@@ -664,6 +664,17 @@ export default async function ompDori(pi: DoriApi): Promise<void> {
       if (role) agentRoles.set(ctx.agent.id, role);
       else agentRoles.delete(ctx.agent.id);
       try {
+        // Opening an OMP transcript is read-only. This appends before publishing the pane so the resumed
+        // foreground must actually take the native session lease; a conflicting writer will force a sibling.
+        if (
+          eventName === "session_start" &&
+          ctx.agent.kind === "main" &&
+          ctx.mode === "tui" &&
+          role === "lane" &&
+          !requiredLoadError &&
+          process.env["DORI_DISCORD_WAKE_SESSION"] === ctx.sessionManager.getSessionId()
+        )
+          pi.appendEntry(ROLE_ENTRY, role);
         if (ctx.agent.kind === "main")
           await syncMain(ctx, ctx.sessionManager.getBranch(), eventName === "session_start");
       } finally {

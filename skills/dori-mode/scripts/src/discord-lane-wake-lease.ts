@@ -22,7 +22,7 @@ export async function wakeLeaseState(deps: FlowDeps, check: WakeLease): Promise<
   return report.held.length === 1 && report.held[0] === check.session ? "held" : "unknown";
 }
 
-/** Pinned OMP Linux leases are datagram sockets named from the profile-independent `.lock` path. */
+/** Pinned OMP hashes the profile-independent session owner path with the file-lock wrapper's `.lock` suffix. */
 export async function ownsWakeLease(deps: FlowDeps, check: WakeLease, pid: number): Promise<boolean> {
   if (process.platform !== "linux" || !/^[A-Za-z0-9_-]{1,128}$/.test(check.session)) return false;
   if ((await wakeLeaseState(deps, check)) !== "held") return false;
@@ -39,7 +39,7 @@ export async function ownsWakeLease(deps: FlowDeps, check: WakeLease, pid: numbe
   const sockets = await deps.run(["cat", "/proc/net/unix"], { timeoutMs: TIMEOUT_MS });
   if (sockets.code !== 0) return false;
   const bound = sockets.out.split("\n").flatMap((line) => {
-    const row = /^\S+\s+\S+\s+\S+\s+\S+\s+0002\s+01\s+(\d+)\s+(\S+)\s*$/.exec(line.trim());
+    const row = /^\S+\s+\S+\s+\S+\s+\S+\s+0002\s+\S+\s+(\d+)\s+(\S+)\s*$/.exec(line.trim());
     return row?.[1] && row[2] === name ? [row[1]] : [];
   });
   const [inode] = bound;

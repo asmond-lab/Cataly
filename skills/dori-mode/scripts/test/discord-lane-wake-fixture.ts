@@ -107,7 +107,7 @@ export async function wakeFixture(): Promise<WakeFixture> {
         const hash = [0x4f4d502d4c4f434bn, 0x50492d46494c454cn]
           .map((seed) => Bun.hash.xxHash64(lockPath, seed).toString(16).padStart(16, "0"))
           .join("");
-        return ok(`ffffde558b448800: 00000002 00000000 00000000 0002 01 ${leaseInode} @omp-file-lock-${hash}`);
+        return ok(`ffffde558b448800: 00000002 00000000 00000000 0002 03 ${leaseInode} @omp-file-lock-${hash}`);
       }
       if (cmd === "find")
         return ok(
