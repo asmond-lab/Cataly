@@ -33,6 +33,8 @@ Discord에서 요청을 받아 전용 코딩 세션에서 작업하고,
 
 ## 작동 방식
 
+아래는 현재 `main`의 작업 흐름입니다.
+
 1. **요청을 받습니다.** Discord 수신을 켜면 지정한 사용자의 메시지를 읽고,
    확인할 수 있는 답장 맥락과 첨부 파일 메타데이터를 함께 전달합니다.
 2. **리드가 작업을 맡깁니다.** 간단한 요청은 직접 처리합니다. 긴 작업에는 브리프와
@@ -40,7 +42,7 @@ Discord에서 요청을 받아 전용 코딩 세션에서 작업하고,
    전용 [oh-my-pi(OMP)](https://github.com/can1357/oh-my-pi) 코딩 세션입니다.
    레지스트리는 작업을 세션과 메신저 스레드에 연결합니다.
 3. **레인이 작업하고 보고합니다.** 작업 로그·보고·체크포인트를 통해 재시작 후에도
-   진행 상황을 확인할 수 있습니다. 현재 소스에서는 Discord 채널이 레인 하나에 연결돼
+   진행 상황을 확인할 수 있습니다. Discord 채널이 레인 하나에 연결돼
    있으면 일반 채팅은 해당 레인의 OMP 세션으로 전달됩니다. 지원되는 ASK 양식에
    직접 답장하면 새 작업을 시작하는 대신 열린 질문에 답합니다.
 4. **완료를 검증합니다.** 레인의 완료 보고 자체가 증거는 아닙니다. Done 절차는
@@ -62,15 +64,15 @@ Cataly는 프로젝트 이름입니다. `dori`, `omp-dori`, `omp` 명령과 기�
 
 [v0.1.2 프리릴리스](https://github.com/vntrevx/Cataly/releases/tag/v0.1.2)는
 **Linux x64 / herdr / Discord** 환경을 대상으로 합니다. 검증 기준은 Ubuntu 24.04 x64,
-Bun 1.4.4, 네이티브 OMP 18.18.8, herdr 0.9.5입니다. 별도로 설치한 OMP가 필요하며,
-이 태그에는 현재 `main`의 새 기능과 도구 체인이 포함되어 있지 않습니다.
+Bun 1.4.4, 네이티브 OMP 18.18.8, herdr 0.9.5입니다. 별도로 설치한 OMP와 기본
+설치 홈 `~/.dori`를 사용합니다. 현재 `main`의 새 기능과 도구 체인은 포함되지 않습니다.
 
-1. [정확한 프리릴리스 설치](docs/releases.md#install-the-exact-preview)를 따르세요.
-   [사전 요구 사항](docs/releases.md#prerequisites-and-trust)을 확인하고, 같은 릴리스의
-   배포 파일을 검증한 뒤 설치기를 실행합니다.
-2. [모델 제공업체와 Discord 봇을 설정](skills/dori-mode/references/setup.md)하세요.
+1. [정확한 프리릴리스 설치](https://github.com/vntrevx/Cataly/blob/v0.1.2/docs/releases.md#install-the-exact-preview)를 따르세요.
+   [사전 요구 사항](https://github.com/vntrevx/Cataly/blob/v0.1.2/docs/releases.md#prerequisites-and-trust)을 확인하고,
+   같은 릴리스의 배포 파일을 검증한 뒤 설치기를 실행합니다.
+2. [모델 제공업체와 Discord 봇을 설정한 뒤 Dori를 시작하세요](https://github.com/vntrevx/Cataly/blob/v0.1.2/docs/releases.md#your-authentication-and-explicit-startup).
    본인의 제공업체 계정과 사용량 한도, 봇 토큰, 사용자 ID, 채널 ID를 사용합니다.
-3. 실행 중인 Dori 세션에서 [Discord 수신을 켜세요](docs/releases.md#discord-owner-intake).
+3. [Discord 수신을 켜세요](https://github.com/vntrevx/Cataly/blob/v0.1.2/docs/releases.md#discord-owner-intake).
    `INBOUND_READY`가 표시된 뒤 설정한 채널에 새 메시지를 보내세요. 첫 시작 시에는
    이전 메시지를 다시 가져오지 않습니다.
 

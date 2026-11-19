@@ -34,6 +34,8 @@ its working session, and the evidence that it is done.
 
 ## How it works
 
+Here is the workflow on current `main`:
+
 1. **A request arrives.** With Discord intake enabled, Cataly reads messages from
    the configured owner and carries available reply context and attachment
    metadata into the work.
@@ -42,7 +44,7 @@ its working session, and the evidence that it is done.
    coding session in herdr or hc, with a brief and an explicit `Done` condition.
    The lane registry ties the work to its session and messenger thread.
 3. **The lane works and reports.** Worklogs, reports, and checkpoints make
-   progress inspectable across restarts. On current source, ordinary Discord chat
+   progress inspectable across restarts. Ordinary Discord chat
    for an unambiguously linked lane reaches that lane’s native OMP session;
    an exact reply to a supported ASK form answers the form instead.
 4. **Completion is checked.** A lane’s “done” claim is not proof. The Done flow
@@ -65,17 +67,17 @@ and `omp`; existing install paths and release asset names are unchanged.
 The [v0.1.2 prerelease](https://github.com/vntrevx/Cataly/releases/tag/v0.1.2)
 is the published **Linux x64 / herdr / Discord** preview. The tested baseline
 is Ubuntu 24.04 x64, Bun 1.4.4, native OMP 18.18.8, and herdr 0.9.5. This tag
-requires an independently installed OMP; it does not contain the newer `main`
-features or toolchain.
+requires an independently installed OMP and uses the primary `~/.dori` home.
+It does not contain the newer `main` features or toolchain.
 
-1. [Install the exact preview](docs/releases.md#install-the-exact-preview).
-   Check the [prerequisites](docs/releases.md#prerequisites-and-trust) and verify
-   the matching release assets before running their installer.
-2. [Configure your provider and Discord bot](skills/dori-mode/references/setup.md).
+1. [Install the exact preview](https://github.com/vntrevx/Cataly/blob/v0.1.2/docs/releases.md#install-the-exact-preview).
+   Check its [prerequisites](https://github.com/vntrevx/Cataly/blob/v0.1.2/docs/releases.md#prerequisites-and-trust)
+   and verify the matching release assets before running their installer.
+2. [Configure your provider and Discord bot, then start Dori](https://github.com/vntrevx/Cataly/blob/v0.1.2/docs/releases.md#your-authentication-and-explicit-startup).
    Use your own provider account and allowance, bot token, owner ID, and channel ID.
-3. [Enable Discord intake](docs/releases.md#discord-owner-intake) in the running
-   Dori session. Wait for `INBOUND_READY`, then send a fresh message in the
-   configured channel. Old messages are not replayed on first start.
+3. [Enable Discord intake](https://github.com/vntrevx/Cataly/blob/v0.1.2/docs/releases.md#discord-owner-intake).
+   Wait for `INBOUND_READY`, then send a fresh message in the configured channel.
+   Old messages are not replayed on first start.
 
 ### Work from current source
 
