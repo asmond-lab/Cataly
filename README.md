@@ -12,7 +12,8 @@ work in a tracked coding session, and bring back a result you can verify.
 
 [Get started](#get-started) · [How it works](#how-it-works) · [Documentation](#documentation)
 
-[English](README.md) · [한국어](README.ko.md) · [日本語](README.ja.md) · [Deutsch](README.de.md) · [Italiano](README.it.md) · [中文](README.zh.md)
+[English](README.md) · [한국어](README.ko.md) · [日本語](README.ja.md)<br>
+[Deutsch](README.de.md) · [Italiano](README.it.md) · [中文](README.zh.md)
 
 ## Give it an outcome, not a script
 
