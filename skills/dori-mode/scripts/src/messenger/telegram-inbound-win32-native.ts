@@ -1,5 +1,5 @@
 import { MessengerError } from "./http.ts";
-import { loadWindowsCursorFfi, requireNative, wide, winCursorError } from "./telegram-inbound-win32-ffi.ts";
+import { loadWindowsCursorFfi, requireNative, sidOffset, wide, winCursorError } from "./telegram-inbound-win32-ffi.ts";
 
 export const winFile = {
   read: 0x80000000,
@@ -40,10 +40,15 @@ const loadNative = () => {
     return out;
   };
   const tokenUser = (handle: bigint) => {
-    const out = Buffer.alloc(128);
+    const out = Buffer.from(new ArrayBuffer(128));
     const length = Buffer.alloc(4);
-    requireNative(security.GetTokenInformation(handle, 1, out, out.length, length) !== 0, "user SID is unavailable");
-    return sid(out.subarray(0, length.readUInt32LE()), Number(out.readBigUInt64LE() - BigInt(ffi.ptr(out))));
+    // Pass the explicit Bun pointer and use that very address to interpret the returned PSID.
+    const address = ffi.ptr(out.buffer);
+    requireNative(Number.isSafeInteger(address) && address > 0, "TOKEN_USER buffer address is invalid");
+    const ok = security.GetTokenInformation(handle, 1, address, out.length, ffi.ptr(length));
+    requireNative(ok !== 0, "user SID is unavailable");
+    const written = length.readUInt32LE();
+    return sid(out.subarray(0, written), sidOffset(out, BigInt(address), written));
   };
   return {
     close: (handle: bigint) => {

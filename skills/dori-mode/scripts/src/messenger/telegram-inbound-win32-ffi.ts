@@ -29,6 +29,21 @@ export const withNativeCleanup = <T>(action: () => T, cleanup: () => void): T =>
 
 export const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
 
+export const sidOffset = (result: Buffer, address: bigint, written: number) => {
+  // Windows x64 TOKEN_USER is a SID_AND_ATTRIBUTES with a leading PSID in a 16-byte header.
+  const headerSize = 16;
+  requireNative(
+    Number.isInteger(written) && written >= headerSize && written <= result.length,
+    "TOKEN_USER byte count is invalid",
+  );
+  const offset = result.readBigUInt64LE() - address;
+  requireNative(
+    offset >= BigInt(headerSize) && offset <= BigInt(written - 8),
+    "TOKEN_USER SID pointer is out of range",
+  );
+  return Number(offset);
+};
+
 export const loadWindowsCursorFfi = () => {
   const ffi: typeof BunFfi = require("bun:ffi");
   // Kernel32 is already loaded into the process. Resolve the other DLLs from its system directory, not PATH/cwd.

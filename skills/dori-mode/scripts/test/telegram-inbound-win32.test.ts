@@ -123,7 +123,7 @@ windows("an NTFS junction at the cursor directory is rejected without touching o
     const canary = join(outside, `${bot}.json`);
     writeFileSync(canary, "outside");
     symlinkSync(outside, f.directory, "junction");
-    expect(() => fileTgInboundStore(f.state, bot)).toThrow("Telegram inbound cursor");
+    expect(() => fileTgInboundStore(f.state, bot)).toThrow("Telegram inbound cursor encountered a reparse point");
     expect(readFileSync(canary, "utf8")).toBe("outside");
     expect(readdirSync(outside)).toEqual([`${bot}.json`]);
   } finally {
