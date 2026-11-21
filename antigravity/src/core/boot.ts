@@ -1,5 +1,6 @@
 import { DiscordInboundState, type ObligationRecord } from "../discord/inbound.js";
 import { Backlog } from "./backlog.js";
+import { SharedBoard } from "./board.js";
 import { loadConfig, loadDiscordBotToken, resolveCatalyHome, resolveStateDir } from "./config.js";
 import { Decisions } from "./decisions.js";
 import { LaneRegistry } from "./lanes.js";
@@ -44,6 +45,7 @@ export type BootSummary = {
   readonly trackedPrCount: number;
   readonly activeLocks: readonly { readonly name: string; readonly lane: string; readonly pid: number }[];
   readonly lessonCount: number;
+  readonly boardHead: number;
   readonly warnings: readonly string[];
 };
 
@@ -59,15 +61,23 @@ export function collectBootSummary(catalyHome?: string): BootSummary {
   const prs = new PrTracker(stateDir);
   const locks = new SharedLocks(stateDir);
   const lessons = new Lessons(stateDir);
+  const board = new SharedBoard(stateDir);
   const inboundState = new DiscordInboundState(stateDir);
 
   const wlRead = worklog.read();
   const decRead = decisions.read();
   const lessonRead = lessons.read();
+  const boardRead = board.read({ limit: 5 });
   const openBacklog = backlog.list("open");
   const activeLaneRecords = lanes.list(false);
   const pendingDiscordObligations = inboundState.pendingObligations();
-  const warnings = [...wlRead.problems, ...wlRead.warnings, ...decRead.problems, ...lessonRead.problems];
+  const warnings = [
+    ...wlRead.problems,
+    ...wlRead.warnings,
+    ...decRead.problems,
+    ...lessonRead.problems,
+    ...boardRead.problems,
+  ];
 
   return {
     catalyHome: home,
@@ -106,6 +116,7 @@ export function collectBootSummary(catalyHome?: string): BootSummary {
     trackedPrCount: prs.list().length,
     activeLocks: locks.list().map((lk) => ({ name: lk.name, lane: lk.lane, pid: lk.pid })),
     lessonCount: lessonRead.lessons.filter((l) => l.outcome === "pending" || l.outcome === "helped").length,
+    boardHead: boardRead.head,
     warnings,
   };
 }
@@ -145,6 +156,9 @@ export function formatBootMarkdown(summary: BootSummary): string {
   }
   if (summary.trackedPrCount > 0) {
     lines.push(`Tracked PRs: ${summary.trackedPrCount}`);
+  }
+  if (summary.boardHead > 0) {
+    lines.push(`Shared Board: ${summary.boardHead} post(s)`);
   }
   if (summary.activeLocks.length > 0) {
     lines.push(`Active Locks: ${summary.activeLocks.map((l) => `${l.name}(${l.lane})`).join(", ")}`);

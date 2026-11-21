@@ -9,24 +9,24 @@ Works cross-platform on Windows, macOS, and Linux with Node.js 22+ (tested on No
 ```text
 antigravity/
 ├── src/
-│   ├── core/            # config (mtime-cached), Done = signal verifier, lanes, worklog, decisions, lessons, checkpoints, reports, backlog, locks, PR verify/watch, boot
-│   ├── discord/         # v10 REST client, code-fence splitter, Gateway v10 online WebSocket waiter, channel purposes/cache, attachment downloader, owner-only inbound poller
-│   ├── mcp-server.ts    # Stdio MCP server (`cataly-core`, 40 tools)
+│   ├── core/            # config (mtime-cached), Done = signal verifier, lanes, shared board, worklog, decisions, lessons, checkpoints, reports, backlog, locks, PR verify/watch, boot
+│   ├── discord/         # v10 REST client, code-fence splitter, Gateway v10 online WebSocket waiter (burst coalescing, autoAck, local commands), channel purposes/cache, attachment downloader, owner-only inbound poller
+│   ├── mcp-server.ts    # Stdio MCP server (`cataly-core`, 42 tools)
 │   ├── hooks.ts         # Antigravity SessionStart & Stop lifecycle hooks
-│   ├── cli.ts           # Standalone CLI (`boot`, `sweep`, `check-done`, `report`, `checkpoint`, `claim-done`, `pr-watch`, `discord`)
-│   └── test/            # Unit, hook, Gateway WebSocket, and MCP stdio handshake tests
+│   ├── cli.ts           # Standalone CLI (`boot`, `sweep`, `check-done`, `report`, `checkpoint`, `claim-done`, `board`, `pr-watch`, `discord`)
+│   └── test/            # Unit, hook, installer/rollback, board/commands, Gateway WebSocket, and MCP stdio handshake tests
 ├── plugin/              # Antigravity plugin bundle (`plugin.json`, `hooks.json`, `rules/`, `agents/`, `skills/`, `assets/`)
 └── scripts/
-    └── install-plugin.mjs  # Builds and installs a stripped production bundle to ~/.gemini/config/plugins/cataly
+    └── install-plugin.mjs  # Stages, validates, and atomically installs a standalone bundle (with attribution/license files and rollback) to ~/.gemini/config/plugins/cataly
 ```
 
 ## Key Capabilities
 
 - **Verifiable `Done =` Signals**: Live-verifies `merged`, `closed`, `published`, `command`, `file` (SHA-256 + JSON field match), and `url` (status + body regex), plus single-call `git status --porcelain=v2 --branch` clean/pushed verification.
-- **Tracked Subagent Lanes**: Creates scoped briefs injected with global + repo lessons (`cataly_lane_create`), binds Antigravity `conversationId` (`cataly_lane_attach`), enforces claim/objection/grace-window verification (`cataly_lane_verify_close`, `cataly_lane_sweep`), and includes dedicated `cataly-lane` and `cataly-reviewer` subagent definitions.
-- **Compaction-Safe State (`~/.cataly/`)**: Append-only JSONL + rendered Markdown for `worklog`, `decisions`, `lessons`, `checkpoints`, `reports`, prioritized `backlog`, `locks`, and `tracked-prs.json`.
+- **Tracked Subagent Lanes & Shared Board**: Creates scoped briefs injected with global + repo lessons (`cataly_lane_create`), binds Antigravity `conversationId` (`cataly_lane_attach`), enforces version-guarded claim/objection/grace-window verification (`cataly_lane_verify_close`, `cataly_lane_sweep`), shares informational cross-lane notes (`cataly_board_post`, `cataly_board_read`), and includes dedicated `cataly-lane`, `cataly-responder`, and `cataly-reviewer` subagent definitions.
+- **Compaction-Safe State (`~/.cataly/`)**: Append-only JSONL + rendered Markdown for `worklog`, `decisions`, `lessons`, `board`, `checkpoints`, `reports`, prioritized `backlog`, `locks`, and `tracked-prs.json`.
 - **Antigravity Lifecycle Hooks**: `SessionStart` injects a concise boot recovery summary only when active state or unanswered obligations exist; `Stop` guards bound `working` lanes once without looping.
-- **Native Discord v10 Integration**: Owner-only intake, Gateway v10 WebSocket online presence with <100ms delivery and automatic REST fallback, code-fence-aware 2000-char message splitting, 👀 read-receipt and reply obligation tracking, decision reply auto-matching, safe CDN attachment staging with magic-byte detection, and thread lifecycle (`[working]` / `[waiting]` / `[done]`).
+- **Native Discord v10 Integration**: Owner-only intake, Gateway v10 WebSocket online presence with <100ms delivery, burst coalescing, instant `autoAck` (👀 + typing), zero-token local shortcut commands (`/help`, `/status`, `/board`, `/stop`, `/resume`) plus session-routed `/usage` and `/model`, automatic REST fallback, code-fence-aware 2000-char message splitting, per-message reply obligation tracking, decision reply auto-matching, safe CDN attachment staging with magic-byte detection, and thread lifecycle (`[working]` / `[waiting]` / `[done]`).
 
 ## Installation & Verification
 
@@ -37,7 +37,7 @@ npm test
 npm run install:plugin
 ```
 
-`npm run install:plugin` deploys a self-contained production bundle (excluding devDependencies, source maps, type declarations, and docs) to `~/.gemini/config/plugins/cataly/` (override with `CATALY_PLUGIN_DIR`). Antigravity discovers the plugin automatically without restarting.
+`npm run install:plugin` stages, validates, and atomically publishes a self-contained production bundle (preserving upstream `LICENSE`, `LICENSE.omp-dori`, `LICENSING.md`, `NOTICE`, and dependency license/notice files while excluding devDependencies, source maps, type declarations, and tests, with automatic rollback on failed upgrades) to `~/.gemini/config/plugins/cataly/` (override with `CATALY_PLUGIN_DIR`). Antigravity discovers the plugin automatically without restarting.
 
 ### Optional Discord Setup
 
@@ -50,4 +50,4 @@ npm run install:plugin
 
 ## Licensing & Attribution
 
-This directory is part of [vntrevx/Cataly](https://github.com/vntrevx/Cataly) and retains the repository's applicable license and provenance terms documented in [../LICENSE](../LICENSE), [../LICENSING.md](../LICENSING.md), and [../NOTICE](../NOTICE).
+This directory is part of [vntrevx/Cataly](https://github.com/vntrevx/Cataly) and retains the repository's applicable license and provenance terms documented in [../LICENSE](../LICENSE), [../LICENSE.omp-dori](../LICENSE.omp-dori), [../LICENSING.md](../LICENSING.md), and [../NOTICE](../NOTICE).

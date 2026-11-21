@@ -154,5 +154,12 @@ describe("Discord client, channel purposes, and owner-only inbound polling", () 
     inboundState.markChannelReplied(channelId);
     assert.equal(inboundState.pendingObligations().length, 0);
     assert.equal(sentPayloads.length, 1);
+
+    // Monotonic advanceCursors never regresses a newer cursor and merges disjoint channel updates atomically
+    inboundState.advanceCursors({ [channelId]: "900000000000000050", [threadId]: "900000000000000010" });
+    const merged = inboundState.advanceCursors({ [channelId]: "900000000000000005", "600000000000000006": "100" });
+    assert.equal(merged[channelId], "900000000000000050");
+    assert.equal(merged[threadId], "900000000000000010");
+    assert.equal(merged["600000000000000006"], "100");
   });
 });

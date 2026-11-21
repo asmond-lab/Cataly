@@ -375,12 +375,34 @@ export class LaneRegistry {
     opts: {
       readonly skipGitCheck?: boolean;
       readonly forceClose?: boolean;
+      readonly expectedVersion?: number;
       readonly runner?: Runner;
       readonly signalIo?: SignalIo;
       readonly now?: number;
     } = {},
   ): Promise<VerifyCloseResult> {
     const lane = this.require(key);
+    const expectedVersion = opts.expectedVersion ?? lane.version;
+    if (opts.expectedVersion !== undefined && lane.version !== opts.expectedVersion) {
+      return {
+        lane,
+        closed: false,
+        checks: [],
+        gitIssues: [],
+        reasons: [
+          `lane changed concurrently before verification (expected v${opts.expectedVersion}, actual v${lane.version}, status=${lane.status})`,
+        ],
+      };
+    }
+    if (lane.status === "paused" && !opts.forceClose) {
+      return {
+        lane,
+        closed: false,
+        checks: [],
+        gitIssues: [],
+        reasons: [`lane "${key}" is paused; resume it or pass forceClose to close`],
+      };
+    }
     const now = opts.now ?? Date.now();
     const runner = opts.runner ?? defaultRunner;
     const checks = await checkDone(lane.done, runner, { cwd: lane.cwd, ...opts.signalIo });
@@ -391,36 +413,57 @@ export class LaneRegistry {
     const allPassed = reasons.length === 0;
     const at = new Date(now).toISOString();
 
-    const updated = this.transition(key, (current) => {
-      if (current.status === "closed") return current;
-      const verification = { at, ok: allPassed, checks, gitIssues };
-      if (allPassed || opts.forceClose) {
-        const closeNote = allPassed ? "all Done signals verified live" : `force closed (${reasons.join("; ")})`;
+    let updated: LaneRecord;
+    try {
+      updated = this.transition(
+        key,
+        (current) => {
+          if (current.status === "closed") return current;
+          if (current.status === "paused" && !opts.forceClose) return current;
+          const verification = { at, ok: allPassed, checks, gitIssues };
+          if (allPassed || opts.forceClose) {
+            const closeNote = allPassed ? "all Done signals verified live" : `force closed (${reasons.join("; ")})`;
+            return {
+              ...current,
+              status: "closed",
+              updatedAt: at,
+              closedAt: at,
+              closeReason: closeNote,
+              lastVerification: verification,
+              version: current.version + 1,
+              history: [
+                ...current.history,
+                ...(allPassed ? [{ at, status: "verified-done" as const, note: "verified live" }] : []),
+                { at, status: "closed" as const, note: closeNote },
+              ],
+            };
+          }
+          return {
+            ...current,
+            status: "not-done",
+            updatedAt: at,
+            lastVerification: verification,
+            objection: { at, reason: reasons.join("; ") },
+            version: current.version + 1,
+            history: [...current.history, { at, status: "not-done", note: reasons.join("; ") }],
+          };
+        },
+        expectedVersion,
+      );
+    } catch (err) {
+      if (err instanceof LaneError && err.message.startsWith("LANE_CHANGED:")) {
+        const latest = this.require(key);
+        const conflictReason = `lane changed concurrently during verification (expected v${expectedVersion}, actual v${latest.version}, status=${latest.status})`;
         return {
-          ...current,
-          status: "closed",
-          updatedAt: at,
-          closedAt: at,
-          closeReason: closeNote,
-          lastVerification: verification,
-          version: current.version + 1,
-          history: [
-            ...current.history,
-            ...(allPassed ? [{ at, status: "verified-done" as const, note: "verified live" }] : []),
-            { at, status: "closed" as const, note: closeNote },
-          ],
+          lane: latest,
+          closed: false,
+          checks,
+          gitIssues,
+          reasons: [conflictReason, ...reasons],
         };
       }
-      return {
-        ...current,
-        status: "not-done",
-        updatedAt: at,
-        lastVerification: verification,
-        objection: { at, reason: reasons.join("; ") },
-        version: current.version + 1,
-        history: [...current.history, { at, status: "not-done", note: reasons.join("; ") }],
-      };
-    });
+      throw err;
+    }
 
     return {
       lane: updated,
@@ -454,6 +497,7 @@ export class LaneRegistry {
         if (Date.parse(lane.claim.autoCloseAt) <= now) {
           const result = await this.verifyAndClose(lane.key, {
             skipGitCheck: opts.skipGitCheck,
+            expectedVersion: lane.version,
             runner: opts.runner,
             signalIo: opts.signalIo,
             now,

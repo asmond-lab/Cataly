@@ -16,6 +16,8 @@ export type InboundMessageRecord = {
   readonly replyToMessageId?: string;
   readonly replyToContent?: string;
   readonly matchedDecisionId?: string;
+  readonly parsedCommand?: { readonly name: string; readonly args: string };
+  readonly autoAcked?: boolean;
   readonly attachments: readonly {
     readonly filename: string;
     readonly size: number;
@@ -75,6 +77,25 @@ export class DiscordInboundState {
     });
   }
 
+  advanceCursors(updates: Readonly<Record<string, string>>): Record<string, string> {
+    return withFileLock(`${this.cursorsPath}.lock`, () => {
+      const current = this.readCursors();
+      let changed = false;
+      for (const [channelId, msgId] of Object.entries(updates)) {
+        if (!msgId) continue;
+        const prev = current[channelId];
+        if (!prev || compareSnowflake(msgId, prev) > 0) {
+          current[channelId] = msgId;
+          changed = true;
+        }
+      }
+      if (changed) {
+        atomicWriteFile(this.cursorsPath, `${JSON.stringify(current, null, 2)}\n`);
+      }
+      return current;
+    });
+  }
+
   readObligations(): ObligationRecord[] {
     if (!existsSync(this.obligationsPath)) return [];
     return JSON.parse(readFileSync(this.obligationsPath, "utf8")) as ObligationRecord[];
@@ -98,6 +119,13 @@ export class DiscordInboundState {
   markEyesReacted(messageId: string): void {
     withFileLock(`${this.obligationsPath}.lock`, () => {
       const list = this.readObligations().map((o) => (o.messageId === messageId ? { ...o, eyesReacted: true } : o));
+      atomicWriteFile(this.obligationsPath, `${JSON.stringify(list, null, 2)}\n`);
+    });
+  }
+
+  markMessageReplied(messageId: string): void {
+    withFileLock(`${this.obligationsPath}.lock`, () => {
+      const list = this.readObligations().map((o) => (o.messageId === messageId ? { ...o, replied: true } : o));
       atomicWriteFile(this.obligationsPath, `${JSON.stringify(list, null, 2)}\n`);
     });
   }
@@ -174,6 +202,7 @@ export async function pollDiscordInbound(
   const channelsStore = new DiscordChannels(stateDir);
   const decisionsStore = new Decisions(stateDir);
   const cursors = state.readCursors();
+  const cursorUpdates: Record<string, string> = {};
   const baselinedChannels: string[] = [];
   const polledChannels: string[] = [];
   const messages: InboundMessageRecord[] = [];
@@ -213,13 +242,13 @@ export async function pollDiscordInbound(
     const latestId = sorted.at(-1)?.id;
 
     if (!cursor && !opts.includeHistoryOnFirstPoll) {
-      if (latestId) cursors[channelId] = latestId;
+      if (latestId) cursorUpdates[channelId] = latestId;
       baselinedChannels.push(channelId);
       continue;
     }
 
     if (latestId && (!cursor || compareSnowflake(latestId, cursor) > 0)) {
-      cursors[channelId] = latestId;
+      cursorUpdates[channelId] = latestId;
     }
 
     const ownerMessages = sorted.filter((m) => m.author.id === ownerId && !m.author.bot);
@@ -253,6 +282,6 @@ export async function pollDiscordInbound(
     }
   }
 
-  state.saveCursors(cursors);
+  state.advanceCursors(cursorUpdates);
   return { messages, baselinedChannels, polledChannels, warnings };
 }

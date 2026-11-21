@@ -160,6 +160,206 @@ describe("lanes, lessons, checkpoints, reports, sweep", () => {
     assert.deepEqual(swept.closed, ["ship-feature"]);
     assert.equal(registry.require("ship-feature").status, "closed");
   });
+
+  it("does not overwrite a concurrent objectDone when verifyAndClose finishes after a version change", async () => {
+    const home = makeTempDir("cataly-home-");
+    const workDir = makeTempDir("cataly-repo-");
+    const stateDir = resolveStateDir(home);
+    updateConfig({ doneGraceMinutes: 1 }, home);
+
+    const registry = new LaneRegistry(stateDir, home);
+    registry.create({
+      key: "race-lane",
+      title: "Race guard lane",
+      cwd: workDir,
+      done: 'command ["verify-cmd"] stdout~"passed"',
+      briefBody: "Verify version guard under concurrent objection.",
+    });
+
+    const t0 = Date.now();
+    registry.claimDone("race-lane", "claim before verification", 1, undefined, t0);
+
+    let enteredVerifier!: () => void;
+    const verifierStarted = new Promise<void>((r) => {
+      enteredVerifier = r;
+    });
+    let releaseVerifier!: () => void;
+    const verifierGate = new Promise<void>((r) => {
+      releaseVerifier = r;
+    });
+
+    const pausedRunner: Runner = async () => {
+      enteredVerifier();
+      await verifierGate;
+      return { code: 0, out: "all tests passed", err: "" };
+    };
+
+    const verifyPromise = registry.verifyAndClose("race-lane", {
+      skipGitCheck: true,
+      runner: pausedRunner,
+      now: t0 + 2000,
+    });
+
+    // Wait until the verifier is mid-flight, then record a lead objection
+    await verifierStarted;
+    const objected = registry.objectDone("race-lane", "lead found missing edge-case test", undefined, t0 + 1000);
+    assert.equal(objected.status, "not-done");
+
+    // Let the in-flight verification succeed and complete
+    releaseVerifier();
+    const res = await verifyPromise;
+
+    assert.equal(res.closed, false);
+    assert.equal(res.lane.status, "not-done");
+    assert.equal(res.lane.version, objected.version);
+    assert.equal(res.lane.objection?.reason, "lead found missing edge-case test");
+    assert.ok(
+      res.reasons.some((r) => r.includes("changed concurrently")),
+      `expected concurrent change reason, got ${JSON.stringify(res.reasons)}`,
+    );
+
+    const stored = registry.require("race-lane");
+    assert.equal(stored.status, "not-done");
+    assert.equal(stored.objection?.reason, "lead found missing edge-case test");
+  });
+
+  it("handles concurrent objectDone cleanly inside sweep without closing or throwing", async () => {
+    const home = makeTempDir("cataly-home-");
+    const workDir = makeTempDir("cataly-repo-");
+    const stateDir = resolveStateDir(home);
+    updateConfig({ doneGraceMinutes: 1 }, home);
+
+    const registry = new LaneRegistry(stateDir, home);
+    registry.create({
+      key: "sweep-race",
+      title: "Sweep race guard lane",
+      cwd: workDir,
+      done: 'command ["verify-cmd"] stdout~"ok"',
+      briefBody: "Ensure sweep survives concurrent objection.",
+    });
+
+    const t0 = Date.now();
+    registry.claimDone("sweep-race", "claimed", 1, undefined, t0);
+
+    let enteredSweepVerify!: () => void;
+    const sweepStarted = new Promise<void>((r) => {
+      enteredSweepVerify = r;
+    });
+    let releaseSweepVerify!: () => void;
+    const sweepGate = new Promise<void>((r) => {
+      releaseSweepVerify = r;
+    });
+
+    const pausedRunner: Runner = async () => {
+      enteredSweepVerify();
+      await sweepGate;
+      return { code: 0, out: "ok", err: "" };
+    };
+
+    const sweepPromise = registry.sweep({
+      skipGitCheck: true,
+      runner: pausedRunner,
+      now: t0 + 5 * 60_000,
+    });
+
+    await sweepStarted;
+    registry.objectDone("sweep-race", "lead objected mid-sweep", undefined, t0 + 2 * 60_000);
+    releaseSweepVerify();
+
+    const swept = await sweepPromise;
+    assert.deepEqual(swept.closed, []);
+    assert.equal(swept.rejected.length, 1);
+    assert.equal(swept.rejected[0]?.key, "sweep-race");
+    assert.ok(swept.rejected[0]?.reasons.some((r) => r.includes("changed concurrently")));
+    assert.equal(registry.require("sweep-race").status, "not-done");
+  });
+
+  it("guards later lanes in multi-lane sweep against concurrent objectDone and refuses to close paused lanes without forceClose", async () => {
+    const home = makeTempDir("cataly-home-");
+    const workDir = makeTempDir("cataly-repo-");
+    const stateDir = resolveStateDir(home);
+    updateConfig({ doneGraceMinutes: 1 }, home);
+
+    const registry = new LaneRegistry(stateDir, home);
+    registry.create({
+      key: "lane-a",
+      title: "First swept lane",
+      cwd: workDir,
+      done: 'command ["verify-a"] stdout~"ok"',
+      briefBody: "Lane A",
+      priority: 1,
+    });
+    registry.create({
+      key: "lane-b",
+      title: "Second swept lane",
+      cwd: workDir,
+      done: 'command ["verify-b"] stdout~"ok"',
+      briefBody: "Lane B",
+      priority: 2,
+    });
+    registry.create({
+      key: "paused-lane",
+      title: "Paused lane",
+      cwd: workDir,
+      done: 'command ["verify-p"] stdout~"ok"',
+      briefBody: "Paused",
+      priority: 3,
+    });
+
+    const t0 = Date.now();
+    registry.claimDone("lane-a", "done A", 1, undefined, t0);
+    registry.claimDone("lane-b", "done B", 1, undefined, t0);
+    registry.pause("paused-lane", "waiting on owner", undefined, t0);
+
+    // Refuses to close paused lane unless forceClose is set
+    const pausedRes = await registry.verifyAndClose("paused-lane", {
+      skipGitCheck: true,
+      runner: async () => ({ code: 0, out: "ok", err: "" }),
+      now: t0 + 1000,
+    });
+    assert.equal(pausedRes.closed, false);
+    assert.equal(pausedRes.lane.status, "paused");
+    assert.ok(pausedRes.reasons.some((r) => r.includes("paused")));
+
+    let enteredLaneA!: () => void;
+    const laneAStarted = new Promise<void>((r) => {
+      enteredLaneA = r;
+    });
+    let releaseLaneA!: () => void;
+    const laneAGate = new Promise<void>((r) => {
+      releaseLaneA = r;
+    });
+
+    const executedCmds: string[] = [];
+    const runner: Runner = async (argv) => {
+      executedCmds.push(argv[0] ?? "");
+      if (argv[0] === "verify-a") {
+        enteredLaneA();
+        await laneAGate;
+      }
+      return { code: 0, out: "ok", err: "" };
+    };
+
+    const sweepPromise = registry.sweep({
+      skipGitCheck: true,
+      runner,
+      now: t0 + 5 * 60_000,
+    });
+
+    // While sweep is blocked verifying lane-a, object to lane-b
+    await laneAStarted;
+    registry.objectDone("lane-b", "objected while lane-a verified", undefined, t0 + 2 * 60_000);
+    releaseLaneA();
+
+    const swept = await sweepPromise;
+    assert.deepEqual(swept.closed, ["lane-a"]);
+    assert.equal(swept.rejected.length, 1);
+    assert.equal(swept.rejected[0]?.key, "lane-b");
+    assert.ok(swept.rejected[0]?.reasons.some((r) => r.includes("changed concurrently")));
+    assert.equal(registry.require("lane-b").status, "not-done");
+    assert.equal(registry.require("lane-b").objection?.reason, "objected while lane-a verified");
+    assert.deepEqual(executedCmds, ["verify-a"]);
+  });
 });
 
 describe("worklog, decisions, backlog, locks, boot", () => {

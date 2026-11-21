@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { SharedBoard } from "./core/board.js";
 import { collectBootSummary, formatBootMarkdown } from "./core/boot.js";
 import { Checkpoints } from "./core/checkpoints.js";
 import { loadConfig, loadDiscordBotToken, resolveCatalyHome, resolveStateDir, updateConfig } from "./core/config.js";
@@ -10,8 +11,9 @@ import { formatReportLine, isReportKind, Reports } from "./core/reports.js";
 import { checkDone } from "./core/signals.js";
 import { downloadDiscordAttachment } from "./discord/attachments.js";
 import { DiscordClient } from "./discord/client.js";
+import { parseDiscordCommand, runLocalDiscordCommand } from "./discord/commands.js";
 import { waitForDiscordGateway } from "./discord/gateway.js";
-import { pollDiscordInbound } from "./discord/inbound.js";
+import { DiscordInboundState, type InboundMessageRecord, pollDiscordInbound } from "./discord/inbound.js";
 
 const catalyHome = resolveCatalyHome();
 const stateDir = resolveStateDir(catalyHome);
@@ -28,13 +30,15 @@ function usage(): void {
       "  cataly report <key> <kind> <text...>       Record a lane report (milestone|blocker|question|halted|done)",
       "  cataly checkpoint <key> --step S --result R [--evidence E] [--effect F]",
       "  cataly claim-done <key> --evidence TEXT    Claim a lane done with concrete evidence",
+      "  cataly board read [--limit 20] [--topic T] [--lane L]",
+      "  cataly board post --author A [--topic T] [--lane L] <text...>",
       "  cataly pr-watch                            Poll tracked GitHub PRs for updates",
       "  cataly discord setup --owner ID --channels ID1,ID2 [--guild ID] [--token-file PATH]",
       "  cataly discord save-token                  Save Discord bot token from stdin to ~/.cataly/secrets/discord.token",
       "  cataly discord poll [--history]            Poll owner-only Discord messages once",
-      "  cataly discord wait [--rest] [--interval 3] [--timeout 0] [--no-download]  Wait reactively via Gateway (online presence, <100ms, auto REST fallback)",
+      "  cataly discord wait [--rest] [--interval 3] [--timeout 0] [--debounce-ms 700] [--no-download] [--no-ack] [--no-local-commands]",
       "  cataly discord watch [--interval 5]        Continuously poll Discord and print INBOUND JSON lines",
-      "  cataly discord send --to CHANNEL --text TEXT [--reply MSG_ID]",
+      "  cataly discord send --to CHANNEL (--text TEXT | --text-file PATH | --stdin) [--reply MSG_ID]",
       "",
     ].join("\n"),
   );
@@ -135,6 +139,48 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === "board") {
+    const sub = args[1];
+    const board = new SharedBoard(stateDir);
+    if (sub === "read") {
+      const limitRaw = getFlag(args, "--limit");
+      let limit = 20;
+      if (limitRaw !== undefined) {
+        const parsedLimit = Number(limitRaw);
+        if (!Number.isInteger(parsedLimit) || parsedLimit <= 0) {
+          process.stderr.write(`Invalid --limit value "${limitRaw}": must be a positive integer\n`);
+          process.exit(1);
+        }
+        limit = parsedLimit;
+      }
+      const topic = getFlag(args, "--topic");
+      const lane = getFlag(args, "--lane");
+      process.stdout.write(`${JSON.stringify(board.read({ limit, topic, lane }), null, 2)}\n`);
+      return;
+    }
+    if (sub === "post") {
+      const author = getFlag(args, "--author") ?? "cli";
+      const topic = getFlag(args, "--topic");
+      const lane = getFlag(args, "--lane");
+      const positional: string[] = [];
+      for (let i = 2; i < args.length; i++) {
+        const cur = args[i]!;
+        if (cur === "--author" || cur === "--topic" || cur === "--lane") {
+          i++;
+          continue;
+        }
+        positional.push(cur);
+      }
+      const text = positional.join(" ").trim();
+      if (!text) {
+        process.stderr.write("Usage: cataly board post --author A [--topic T] [--lane L] <text...>\n");
+        process.exit(1);
+      }
+      process.stdout.write(`${JSON.stringify(board.post({ author, topic, lane, text }), null, 2)}\n`);
+      return;
+    }
+  }
+
   if (cmd === "pr-watch") {
     const tracker = new PrTracker(stateDir);
     const res = await tracker.checkUpdates();
@@ -214,9 +260,14 @@ async function main(): Promise<void> {
     if (sub === "wait") {
       const forceRest = args.includes("--rest");
       const downloadAttachments = !args.includes("--no-download");
+      const autoAck = !args.includes("--no-ack");
+      const handleLocalCommands = !args.includes("--no-local-commands");
       const intervalSec = Number(getFlag(args, "--interval") ?? "3");
       const timeoutRaw = getFlag(args, "--timeout");
       const timeoutSec = timeoutRaw === undefined ? 0 : Number(timeoutRaw);
+      const debounceRaw = getFlag(args, "--debounce-ms");
+      const debounceParsed = debounceRaw === undefined ? 700 : Number(debounceRaw);
+      const debounceMs = Number.isFinite(debounceParsed) && debounceParsed >= 0 ? Math.round(debounceParsed) : 700;
       const intervalMs = Number.isFinite(intervalSec) && intervalSec >= 1 ? Math.round(intervalSec * 1000) : 3000;
       const unlimited = timeoutSec === 0;
       const timeoutMs = unlimited ? 0 : Number.isFinite(timeoutSec) && timeoutSec > 0 ? timeoutSec * 1000 : 600_000;
@@ -229,8 +280,11 @@ async function main(): Promise<void> {
             stateDir,
             catalyHome,
             timeoutMs,
+            debounceMs,
             includeContext: true,
             downloadAttachments,
+            autoAck,
+            handleLocalCommands,
             onStatus: (s) => process.stderr.write(`${s}\n`),
           });
           if (gwRes.kind === "messages") {
@@ -244,16 +298,55 @@ async function main(): Promise<void> {
         }
       }
 
+      const inboundState = new DiscordInboundState(stateDir);
       const deadline = unlimited ? Number.POSITIVE_INFINITY : Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         try {
           const res = await pollDiscordInbound(client, stateDir, { includeContext: true, catalyHome });
           if (res.messages.length > 0) {
-            const enriched = downloadAttachments
-              ? await Promise.all(
-                  res.messages.map(async (m) => ({
-                    ...m,
-                    attachments: await Promise.all(
+            const forward: InboundMessageRecord[] = [];
+            for (const m of res.messages) {
+              const parsed = parseDiscordCommand(m.content);
+              if (handleLocalCommands && parsed?.localZeroToken) {
+                const localRes = runLocalDiscordCommand(parsed, stateDir, catalyHome);
+                if (localRes.handled && localRes.reply) {
+                  const [reactRes, sendRes] = await Promise.allSettled([
+                    client.react(m.channelId, m.messageId, "👀"),
+                    client.send(m.channelId, localRes.reply, { replyTo: m.messageId }),
+                  ]);
+                  if (reactRes.status === "fulfilled") {
+                    inboundState.markEyesReacted(m.messageId);
+                  } else {
+                    process.stderr.write(`LOCAL_COMMAND_REACT_FAILED /${parsed.name}\n`);
+                  }
+                  if (sendRes.status === "fulfilled") {
+                    inboundState.markMessageReplied(m.messageId);
+                    continue;
+                  }
+                  process.stderr.write(
+                    `LOCAL_COMMAND_SEND_FAILED /${parsed.name}: ${sendRes.reason instanceof Error ? sendRes.reason.message : String(sendRes.reason)}\n`,
+                  );
+                }
+              }
+              forward.push(parsed ? { ...m, parsedCommand: { name: parsed.name, args: parsed.args } } : m);
+            }
+            if (forward.length === 0) continue;
+
+            const enriched = await Promise.all(
+              forward.map(async (m) => {
+                let autoAcked = false;
+                if (autoAck) {
+                  const [reactRes] = await Promise.allSettled([
+                    client.react(m.channelId, m.messageId, "👀").then(() => {
+                      inboundState.markEyesReacted(m.messageId);
+                      return true;
+                    }),
+                    client.typing(m.channelId),
+                  ]);
+                  autoAcked = reactRes?.status === "fulfilled" && reactRes.value === true;
+                }
+                const attachments = downloadAttachments
+                  ? await Promise.all(
                       m.attachments.map(async (att) => {
                         try {
                           const dl = await downloadDiscordAttachment(att.url, stateDir, {
@@ -265,10 +358,11 @@ async function main(): Promise<void> {
                           return att;
                         }
                       }),
-                    ),
-                  })),
-                )
-              : res.messages;
+                    )
+                  : m.attachments;
+                return { ...m, ...(autoAcked ? { autoAcked: true } : {}), attachments };
+              }),
+            );
             process.stdout.write(`INBOUND_MESSAGES=${JSON.stringify(enriched)}\n`);
             return;
           }
@@ -308,13 +402,40 @@ async function main(): Promise<void> {
 
     if (sub === "send") {
       const to = getFlag(args, "--to");
-      const text = getFlag(args, "--text");
+      const textFlag = getFlag(args, "--text");
+      const textFile = getFlag(args, "--text-file");
+      const useStdin = args.includes("--stdin");
       const replyTo = getFlag(args, "--reply");
-      if (!to || !text) {
-        process.stderr.write("Usage: cataly discord send --to CHANNEL_ID --text TEXT [--reply MSG_ID]\n");
+
+      let text: string | undefined = textFlag;
+      if (textFile) {
+        text = readFileSync(textFile, "utf8")
+          .replace(/^\uFEFF/, "")
+          .replace(/(?:\r?\n)+$/, "");
+      } else if (useStdin) {
+        const chunks: Buffer[] = [];
+        for await (const c of process.stdin) {
+          chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c)));
+        }
+        text = Buffer.concat(chunks)
+          .toString("utf8")
+          .replace(/^\uFEFF/, "")
+          .replace(/(?:\r?\n)+$/, "");
+      }
+
+      if (!to || !text || !text.trim()) {
+        process.stderr.write(
+          "Usage: cataly discord send --to CHANNEL_ID (--text TEXT | --text-file PATH | --stdin) [--reply MSG_ID]\n",
+        );
         process.exit(1);
       }
       const ids = await client.send(to, text, { replyTo });
+      const inboundState = new DiscordInboundState(stateDir);
+      if (replyTo) {
+        inboundState.markMessageReplied(replyTo);
+      } else {
+        inboundState.markChannelReplied(to);
+      }
       process.stdout.write(`${JSON.stringify({ channelId: to, messageIds: ids })}\n`);
       return;
     }

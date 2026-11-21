@@ -81,16 +81,32 @@ describe("MCP server stdio handshake", () => {
       assert.ok(toolNames.includes("cataly_boot"));
       assert.ok(toolNames.includes("cataly_lane_create"));
       assert.ok(toolNames.includes("cataly_done_check"));
+      assert.ok(toolNames.includes("cataly_board_post"));
+      assert.ok(toolNames.includes("cataly_board_read"));
       assert.ok(toolNames.includes("cataly_discord_poll"));
       assert.ok(toolNames.includes("cataly_discord_send"));
-      assert.ok(toolNames.length >= 35, `expected >=35 tools, got ${toolNames.length}`);
+      assert.ok(toolNames.length >= 42, `expected >=42 tools, got ${toolNames.length}`);
 
       const bootRes = (await rpc(3, "tools/call", { name: "cataly_boot", arguments: {} })) as {
         result?: { content?: { text?: string }[] };
       };
       assert.match(bootRes.result?.content?.[0]?.text ?? "", /CATALY BOOT/);
     } finally {
-      child.kill();
+      if (child.exitCode === null && child.signalCode === null) {
+        await new Promise<void>((resolveClose) => {
+          const timer = setTimeout(resolveClose, 2000);
+          child.once("close", () => {
+            clearTimeout(timer);
+            resolveClose();
+          });
+          try {
+            child.stdin.end();
+          } catch {
+            // ignore
+          }
+          child.kill();
+        });
+      }
     }
   });
 });

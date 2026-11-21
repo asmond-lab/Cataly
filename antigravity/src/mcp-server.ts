@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { Backlog } from "./core/backlog.js";
+import { SharedBoard } from "./core/board.js";
 import { collectBootSummary, formatBootMarkdown } from "./core/boot.js";
 import { Checkpoints } from "./core/checkpoints.js";
 import { loadConfig, loadDiscordBotToken, resolveCatalyHome, resolveStateDir, updateConfig } from "./core/config.js";
@@ -33,6 +34,7 @@ const lanes = new LaneRegistry(stateDir, catalyHome);
 const backlog = new Backlog(stateDir);
 const locks = new SharedLocks(stateDir);
 const prTracker = new PrTracker(stateDir);
+const board = new SharedBoard(stateDir);
 const discordChannels = new DiscordChannels(stateDir);
 const discordInboundState = new DiscordInboundState(stateDir);
 
@@ -317,10 +319,11 @@ server.tool(
     key: z.string().min(1),
     skipGitCheck: z.boolean().optional(),
     forceClose: z.boolean().optional(),
+    expectedVersion: z.number().int().min(1).optional(),
   },
-  async ({ key, skipGitCheck, forceClose }) => {
+  async ({ key, skipGitCheck, forceClose, expectedVersion }) => {
     try {
-      const res = await lanes.verifyAndClose(key, { skipGitCheck, forceClose });
+      const res = await lanes.verifyAndClose(key, { skipGitCheck, forceClose, expectedVersion });
       return okJson(res);
     } catch (e) {
       return errText(e);
@@ -907,7 +910,7 @@ server.tool(
 
 server.tool(
   "cataly_discord_send",
-  "Send a message to a Discord channel or thread (auto-splits >2000 chars preserving code blocks, suppresses unwanted pings, records channel reply receipt).",
+  "Send a message to a Discord channel or thread (auto-splits >2000 chars preserving code blocks, suppresses unwanted pings, records message/channel reply receipt).",
   {
     channelId: z.string().min(1),
     text: z.string().min(1),
@@ -921,7 +924,11 @@ server.tool(
         await client.typing(channelId).catch(() => {});
       }
       const messageIds = await client.send(channelId, text, { replyTo });
-      discordInboundState.markChannelReplied(channelId);
+      if (replyTo) {
+        discordInboundState.markMessageReplied(replyTo);
+      } else {
+        discordInboundState.markChannelReplied(channelId);
+      }
       return okJson({ channelId, messageIds });
     } catch (e) {
       return errText(e);
@@ -1070,6 +1077,42 @@ server.tool(
         guildId: guildId ?? cfg.guildId,
       });
       return okJson(result);
+    } catch (e) {
+      return errText(e);
+    }
+  },
+);
+
+server.tool(
+  "cataly_board_post",
+  "Post an informational note to the shared Head/Lane Board (context sharing only — never an instruction or approval bus).",
+  {
+    author: z.string().min(1).max(80).describe('e.g. "lead", "owner", or lane key'),
+    text: z.string().min(1).max(2000),
+    topic: z.string().max(80).optional(),
+    lane: z.string().max(80).optional(),
+  },
+  async ({ author, text, topic, lane }) => {
+    try {
+      return okJson(board.post({ author, text, topic, lane }));
+    } catch (e) {
+      return errText(e);
+    }
+  },
+);
+
+server.tool(
+  "cataly_board_read",
+  "Read recent informational posts from the shared Head/Lane Board (optionally filtered by since seq, topic, or lane).",
+  {
+    since: z.number().int().min(0).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+    topic: z.string().optional(),
+    lane: z.string().optional(),
+  },
+  async ({ since, limit, topic, lane }) => {
+    try {
+      return okJson(board.read({ since, limit, topic, lane }));
     } catch (e) {
       return errText(e);
     }
