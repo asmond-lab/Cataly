@@ -56,19 +56,36 @@ export async function downloadDiscordAttachment(
     throw new Error(`refused attachment URL outside Discord CDN: ${parsed.origin}`);
   }
   const maxBytes = opts.maxBytes ?? MAX_ATTACHMENT_BYTES;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error("invalid attachment byte limit");
   const fetcher = opts.fetchImpl ?? fetch;
-  const res = await fetcher(url, { signal: AbortSignal.timeout(30_000) });
+  const res = await fetcher(url, { redirect: "error", signal: AbortSignal.timeout(30_000) });
   if (!res.ok) {
     throw new Error(`attachment download failed: HTTP ${res.status}`);
   }
   const contentLength = Number(res.headers.get("content-length") ?? "0");
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    await res.body?.cancel();
     throw new Error(`attachment exceeds ${maxBytes} byte limit`);
   }
-  const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length > maxBytes) {
-    throw new Error(`attachment exceeds ${maxBytes} byte limit`);
+  if (!res.body) throw new Error("attachment response has no body");
+  const reader = res.body.getReader();
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maxBytes) {
+        await reader.cancel();
+        throw new Error(`attachment exceeds ${maxBytes} byte limit`);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
   }
+  const buf = Buffer.concat(chunks, bytes);
 
   const detected = detectImageExtension(buf);
   const rawName = sanitizeFilename(opts.filename ?? (parsed.pathname.split("/").pop() || "file"));
