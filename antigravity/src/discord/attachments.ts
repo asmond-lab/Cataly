@@ -58,6 +58,7 @@ export async function downloadDiscordAttachment(
   const maxBytes = opts.maxBytes ?? MAX_ATTACHMENT_BYTES;
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error("invalid attachment byte limit");
   const fetcher = opts.fetchImpl ?? fetch;
+  // Reject redirects so a CDN URL cannot redirect around the hostname allowlist.
   const res = await fetcher(url, { redirect: "error", signal: AbortSignal.timeout(30_000) });
   if (!res.ok) {
     throw new Error(`attachment download failed: HTTP ${res.status}`);
