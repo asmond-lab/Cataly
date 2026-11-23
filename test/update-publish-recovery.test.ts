@@ -2,7 +2,7 @@ import { expect } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { publishRelease } from "../src/update/publish.ts";
 import type { PublicationRecord } from "../src/update/publish-types.ts";
 import { persistJob, persistState, readJob, readState, saveJson } from "../src/update/state.ts";
@@ -26,7 +26,7 @@ it("main movement after durable publication preparation holds without rebasing o
   git(f.seed, "commit", "-m", "Concurrent owner main update");
   const owner = git(f.seed, "rev-parse", "HEAD");
   git(f.seed, "push", f.target, "HEAD:refs/heads/main");
-  const result = await new DoriUpdater(f.config, () => {}).once();
+  const result = await new CatalyUpdater(f.config, () => {}).once();
   expect(result.outcome).toBe("held");
   expect(git(f.target, "rev-parse", "main")).toBe(owner);
   expect(git(f.target, "show", "--format=%P", "--no-patch", owner)).toBe(f.expectedMain);
@@ -36,7 +36,7 @@ it("main movement after durable publication preparation holds without rebasing o
   expect(result.job?.promotion?.publication?.status).toBe("held");
   expect(readState(f.updater.context).baseline).toBeUndefined();
   expect(existsSync(join(f.config.root, "detector", "last-detection.json"))).toBe(false);
-  expect((await new DoriUpdater(f.config, () => {}).once()).outcome).toBe("duplicate");
+  expect((await new CatalyUpdater(f.config, () => {}).once()).outcome).toBe("duplicate");
   expect(git(f.target, "rev-parse", "main")).toBe(owner);
 });
 
@@ -72,7 +72,7 @@ it("lost acknowledgement after actual main push resumes from intent and real ref
   f.write(f.remote, "src/behavior.ts", "export const behavior = 3;\n");
   git(f.remote, "add", ".");
   git(f.remote, "commit", "-m", "Later upstream must wait behind interrupted promotion");
-  const result = await new DoriUpdater(f.config, () => {}).once();
+  const result = await new CatalyUpdater(f.config, () => {}).once();
   expect(result.outcome).toBe("promoted");
   expect(result.job?.id).toBe(f.job.id);
   expect(result.job?.phase).toBe("ready");
@@ -108,7 +108,7 @@ it("an actually moved owned candidate branch is held even when its main still ma
   expect(git(f.target, "rev-parse", publication.branch)).toBe(publication.commit!);
   // A real server-side owner move after the controller's confirmed branch receipt.
   git(f.target, "update-ref", publication.branch, f.expectedMain, publication.commit!);
-  expect((await new DoriUpdater(f.config, () => {}).once()).outcome).toBe("held");
+  expect((await new CatalyUpdater(f.config, () => {}).once()).outcome).toBe("held");
   expect(git(f.target, "rev-parse", publication.branch)).toBe(f.expectedMain);
   expect(git(f.target, "rev-parse", "main")).toBe(f.expectedMain);
   expect(readState(f.updater.context).baseline).toBeUndefined();

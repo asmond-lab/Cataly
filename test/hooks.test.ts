@@ -9,7 +9,8 @@ import { review } from "../src/gate.ts";
 import { prompt, type Deps } from "../src/harness.ts";
 import { ConfigError, hooksSettled, loadHooks, runHook, substitute } from "../src/hooks.ts";
 import { ready, report, startLane } from "../src/lanes.ts";
-import type { World } from "./fake.ts";
+import { spawnExec } from "../src/runtime/exec.ts";
+import { World } from "./fake.ts";
 import { setup } from "./harness-setup.ts";
 
 const config = (d: Deps, value: unknown) => writeFileSync(join(d.store.root, "config.json"), JSON.stringify(value));
@@ -25,7 +26,7 @@ function captureStderr() {
 }
 
 afterEach(() => {
-  delete process.env["DORI_PROMPTS_DIR"];
+  delete process.env["CATALY_PROMPTS_DIR"];
 });
 
 describe("hook config and placeholders", () => {
@@ -60,6 +61,24 @@ describe("hook config and placeholders", () => {
 });
 
 describe("lifecycle hooks", () => {
+  test.skipIf(process.platform === "win32")("saved lifecycle hooks receive the home of the loaded store", async () => {
+    const { d } = setup();
+    const output = join(d.store.root, "hook-output");
+    const previous = process.env["DORI_HOME"];
+    process.env["DORI_HOME"] = join(d.store.root, "foreign");
+    config(d, {
+      hooks: { onReport: ["bash", "-c", 'printf "%s" "${DORI_HOME:?}" > "$1"', "_", output] },
+    });
+    try {
+      await runHook({ ...d, exec: spawnExec }, "onReport", {});
+      expect(readFileSync(output, "utf8")).toBe(d.store.root);
+      expect(process.env["DORI_HOME"]).toBe(join(d.store.root, "foreign"));
+    } finally {
+      if (previous === undefined) delete process.env["DORI_HOME"];
+      else process.env["DORI_HOME"] = previous;
+    }
+  });
+
   test("onReport runs after the record is saved, with the exact argv", async () => {
     const { w, d, brief } = setup();
     await startLane(d, "lane-k", brief, { group: "w1" });
@@ -96,7 +115,7 @@ describe("lifecycle hooks", () => {
     expect(d.store.lane("gone-lane")!.status).toBe("lost");
   });
 
-  test("a hook exiting 1 leaves `dori ready` exit 0 and prints one stderr line", async () => {
+  test("a hook exiting 1 leaves `cataly ready` exit 0 and prints one stderr line", async () => {
     const { w, d, brief } = setup();
     await startLane(d, "lane-k", brief, { group: "w1" });
     config(d, { hooks: { onReady: ["my-hook", "{key}"] } });
@@ -110,7 +129,7 @@ describe("lifecycle hooks", () => {
       err.restore();
       log.mockRestore();
     }
-    expect(err.lines).toEqual(["dori: hook onReady failed (boom: webhook refused)\n"]);
+    expect(err.lines).toEqual(["cataly: hook onReady failed (boom: webhook refused)\n"]);
     expect(d.store.lane("lane-k")!.status).toBe("ready");
   });
 
@@ -132,12 +151,12 @@ describe("lifecycle hooks", () => {
       err.restore();
     }
     expect(err.lines).toHaveLength(2);
-    expect(err.lines[0]).toBe("dori: hook onLost failed (ENOENT: spawn)\n");
-    expect(err.lines[1]).toStartWith("dori: hook onLost failed (config.json: hooks.onLost must be");
+    expect(err.lines[0]).toBe("cataly: hook onLost failed (ENOENT: spawn)\n");
+    expect(err.lines[1]).toStartWith("cataly: hook onLost failed (config.json: hooks.onLost must be");
   });
 });
 
-describe("reviewCommand and DORI_PROMPTS_DIR", () => {
+describe("reviewCommand and CATALY_PROMPTS_DIR", () => {
   const head = "b".repeat(40);
 
   test("reviewCommand replaces the built-in reviewer; its VERDICT is parsed and the receipt says model hook", async () => {
@@ -154,14 +173,15 @@ describe("reviewCommand and DORI_PROMPTS_DIR", () => {
     await expect(review(d, "o/r#5")).rejects.toThrow("reviewer printed no VERDICT line");
   });
 
-  test("DORI_PROMPTS_DIR overrides prompt() and the prompts dori up renders", async () => {
-    const { w, d } = setup();
-    const dir = mkdtempSync(join(tmpdir(), "dori-prompts-"));
+  test("CATALY_PROMPTS_DIR overrides prompt() and the prompts cataly up renders", async () => {
+    const w = new World();
+    const d = w.deps();
+    const dir = mkdtempSync(join(tmpdir(), "cataly-prompts-"));
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "nudge.md"), "custom nudge for {{key}}");
-    for (const name of ["lead.md", "duty.md"]) writeFileSync(join(dir, name), `custom ${name} via {{dori}}`);
+    for (const name of ["lead.md", "duty.md"]) writeFileSync(join(dir, name), `custom ${name} via {{cataly}}`);
     expect(prompt("nudge.md", { key: "k" })).not.toBe("custom nudge for k");
-    process.env["DORI_PROMPTS_DIR"] = dir;
+    process.env["CATALY_PROMPTS_DIR"] = dir;
     expect(prompt("nudge.md", { key: "k" })).toBe("custom nudge for k");
     const log = spyOn(console, "log").mockImplementation(() => {});
     try {
@@ -169,8 +189,8 @@ describe("reviewCommand and DORI_PROMPTS_DIR", () => {
     } finally {
       log.mockRestore();
     }
-    expect(readFileSync(join(d.store.root, "prompts", "lead.md"), "utf8")).toBe("custom lead.md via dori");
-    expect(readFileSync(join(d.store.root, "prompts", "duty.md"), "utf8")).toBe("custom duty.md via dori");
+    expect(readFileSync(join(d.store.root, "prompts", "lead.md"), "utf8")).toBe("custom lead.md via cataly");
+    expect(readFileSync(join(d.store.root, "prompts", "duty.md"), "utf8")).toBe("custom duty.md via cataly");
     expect(w.calls.length).toBeGreaterThan(0);
   });
 });
@@ -223,6 +243,6 @@ describe("hooks never block a command", () => {
     } finally {
       process.stderr.write = original;
     }
-    expect(events).toEqual(["kill", "dori: hook onReport failed (timed out after 50 ms)\n"]);
+    expect(events).toEqual(["kill", "cataly: hook onReport failed (timed out after 50 ms)\n"]);
   });
 });

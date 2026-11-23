@@ -11,7 +11,7 @@ test.each([
   { foreground: { name: "/opt/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js" }, shell: false },
   { foreground: { name: "bash", argv: ["bash", "-c", "read answer", null] }, shell: true },
 ])("incomplete argv does not erase delivery hold evidence: %p", async ({ foreground, shell }) => {
-  const stateDir = mkdtempSync(join(tmpdir(), "dori-hc-argv-"));
+  const stateDir = mkdtempSync(join(tmpdir(), "cataly-hc-argv-"));
   try {
     const fake = new FakeHc({ t1: terminal({ status: shell ? null : { state: "idle" } }) });
     const rt = new HcRuntime(

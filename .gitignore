@@ -1,5 +1,8 @@
 node_modules
+.cataly/
+.omp-cataly/
 .dori/
+.omp-dori/
 *.tmp
 .DS_Store
 .omo/
@@ -7,3 +10,6 @@ node_modules
 ref/
 .qa-home/
 evidence/
+/target/
+/.cataly-native/
+__pycache__/

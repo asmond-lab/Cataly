@@ -98,17 +98,18 @@ describe("close, list, self", () => {
     await rt.close(T1);
   });
 
-  test("list filters by the dori.group label and keeps only this core's terminals", async () => {
-    const { fake, rt } = rig({
-      t1: terminal({ labels: { "dori.group": "g1" } }),
-      t2: terminal({ labels: { "dori.group": "g2" } }),
+  test("list returns exact local groups across both label generations without duplicates", async () => {
+    const { rt } = rig({
+      t1: terminal({ labels: { "cataly.group": "g1", "dori.group": "g1" } }),
+      t2: terminal({ labels: { "cataly.group": "g2" } }),
       t3: terminal({ labels: { "dori.group": "g1" } }),
+      t4: terminal({ labels: { "dori.group": "g2" } }),
+      "peer/t5": terminal({ labels: { "dori.group": "g1" } }),
     });
     expect(await rt.list({ group: "g1" })).toEqual([
       { ref: { runtime: "hc", id: "t1", group: "g1" }, cwd: "/w", status: "idle", agent: "omo" },
       { ref: { runtime: "hc", id: "t3", group: "g1" }, cwd: "/w", status: "idle", agent: "omo" },
     ]);
-    expect(fake.calls).toEqual([["ls", "--label", "dori.group=g1"]]);
   });
 
   test("list without a group lists every live local terminal", async () => {

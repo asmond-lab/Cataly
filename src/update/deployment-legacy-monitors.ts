@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { basename } from "node:path";
-import { readPaneState } from "../../skills/dori-mode/scripts/src/lane-state.ts";
+import { readPaneState } from "../../skills/cataly-mode/scripts/src/lane-state.ts";
+import { parseCatalyRole } from "../../skills/cataly-mode/scripts/src/session-compat.ts";
 import { DeploymentHeld, processIdentity, sameProcess } from "./deployment-process.ts";
 import type {
   DeploymentConfig,
@@ -97,10 +98,10 @@ function captureLegacyRollbackForeground(
     !state ||
     state.pid !== expected.pid ||
     state.paneId !== config.pane ||
-    state.role !== "dori" ||
+    state.role !== "cataly" ||
     state.sessionId !== config.sessionId ||
     state.paneId !== record.oldRuntime.pane ||
-    state.role !== record.oldRuntime.role ||
+    state.role !== parseCatalyRole(record.oldRuntime.role) ||
     state.sessionId !== record.oldRuntime.sessionId ||
     typeof state.sessionFile !== "string" ||
     !state.sessionFile ||
@@ -185,7 +186,7 @@ export function completedLegacyRollbackForeground(
   const receipt = captureLegacyRollbackForeground(config, record, since, expected);
   if (
     receipt.runtime.pane !== completed.pane ||
-    receipt.runtime.role !== completed.role ||
+    receipt.runtime.role !== parseCatalyRole(completed.role) ||
     receipt.runtime.sessionId !== completed.sessionId ||
     receipt.runtime.sessionFile !== completed.sessionFile ||
     receipt.runtime.startedAt !== completed.startedAt ||

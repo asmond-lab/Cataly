@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { main } from "../src/cli.ts";
 import { dutyTick } from "../src/duty.ts";
+import { flushInbox } from "../src/inbox.ts";
+import { HeadlessRuntime } from "../src/runtime/headless.ts";
+import { Runtimes } from "../src/runtime/registry.ts";
+import { formatRef, type DeliverOutcome, type SessionRef } from "../src/runtime/types.ts";
 import { captureIo, setup, typedEntry } from "./inbox-setup.ts";
 import { href } from "./fake.ts";
 
@@ -68,9 +73,30 @@ describe("a typed entry whose pane's agent changed is held, never Entered (#108 
     expect(s.d.store.queued(href("w1:p2"))).toEqual([]);
     expect(s.notices()).toEqual([]);
   });
+
+  test("a typed entry forwarded to an idle native lane is held instead of submitted again", async () => {
+    const s = setup();
+    const old = href("w1:p2");
+    const ref: SessionRef = { runtime: "headless", id: "00000000-0000-4000-8000-000000000001" };
+    const sent: string[] = [];
+    const native = Object.assign(new HeadlessRuntime(s.d.store.root), {
+      probe: async () => ({ status: "idle", shellInFront: false, sessionId: "native-lane" }) as const,
+      deliver: async (_ref: SessionRef, text: string): Promise<DeliverOutcome> => {
+        sent.push(text);
+        return { kind: "delivered" };
+      },
+    });
+    const runtimes = new Runtimes("herdr", (kind) => (kind === "headless" ? native : s.d.runtimes.terminal(kind)));
+    await typedEntry(s);
+    writeFileSync(`${s.d.store.inboxPath(old)}.forward`, `${formatRef(ref)}\n`);
+
+    expect(await flushInbox({ ...s.d, runtimes }, old)).toBe("held");
+    expect(s.d.store.queued(ref).map((msg) => msg.attempt?.state)).toEqual(["ambiguous"]);
+    expect(sent).toEqual([]);
+  });
 });
 
-describe("releasing held entries: dori inbox list | ack | resend (#108 2)", () => {
+describe("releasing held entries: cataly inbox list | ack | resend (#108 2)", () => {
   function heldInbox(s: ReturnType<typeof setup>) {
     const long = `SECRET "quoted"\n${"x".repeat(100)}`;
     s.d.store.saveInbox(href("w1:p2"), [

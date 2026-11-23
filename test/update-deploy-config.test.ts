@@ -31,16 +31,16 @@ afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "dori-deploy-config-"));
+  const root = mkdtempSync(join(tmpdir(), "cataly-deploy-config-"));
   directories.push(root);
   const config = parseDeploymentConfig(
     {
       releaseRoot: "managed",
-      liveSource: "~/.dori/src",
+      liveSource: "~/.cataly/src",
       home: "home",
-      doriHome: "~/.dori",
-      doriConfig: "~/.dori/config.json",
-      stateDir: "~/.dori/state",
+      catalyHome: "~/.cataly",
+      catalyConfig: "~/.cataly/config.json",
+      stateDir: "~/.cataly/state",
       bun: process.execPath,
       omp: process.execPath,
       legacyOmp: "~/private-legacy/omp",
@@ -48,12 +48,12 @@ function fixture() {
       pane: "w1:p1",
       sessionId: "same-session",
       model: "openai-codex/gpt-6.1-sol",
-      restartLock: "~/.dori/restart.lock",
-      launcherPath: "~/.dori/fixed-restart-controller",
+      restartLock: "~/.cataly/restart.lock",
+      launcherPath: "~/.cataly/fixed-restart-controller",
       healthTimeoutMs: 100,
       shims: [
-        { path: "~/.dori/update/local-source", source: "." },
-        { path: "~/.dori/update/controller", source: "." },
+        { path: "~/.cataly/update/local-source", source: "." },
+        { path: "~/.cataly/update/controller", source: "." },
       ],
     },
     root,
@@ -80,7 +80,7 @@ test("native stop mode is optional, canonical when absent and rejects malformed 
 it("release-root shims remain stable through source conversion and restore their exact previous links", () => {
   const { root, config } = fixture();
   expect(config.home).toBe(join(root, "home"));
-  expect(config.liveSource).toBe(join(config.home, ".dori", "src"));
+  expect(config.liveSource).toBe(join(config.home, ".cataly", "src"));
   const release = join(root, "published-source");
   mkdirSync(release);
   writeFileSync(join(release, "consumer.txt"), "published");

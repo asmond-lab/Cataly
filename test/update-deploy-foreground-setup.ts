@@ -4,16 +4,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Writable } from "node:stream";
-import { type PaneState, writePaneState } from "../skills/dori-mode/scripts/src/lane-state.ts";
+import { type PaneState, writePaneState } from "../skills/cataly-mode/scripts/src/lane-state.ts";
 import { processIdentity } from "../src/update/deployment-process.ts";
 import { procChildren, procCmdline, procStat } from "../src/update/proc.ts";
 import type { MonitorSet, RuntimeHealth, RuntimeIdentity } from "../src/update/deployment-types.ts";
 import { foregroundCli } from "./update-deploy-foreground-cli.ts";
 import { foregroundActor } from "./update-deploy-foreground-readiness.ts";
 import { processName } from "./proc-name.ts";
-import { deploymentConfig } from "./update-deploy-setup.ts";
-
-const cleanups: Array<() => Promise<void>> = [];
+import { deploymentConfig, type ForegroundFixtureOptions } from "./update-deploy-setup.ts";
+const cleanups: Array<() => void | Promise<void>> = [];
 afterEach(async () => {
   const errors: unknown[] = [];
   for (const cleanup of cleanups.splice(0).reverse()) {
@@ -27,18 +26,8 @@ afterEach(async () => {
   if (errors.length > 1) throw new AggregateError(errors, "foreground fixture cleanup failed");
 });
 /** Real exec-launched native group and script children; herdr supplies only their observed metadata. */
-export async function foregroundFixture(
-  options: {
-    unknown?: boolean;
-    parentShell?: boolean;
-    rollback?: boolean;
-    paneShell?: boolean;
-    stoppable?: boolean;
-    subshell?: boolean;
-    transient?: boolean;
-  } = {},
-) {
-  const root = mkdtempSync(join(tmpdir(), "dori-foreground-"));
+export async function foregroundFixture(options: ForegroundFixtureOptions = {}) {
+  const root = mkdtempSync(join(tmpdir(), "cataly-foreground-"));
   let closing = false;
   cleanups.push(async () => rmSync(root, { recursive: true, force: true }));
   const config = {
@@ -54,29 +43,34 @@ export async function foregroundFixture(
         "--config",
         join(config.releaseRoot, "native-config.json"),
         `--resume=${sessionFile}`,
-        "--dori-role",
-        "dori",
+        "--cataly-role",
+        "cataly",
         "--model",
         config.model,
       ]
     : [];
   const signalPath = join(root, "signals");
-  const script = join(root, "known.sh");
-  const dori = join(root, "dori");
+  const script = join(root, options.bunOnly ? "known.ts" : "known.sh");
+  const cataly = join(root, "cataly");
   const presence = join(root, "presence.sh");
   const unknown = join(root, "unknown.sh");
   const nested = options.subshell ? "(while IFS= read -r line; do :; done) <&0 &\n" : "";
   const shell = `#!/bin/bash\ntrap 'printf signal >> ${signalPath}' TERM INT HUP\n${nested}printf 'ready\\n'\nwhile IFS= read -r line; do :; done\nwait\n`;
-  writeFileSync(script, shell, { mode: 0o700 });
+  writeFileSync(script, options.bunOnly ? 'console.log("ready"); await Bun.stdin.text();\n' : shell, { mode: 0o700 });
   writeFileSync(unknown, shell, { mode: 0o700 });
-  writeFileSync(dori, `#!${process.execPath}\nconsole.log("ready"); await Bun.stdin.text();\n`, { mode: 0o700 });
-  writeFileSync(presence, `#!/bin/bash\nexec ${JSON.stringify(dori)} "$@"\n`, { mode: 0o700 });
+  writeFileSync(cataly, `#!${process.execPath}\nconsole.log("ready"); await Bun.stdin.text();\n`, { mode: 0o700 });
+  writeFileSync(presence, `#!/bin/bash\nexec ${JSON.stringify(cataly)} "$@"\n`, { mode: 0o700 });
+  const activityPath = join(config.stateDir, "activity", "discord.json");
+  const intakeArgv = options.activity
+    ? [process.execPath, new URL("./update-source-intake-setup.ts", import.meta.url).pathname, activityPath]
+    : [options.bunOnly ? process.execPath : "/bin/bash", script];
   const specs = [
-    { name: "intake", argv: [script], filter: ".", cwd: root },
-    { name: "dori-watch", argv: [presence], filter: ".", cwd: root },
+    { name: "intake", argv: options.activity || options.bunOnly ? intakeArgv : [script], filter: ".", cwd: root },
+    { name: "cataly-watch", argv: [presence], filter: ".", cwd: root },
   ];
   // Direct shebang exec names /proc/comm after the script; explicit Bash reproduces the production foreground.
-  const commands = [["/bin/bash", script], [presence], ...(options.unknown ? [["/bin/bash", unknown]] : [])];
+  const commands = [intakeArgv, [presence]];
+  if (options.unknown) commands.push(["/bin/bash", unknown]);
   writeFileSync(
     config.omp,
     foregroundActor.source({ root, signalPath, commands, stoppable: options.stoppable, transient: options.transient }),
@@ -88,7 +82,7 @@ export async function foregroundFixture(
       : ["--noprofile", "--norc", "-c", 'exec "$@"', "native", process.execPath, config.omp, ...launchArgs];
   const runtimeFor = (pid: number): RuntimeIdentity => ({
     ...processIdentity(pid)!,
-    role: "dori",
+    role: "cataly",
     pane: config.pane,
     sessionId: config.sessionId,
     sessionFile,
@@ -145,7 +139,11 @@ export async function foregroundFixture(
     sessionId: runtime.sessionId,
     runtime,
     monitors: specs,
-    intake: { path: join(root, "heartbeat"), monitor: "intake", maxAgeMs: 5_000 },
+    intake: {
+      path: options.activity ? `${activityPath}.heartbeat` : join(root, "heartbeat"),
+      monitor: "intake",
+      maxAgeMs: 5_000,
+    },
     running: specs.map(({ name }, index) => {
       const pid = observed.monitors[index]!;
       return { name, pid, identity: processIdentity(pid)! };
@@ -160,7 +158,7 @@ export async function foregroundFixture(
     paneId: config.pane,
     pid: runtime.pid,
     sessionId: runtime.sessionId,
-    role: "dori",
+    role: "cataly",
     presetLoaded: true,
     startedAt: runtime.startedAt,
     updatedAt: runtime.startedAt,
@@ -206,6 +204,17 @@ export async function foregroundFixture(
     }
     return { front, status: state.agentStatus! };
   };
+  const ownCleanup = (cleanup: () => void): (() => void) => {
+    let pending = true;
+    const dispose = () => {
+      if (!pending) return;
+      pending = false;
+      cleanup();
+    };
+    if (closing) dispose();
+    else cleanups.push(dispose);
+    return dispose;
+  };
   const cli = foregroundCli(config, observe);
   return {
     root,
@@ -224,6 +233,7 @@ export async function foregroundFixture(
     writeBootstrap,
     writeHealth,
     observe,
+    ownCleanup,
     sendLine: (line: string) => child.stdin!.write(`${line}\n`),
     closeNativeInput: () => (child.stdio[3] as Writable).end(),
   };

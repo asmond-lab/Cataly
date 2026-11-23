@@ -1,15 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { takeLock } from "../../skills/dori-mode/scripts/src/checkpoint-lock";
-import { openOwes } from "../../skills/dori-mode/scripts/src/owes";
+import { takeLock } from "../../skills/cataly-mode/scripts/src/checkpoint-lock";
+import { openOwes } from "../../skills/cataly-mode/scripts/src/owes";
 import { BATCH_MS } from "../monitor";
 import { load, until, useConfig } from "./fake-pi";
 
 const inbound = 'INBOUND discord 20 100 from=owner ref=- "question"';
 const setup = async () => {
   const root = useConfig(join(import.meta.dir, "fake-ulw.ts"));
-  const pi = await load({ session: { id: "s1", entries: [] }, flags: { "dori-role": "dori" } });
+  const pi = await load({ session: { id: "s1", entries: [] }, flags: { "cataly-role": "cataly" } });
   await pi.emit("session_start");
   mkdirSync(join(root, "owes"), { recursive: true, mode: 0o700 });
   const held = takeLock(join(root, "owes", "inbound.jsonl.lock"), Date.now(), (message) => new Error(message));
@@ -38,7 +38,7 @@ const setup = async () => {
 };
 
 afterEach(() => {
-  delete process.env.DORI_CONFIG;
+  delete process.env.CATALY_CONFIG;
 });
 
 test("a synchronous settle does not wait for a file lock, and subsequent admission wakes a new turn", async () => {

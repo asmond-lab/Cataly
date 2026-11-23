@@ -22,9 +22,9 @@ it("published clone provisions frozen dependencies privately and carries only th
   expect(sourceManifest(f.record.releasePath).hash).toBe(candidateBefore.hash);
   expect(sourceManifest(f.candidate)).toEqual(candidateBefore);
   expect(readFileSync(join(f.record.releasePath, "ref/omp-ulw/index.ts"), "utf8")).toContain("preserved");
-  expect(lstatSync(join(f.record.releasePath, "skills/dori-mode/scripts/src/cli.ts")).mode & 0o111).toBe(0o111);
-  expect(readFileSync(join(f.home, ".dori/config.json"), "utf8")).toBe('{"owner":"unchanged"}\n');
-  expect(readFileSync(join(f.home, ".dori/state/owner.json"), "utf8")).toBe('{"cursor":17}\n');
+  expect(lstatSync(join(f.record.releasePath, "skills/cataly-mode/scripts/src/cli.ts")).mode & 0o111).toBe(0o111);
+  expect(readFileSync(join(f.home, ".cataly/config.json"), "utf8")).toBe('{"owner":"unchanged"}\n');
+  expect(readFileSync(join(f.home, ".cataly/state/owner.json"), "utf8")).toBe('{"cursor":17}\n');
   expect(lstatSync(f.config.liveSource, { throwIfNoEntry: false })).toBeUndefined();
   f.record.preparedAt = new Date().toISOString();
   await prepareRelease(f.config, f.input, f.record);
@@ -39,7 +39,7 @@ it("actual published tree mismatch is held before operator source or state chang
   const input = { ...f.input, commit: git(f.remote, "rev-parse", "HEAD") };
   await expect(prepareRelease(f.config, input, f.record)).rejects.toThrow("commit or tree");
   expect(lstatSync(f.config.liveSource, { throwIfNoEntry: false })).toBeUndefined();
-  expect(readFileSync(join(f.home, ".dori/state/owner.json"), "utf8")).toContain('"cursor":17');
+  expect(readFileSync(join(f.home, ".cataly/state/owner.json"), "utf8")).toContain('"cursor":17');
 });
 
 it("a Git tree containing excluded runtime data is rejected even when its admitted source hash matches", async () => {
@@ -139,7 +139,7 @@ exec ${quote(process.execPath)} "$@"`,
       expect(lstatSync(config.liveSource, { throwIfNoEntry: false })).toBeUndefined();
       expect(lstatSync(config.launcherPath, { throwIfNoEntry: false })).toBeUndefined();
       expect(signals).not.toHaveBeenCalled();
-      expect(readFileSync(join(f.home, ".dori/state/owner.json"), "utf8")).toBe('{"cursor":17}\n');
+      expect(readFileSync(join(f.home, ".cataly/state/owner.json"), "utf8")).toBe('{"cursor":17}\n');
       return;
     }
     rmSync(marker);
@@ -152,7 +152,7 @@ exec ${quote(process.execPath)} "$@"`,
     expect(resumed.stopRequestedAt).toBeUndefined();
     expect(readFileSync(native, "utf8")).toContain("observed");
     expect(signals).not.toHaveBeenCalled();
-    expect(readFileSync(join(f.home, ".dori/state/owner.json"), "utf8")).toBe('{"cursor":17}\n');
+    expect(readFileSync(join(f.home, ".cataly/state/owner.json"), "utf8")).toBe('{"cursor":17}\n');
   } finally {
     signals.mockRestore();
     now.mockRestore();

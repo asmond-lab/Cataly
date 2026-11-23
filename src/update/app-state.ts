@@ -9,7 +9,10 @@ import type { SourceEntry, SourceManifest, UpdateContext, UpdateJob } from "./ty
 const PRIVATE_NAMES: Readonly<Record<string, true>> = {
   ".git": true,
   node_modules: true,
+  ".cataly": true,
+  ".omp-cataly": true,
   ".dori": true,
+  ".omp-dori": true,
   ".omp": true,
   ".omo": true,
   auth: true,
@@ -66,10 +69,12 @@ export function applicationInput(ctx: UpdateContext, job: UpdateJob, input: stri
     );
   }
   if (!contains(root, source)) {
-    for (const name of [".dori", ".omp", ".agents"]) {
+    for (const name of [".cataly", ".omp-cataly", ".dori", ".omp-dori", ".omp", ".agents"]) {
       const personal = canonical(join(homedir(), name));
       if (contains(personal, source) || contains(source, personal)) {
-        throw new UpdateError("application-state input must be explicitly task-owned, outside personal Dori/OMP state");
+        throw new UpdateError(
+          "application-state input must be explicitly task-owned, outside personal Cataly/OMP state",
+        );
       }
     }
   }

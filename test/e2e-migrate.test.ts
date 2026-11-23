@@ -19,7 +19,7 @@ const {
   HC_SOCKET: _hcSock,
   HERDR_PANE_ID: _pane,
   HERDR_WORKSPACE_ID: _ws,
-  DORI_CMD: _cmd,
+  CATALY_CMD: _cmd,
   ...outer
 } = process.env;
 const env = {
@@ -28,10 +28,10 @@ const env = {
   XDG_STATE_HOME: state,
   XDG_RUNTIME_DIR: run,
   XDG_CONFIG_HOME: config,
-  DORI_HOME: home,
-  DORI_STATE_DIR: join(home, "omp-state"),
-  DORI_HERDR_SESSION: session,
-  DORI_TELEMETRY: "0",
+  CATALY_HOME: home,
+  CATALY_STATE_DIR: join(home, "omp-state"),
+  CATALY_HERDR_SESSION: session,
+  CATALY_TELEMETRY: "0",
 };
 // The hc stand-in reports its status the way hc reads it (OSC 7501), idle at start, and echoes what it reads.
 const agent7501 = join(root, "agent-7501.sh");
@@ -50,9 +50,9 @@ const json = async (argv: string[]) => {
 };
 const herdr = async (...argv: string[]) => (await json(["herdr", "--session", session, ...argv]))["result"] as never;
 const hc = (...argv: string[]) => json(["hc", "--json", ...argv]);
-const dori = async (extra: Record<string, string>, ...argv: string[]) => {
+const cataly = async (extra: Record<string, string>, ...argv: string[]) => {
   const r = await exec(["bun", cli, ...argv], extra);
-  if (r.code !== 0) throw new Error(`dori ${argv.join(" ")} -> ${r.code}: ${r.err}${r.out}`);
+  if (r.code !== 0) throw new Error(`cataly ${argv.join(" ")} -> ${r.code}: ${r.err}${r.out}`);
   return r.out;
 };
 const alive = (pid: number): boolean => {
@@ -103,7 +103,7 @@ afterAll(async () => {
 }, 60_000);
 
 test.skipIf(!both)(
-  "a herdr lane migrated with --to hc ends MIGRATED with one hc terminal labelled dori.lane=mk",
+  "a herdr lane migrated with --to hc ends MIGRATED with one hc terminal labelled cataly.lane=mk",
   async () => {
     const ws = (await herdr("workspace", "create", "--label", "e2e", "--cwd", home, "--no-focus")) as {
       root_pane: { pane_id: string };
@@ -111,11 +111,11 @@ test.skipIf(!both)(
     };
     const lead = ws.root_pane.pane_id;
     await herdr("pane", "run", lead, "cat");
-    await dori({}, "role", "lead", lead);
+    await cataly({}, "role", "lead", lead);
     const brief = join(root, "brief.md");
     writeFileSync(brief, "E2E-MIGRATE-BRIEF\n");
-    const onHerdr = { DORI_RUNTIME: "herdr", DORI_AGENT_CMD: "sh -c 'exec cat' lane" };
-    const started = await dori(
+    const onHerdr = { CATALY_RUNTIME: "herdr", CATALY_AGENT_CMD: "sh -c 'exec cat' lane" };
+    const started = await cataly(
       onHerdr,
       "start",
       "mk",
@@ -129,13 +129,13 @@ test.skipIf(!both)(
     const oldPane = /STARTED mk pane=(\S+)/.exec(started)?.[1] ?? "";
     expect(oldPane).not.toBe("");
 
-    const onHc = { DORI_RUNTIME: "hc", DORI_AGENT_CMD: `sh -c '. "$0"' ${shq(agent7501)}` };
-    const out = await dori(onHc, "migrate", "--to", "hc", "--lane", "mk", "--wait-minutes", "0");
+    const onHc = { CATALY_RUNTIME: "hc", CATALY_AGENT_CMD: `sh -c '. "$0"' ${shq(agent7501)}` };
+    const out = await cataly(onHc, "migrate", "--to", "hc", "--lane", "mk", "--wait-minutes", "0");
     const moved = new RegExp(`^MIGRATED mk ${oldPane} -> hc:(t\\d+)$`, "m").exec(out);
     expect(moved).not.toBeNull();
-    const rows = ((await hc("ls", "--label", "dori.lane=mk"))["terminals"] ?? []) as { address: string }[];
+    const rows = ((await hc("ls", "--label", "cataly.lane=mk"))["terminals"] ?? []) as { address: string }[];
     expect(rows.map((r) => r.address)).toEqual([moved?.[1] ?? ""]);
-    expect(await dori({}, "status")).toMatch(new RegExp(`mk\\s+working\\s+hc\\s+hc:${moved?.[1]}`));
+    expect(await cataly({}, "status")).toMatch(new RegExp(`mk\\s+working\\s+hc\\s+hc:${moved?.[1]}`));
     await until("the old herdr pane to close", async () => {
       const r = await exec(["herdr", "--session", session, "pane", "get", oldPane]);
       return r.code !== 0 ? true : undefined;

@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 const load = (argv: readonly string[], role: "worker" | "reviewer", engine?: "omp" | "external") => {
-  const directory = mkdtempSync(join(tmpdir(), "dori-native-bun-run-"));
+  const directory = mkdtempSync(join(tmpdir(), "cataly-native-bun-run-"));
   directories.push(directory);
   for (const name of ["candidate", "remote"]) mkdirSync(join(directory, name), { mode: 0o700 });
   const agent = { argv: ["omp", "--model=anthropic/claude-opus-5-5", "{prompt}"], timeoutMs: 1000 };
@@ -20,7 +20,7 @@ const load = (argv: readonly string[], role: "worker" | "reviewer", engine?: "om
     path,
     JSON.stringify({
       version: 1,
-      target: "dori",
+      target: "cataly",
       runtime: "herdr",
       root: join(directory, "updates"),
       remote: join(directory, "remote"),
@@ -46,7 +46,7 @@ test.each([
   ["attached and boolean options", ["bun", "run", "--preload=/hook.ts", "--smol", "/x/omp"]],
 ])("Bun run with %s retains native admission and the resume guard", (_, prefix) => {
   const argv = [...prefix, "--model=anthropic/claude-opus-5-5", "{prompt}"];
-  expect(classifyOmpArgv(argv)).toEqual({ kind: "omp", command: argv });
+  expect(classifyOmpArgv(argv)).toEqual({ kind: "omp", command: argv, argsAt: prefix.length });
   const resume = [...argv.slice(0, -1), "--resume", "s", "{prompt}"];
   for (const role of ["worker", "reviewer"] as const) {
     const command = load(argv, role)[role];
@@ -57,10 +57,10 @@ test.each([
   }
 });
 
-test.each(["-e", "--profile", "--dori-role"])("Bun run cannot bypass the native %s capability guard", (flag) => {
+test.each(["-e", "--profile", "--cataly-role"])("Bun run cannot bypass the native %s capability guard", (flag) => {
   const argv = ["bun", "run", "/x/omp", "--model=anthropic/claude-opus-5-5", flag, "untrusted", "{prompt}"];
   for (const role of ["worker", "reviewer"] as const) {
-    expect(() => load(argv, role)).toThrow("controller-owned prompt/profile/alias/extension/hook/Dori-role flags");
+    expect(() => load(argv, role)).toThrow("controller-owned prompt/profile/alias/extension/hook/Cataly-role flags");
   }
 });
 
@@ -96,7 +96,7 @@ test("readable env and assignment prefixes still expose Bun run to the native re
     "s",
     "{prompt}",
   ];
-  expect(classifyOmpArgv(argv)).toEqual({ kind: "omp", command: argv.slice(4) });
+  expect(classifyOmpArgv(argv)).toEqual({ kind: "omp", command: argv.slice(4), argsAt: 4 });
   for (const role of ["worker", "reviewer"] as const) {
     expect(() => load(argv, role)).toThrow("without session resume");
   }

@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { routeDiscordAskReply } from "../../skills/dori-mode/scripts/src/messenger/discord-ask-mailbox.ts";
+import { routeDiscordAskReply } from "../../skills/cataly-mode/scripts/src/messenger/discord-ask-mailbox.ts";
 import { askOnDiscord } from "../discord-ask-remote.ts";
 
 const channel = "109867692300000011";
@@ -19,7 +19,6 @@ test.skipIf(process.platform === "win32").each(["timeout", "manual at deadline",
   async (scenario) => {
     const root = mkdtempSync(join(tmpdir(), "cataly-ask-timeout-"));
     const controller = new AbortController();
-    const originalBase = process.env["DORI_DISCORD_API_BASE"];
     const published = Promise.withResolvers<void>();
     const closed = Promise.withResolvers<void>();
     const started = Promise.withResolvers<void>();
@@ -46,12 +45,12 @@ test.skipIf(process.platform === "win32").each(["timeout", "manual at deadline",
         return new Response(null, { status: 404 });
       },
     });
-    process.env["DORI_DISCORD_API_BASE"] = `http://127.0.0.1:${server.port}/api/v10`;
     let finished = false;
     const run = askOnDiscord({
       html: form(scenario === "no recommendation" ? "" : "checked"),
       route: { channel, owner, receiverStateDir: root },
       token: "synthetic-token",
+      apiOverride: `http://127.0.0.1:${server.port}/api/v10`,
       signal: controller.signal,
       warn: () => {},
     }).then((answer) => {
@@ -80,8 +79,6 @@ test.skipIf(process.platform === "win32").each(["timeout", "manual at deadline",
       controller.abort();
       await run.catch(() => undefined);
       clock.mockRestore();
-      if (originalBase === undefined) delete process.env["DORI_DISCORD_API_BASE"];
-      else process.env["DORI_DISCORD_API_BASE"] = originalBase;
       server.stop(true);
       rmSync(root, { recursive: true, force: true });
     }

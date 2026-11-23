@@ -19,7 +19,7 @@ const entries = [packageRoot, "/private/home space ; literal/source/packages/cod
           "--preload",
           `${root}scripts/../../utils/src/module-timer.ts`,
           entry,
-          "--dori-role",
+          "--cataly-role",
           "lane",
           "message with spaces ; literal",
         ],

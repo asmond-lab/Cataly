@@ -6,6 +6,6 @@ top-ups and paid overage require explicit user permission for the specific use a
 Do not work around the limit with automatic redemption, retries or account/provider/model switches.
 - Check that what you wait on is still alive and moving (a check, a process, a request):
 {{wholeTarget}}
-- It moved: `{{dori}} report {{key}} --text '<what changed>' --evidence <its log, file or link>`
-- It is done: `{{dori}} report {{key}} --status working --text '<result>' --evidence <file|link>`
-- It is stuck: `{{dori}} report {{key}} --status waiting --text 'STUCK: <what you saw>'`, then work around it.
+- It moved: `{{cataly}} report {{key}} --text '<what changed>' --evidence <its log, file or link>`
+- It is done: `{{cataly}} report {{key}} --status working --text '<result>' --evidence <file|link>`
+- It is stuck: `{{cataly}} report {{key}} --status waiting --text 'STUCK: <what you saw>'`, then work around it.

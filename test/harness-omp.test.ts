@@ -13,7 +13,7 @@ import { captureIo } from "./inbox-setup.ts";
 
 describe("OMP harness launches", () => {
   for (const runtime of ["herdr", "hc"] as const) {
-    test(`${runtime}: lead and duty use the Dori role and loop commands stay callable`, async () => {
+    test(`${runtime}: lead and duty use the Cataly role and loop commands stay callable`, async () => {
       const w = new World();
       const d = { ...w.deps({ runtime }), agentCmd: "omp" };
       await captureIo(async () => {
@@ -25,10 +25,10 @@ describe("OMP harness launches", () => {
           ? w.calls.filter((c) => c.cmd === "herdr" && c.argv[1] === "run").map((c) => c.argv[3])
           : w.hc.sent.map((c) => c.text);
       expect(commands).toEqual([
-        `omp --dori-role dori --append-system-prompt '${join(d.store.root, "prompts", "lead.md")}'`,
-        `omp --dori-role dori --append-system-prompt '${join(d.store.root, "prompts", "duty.md")}'`,
-        "dori duty --interval 60",
-        "dori loop",
+        `omp --cataly-role cataly --append-system-prompt '${join(d.store.root, "prompts", "lead.md")}'`,
+        `omp --cataly-role cataly --append-system-prompt '${join(d.store.root, "prompts", "duty.md")}'`,
+        "cataly duty --interval 60",
+        "cataly loop",
       ]);
     });
   }
@@ -38,30 +38,34 @@ describe("OMP harness launches", () => {
     const d = { ...s.d, agentCmd: "omp --model provider/model" };
     const lane = await startLane(d, "omp-task", s.brief, { group: "w1" });
     expect(s.w.panes.get(lane.paneId)!.ran[0]).toStartWith(
-      "omp --model provider/model --dori-role lane 'Read your brief at ",
+      "omp --model provider/model --cataly-role lane 'Read your brief at ",
     );
   });
 
   test("explicit command and role overrides retain their arguments", () => {
     const d = new World().deps();
     expect(agentCommand({ ...d, agentCmd: "custom-agent --model other" }, "lane")).toBe("custom-agent --model other");
-    expect(agentCommand({ ...d, agentCmd: "omp --dori-role=lane --model other" }, "dori")).toBe(
-      "omp --dori-role=lane --model other",
+    expect(agentCommand({ ...d, agentCmd: "omp --cataly-role=lane --model other" }, "cataly")).toBe(
+      "omp --cataly-role=lane --model other",
     );
-    expect(agentCommand({ ...d, agentCmd: "/opt/bin/omp --model other" }, "dori")).toBe(
-      "/opt/bin/omp --model other --dori-role dori",
+    for (const option of ["--dori-role=lane", "--dori-role lane"]) {
+      const command = `omp ${option} --model other`;
+      expect(agentCommand({ ...d, agentCmd: command }, "cataly")).toBe(command);
+    }
+    expect(agentCommand({ ...d, agentCmd: "/opt/bin/omp --model other" }, "cataly")).toBe(
+      "/opt/bin/omp --model other --cataly-role cataly",
     );
     expect(agentCommand({ ...d, agentCmd: "env MODEL=x '/opt/agent tools/omp'" }, "lane")).toBe(
-      "env MODEL=x '/opt/agent tools/omp' --dori-role lane",
+      "env MODEL=x '/opt/agent tools/omp' --cataly-role lane",
     );
     expect(agentCommand({ ...d, agentCmd: "bun /opt/bin/omp --model other" }, "lane")).toBe(
-      "bun /opt/bin/omp --model other --dori-role lane",
+      "bun /opt/bin/omp --model other --cataly-role lane",
     );
     const source =
       "bun --preload '/opt/agent tools/packages/coding-agent/scripts/omp.ts' '/opt/agent tools/packages/coding-agent/scripts/../src/cli.ts'";
-    expect(agentCommand({ ...d, agentCmd: source }, "dori")).toBe(`${source} --dori-role dori`);
+    expect(agentCommand({ ...d, agentCmd: source }, "cataly")).toBe(`${source} --cataly-role cataly`);
     const foreign = "bun --preload '/opt/agent tools/packages/coding-agent/scripts/omp.ts' /elsewhere/src/cli.ts";
-    expect(agentCommand({ ...d, agentCmd: foreign }, "dori")).toBe(foreign);
+    expect(agentCommand({ ...d, agentCmd: foreign }, "cataly")).toBe(foreign);
   });
 
   test("fresh review preserves the configured command prefix and passes model and prompt as literal arguments", async () => {
@@ -70,13 +74,19 @@ describe("OMP harness launches", () => {
     w.gh = () => ({ code: 0, stdout: JSON.stringify({ headRefOid: "a".repeat(40) }) });
     await review(d, "o/r#7", "selected/model");
     const call = w.calls.find((c) => c.cmd === "env")!;
-    const context = Object.entries(harnessLaunchEnv(d)).map(([key, value]) => `${key}=${value}`);
+    const context = [
+      ...Object.entries(harnessLaunchEnv(d)).map(([key, value]) => `${key}=${value}`),
+      "CATALY_DISCORD_TOKEN=",
+      "CATALY_TELEGRAM_TOKEN=",
+      "DORI_DISCORD_TOKEN=",
+      "DORI_TELEGRAM_TOKEN=",
+    ];
     expect(call.argv.slice(0, context.length)).toEqual(context);
     expect(call.argv.slice(context.length, context.length + 8)).toEqual([
       "sh",
       "-c",
-      "unset HERDR_PANE_ID HERDR_WORKSPACE_ID HC_TERMINAL_ID DORI_MANAGED_STARTUP DORI_LANE; omp --model 'configured model' --dori-role lane \"$@\"",
-      "dori-review",
+      "unset HERDR_PANE_ID HERDR_WORKSPACE_ID HC_TERMINAL_ID TERN_PANE CATALY_HEADLESS_ID CATALY_HARNESS_ROLE CATALY_MANAGED_STARTUP CATALY_LANE; omp --model 'configured model' --cataly-role lane \"$@\"",
+      "cataly-review",
       "-p",
       "--no-session",
       "--model",
@@ -86,24 +96,24 @@ describe("OMP harness launches", () => {
     expect(d.store.receipt("o/r#7", "a".repeat(40))!.model).toBe("selected/model");
   });
 
-  test("default dependencies select OMP and retain an explicit DORI_AGENT_CMD", () => {
-    const keys = ["DORI_HOME", "DORI_AGENT_CMD", "DORI_AGENT_ARGV", "DORI_TELEMETRY", "DORI_CMD"];
+  test("default dependencies select OMP and retain an explicit CATALY_AGENT_CMD", () => {
+    const keys = ["CATALY_HOME", "CATALY_AGENT_CMD", "CATALY_AGENT_ARGV", "CATALY_TELEMETRY", "CATALY_CMD"];
     const before = keys.map((key) => process.env[key]);
-    process.env["DORI_HOME"] = realpathSync(mkdtempSync(join(tmpdir(), "dori-default-")));
-    process.env["DORI_TELEMETRY"] = "0";
-    delete process.env["DORI_AGENT_CMD"];
-    delete process.env["DORI_AGENT_ARGV"];
-    delete process.env["DORI_CMD"];
+    process.env["CATALY_HOME"] = realpathSync(mkdtempSync(join(tmpdir(), "cataly-default-")));
+    process.env["CATALY_TELEMETRY"] = "0";
+    delete process.env["CATALY_AGENT_CMD"];
+    delete process.env["CATALY_AGENT_ARGV"];
+    delete process.env["CATALY_CMD"];
     try {
       const d = defaultDeps();
       expect(d.agentCmd).toBe("omp");
-      expect(agentCommand(d, "dori")).toBe("omp --dori-role dori");
-      expect(d.doriCmd).toContain("bun '");
-      expect(d.doriCmd).toContain(join("src", "cli.ts"));
-      writeFileSync(join(d.store.root, ".omp-dori"), "primary\n");
+      expect(agentCommand(d, "cataly")).toBe("omp --cataly-role cataly");
+      expect(d.catalyCmd).toContain("bun '");
+      expect(d.catalyCmd).toContain(join("src", "cli.ts"));
+      writeFileSync(join(d.store.root, ".omp-cataly"), "primary\n");
       expect(defaultDeps().agentCmd).toContain(join(d.store.root, "bin/omp"));
       expect(defaultDeps().agentCmd).not.toBe("omp");
-      process.env["DORI_AGENT_CMD"] = "custom-agent --model x";
+      process.env["CATALY_AGENT_CMD"] = "custom-agent --model x";
       expect(defaultDeps().agentCmd).toBe("custom-agent --model x");
     } finally {
       keys.forEach((key, i) => {
@@ -115,10 +125,10 @@ describe("OMP harness launches", () => {
 });
 
 test("OMP state directory follows config, environment override and home expansion", () => {
-  const root = mkdtempSync(join(tmpdir(), "dori-omp-config-"));
+  const root = mkdtempSync(join(tmpdir(), "cataly-omp-config-"));
   const config = join(root, "config.json");
   writeFileSync(config, JSON.stringify({ stateDir: "~/synthetic-omp-state" }));
-  expect(ompStateDir({ DORI_CONFIG: config })).toBe(join(homedir(), "synthetic-omp-state"));
-  expect(ompStateDir({ DORI_CONFIG: config, DORI_STATE_DIR: join(root, "override") })).toBe(join(root, "override"));
-  expect(ompStateDir({ DORI_CONFIG: join(root, "missing.json") })).toBe(join(homedir(), ".dori", "state"));
+  expect(ompStateDir({ CATALY_CONFIG: config })).toBe(join(homedir(), "synthetic-omp-state"));
+  expect(ompStateDir({ CATALY_CONFIG: config, CATALY_STATE_DIR: join(root, "override") })).toBe(join(root, "override"));
+  expect(ompStateDir({ CATALY_CONFIG: join(root, "missing.json") })).toBe(join(homedir(), ".cataly", "state"));
 });

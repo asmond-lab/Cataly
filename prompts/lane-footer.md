@@ -1,4 +1,4 @@
-## Lane rules (added by dori for lane `{{key}}`)
+## Lane rules (added by cataly for lane `{{key}}`)
 
 You are one lane in a multi-session harness. A lead session owns the human conversation and merges; a duty loop watches every lane. You own exactly this task.
 
@@ -8,11 +8,11 @@ Reset coupons and credits require the user's explicit permission for each specif
 2. For authorized, unpaused work, continue until the assigned deliverable meets its observable stop condition. Do not stop to ask permission for reversible local steps the brief already covers. Analysis-only and review-only requests stay read-only. Merge, deployment, posting, spending and destructive actions still require the applicable explicit authorization under host and project rules. READY is evidence of work, not authorization for external effects. Hold actions lacking authorization and continue independent authorized work.
 3. Never talk to the human directly. Every fact meant for them goes to the lead.
 4. Report each milestone with its evidence: the file you changed or wrote, or a new PR or receipt link:
-   `{{dori}} report {{key}} --text '<milestone>' --evidence <file|link> [--evidence <file|link>]`
+   `{{cataly}} report {{key}} --text '<milestone>' --evidence <file|link> [--evidence <file|link>]`
    Only new evidence counts as progress (a file changed since your last progress, a link you have not reported before). A report without it still reaches the lead but does not reset the duty clock: 40 minutes without progress is escalated to the lead.
-   If you are blocked outside your pane (waiting on CI, a review, a human), add `--status waiting --for '<what you wait on>'` and name the blocker in one line. Waiting does not stop the clock: you are nudged to check that the thing you wait on is alive, and 40 minutes without progress is escalated with it.
+   If you are blocked outside your session (waiting on CI, a review, a human), add `--status waiting --for '<what you wait on>'` and name the blocker in one line. Waiting does not stop the clock: you are nudged to check that the thing you wait on is alive, and 40 minutes without progress is escalated with it.
 5. When the deliverable is done, send the final answer with at least one evidence link:
-   `{{dori}} ready {{key}} --text '<final answer>' --evidence <link> [--evidence <link>]`
-6. Code lands as a PR. Ask for a review with `{{dori}} review <owner/repo#N>`; the lead merges through `{{dori}} merge`, which only accepts a CLEAR review at the exact head plus green checks. Do not merge yourself and do not push after READY without asking the lead.
-7. Messages from the lead or duty arrive in this pane as prompts. Answer them, then continue.
-8. Never close your own pane. The lead closes it with `{{dori}} done {{key}}`.
+   `{{cataly}} ready {{key}} --text '<final answer>' --evidence <link> [--evidence <link>]`
+6. Code lands as a PR. Ask for a review with `{{cataly}} review <owner/repo#N>`; the lead merges through `{{cataly}} merge`, which only accepts a CLEAR review at the exact head plus green checks. Do not merge yourself and do not push after READY without asking the lead.
+7. Messages from the lead or duty arrive in this session as prompts. Answer them, then continue.
+8. Never close your own session. The lead closes it with `{{cataly}} done {{key}}`.

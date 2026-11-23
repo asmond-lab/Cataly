@@ -23,7 +23,7 @@ afterEach(() => {
 
 /** First directory-to-managed conversion: no active receipt, no legacy override, old actor runs the new native image. */
 async function conversion(sameOverlay: boolean) {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "dori-prior-source-")));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "cataly-prior-source-")));
   roots.push(root);
   const omp = join(root, "private-omp/omp");
   mkdirSync(join(root, "private-omp"), { mode: 0o700 });
@@ -63,7 +63,7 @@ async function conversion(sameOverlay: boolean) {
   mkdirSync(record.directory, { recursive: true, mode: 0o700 });
   const runtime: RuntimeIdentity = {
     ...processIdentity(process.pid)!,
-    role: "dori",
+    role: "cataly",
     pane: config.pane,
     sessionId: config.sessionId,
     sessionFile: join(root, "session.jsonl"),

@@ -8,7 +8,7 @@ const posix = test.skipIf(process.platform === "win32");
 
 const script = join(import.meta.dir, "../scripts/ci-install-herdr.sh");
 const fixture = () => {
-  const dir = mkdtempSync(join(tmpdir(), "dori-ci-download-"));
+  const dir = mkdtempSync(join(tmpdir(), "cataly-ci-download-"));
   const bin = join(dir, "mocks");
   const out = join(dir, "out");
   mkdirSync(bin);
@@ -100,7 +100,7 @@ posix("the hc gate requires both E2E files and runs each through bun", () => {
   const script = step?.run;
   if (!script) throw new Error("ci.yml must keep the named hc e2e step");
   const gate = (present: readonly string[]) => {
-    const dir = mkdtempSync(join(tmpdir(), "dori-ci-hc-"));
+    const dir = mkdtempSync(join(tmpdir(), "cataly-ci-hc-"));
     try {
       const bin = join(dir, "bin");
       mkdirSync(bin);

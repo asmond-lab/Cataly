@@ -29,6 +29,8 @@ async function run(args: string[]): Promise<void> {
     console.log(`Built ${manifest.tag} at ${manifest.commit}; public SourceManifest ${manifest.source.hash}`);
     return;
   }
+  if (process.platform !== "linux" || process.arch !== "x64")
+    throw new Error("Public release gating and publication require the Linux x64 native producer");
   const unlock = operation === "publish" ? await lockPublication(directory) : undefined;
   try {
     const distribution = await verifyDistribution(root, directory);

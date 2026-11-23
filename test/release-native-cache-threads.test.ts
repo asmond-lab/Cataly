@@ -62,7 +62,7 @@ test("Astra (35e104e): a dead owner's stage stays while an exited leader's threa
   const c = pruneFixture();
   const x = c.native("x");
   const ended = Bun.spawnSync(["/bin/sh", "-c", "echo $$"]).stdout.toString().trim();
-  const stage = join(c.home, ".cache/omp-dori", `native-stage-${x.identity}-${ended}-1-${bootId()}-AbC123`);
+  const stage = join(c.home, ".cache/omp-cataly", `native-stage-${x.identity}-${ended}-1-${bootId()}-AbC123`);
   mkdirSync(stage);
   writeFileSync(join(stage, "still-needed"), "payload");
   const child = await threadHolder(c.root, join(stage, "still-needed"), "open");
@@ -97,7 +97,7 @@ posix("a dead owner's stage is checked against processes' files read afresh, not
   const ended = Bun.spawnSync(["/bin/sh", "-c", "echo $$"]).stdout.toString().trim();
   const stages = ["a", "b"].map((name) => {
     const x = c.native(name);
-    const stage = join(c.home, ".cache/omp-dori", `native-stage-${x.identity}-${ended}-1-${bootId()}-AbC123`);
+    const stage = join(c.home, ".cache/omp-cataly", `native-stage-${x.identity}-${ended}-1-${bootId()}-AbC123`);
     mkdirSync(stage);
     writeFileSync(join(stage, "still-needed"), "payload");
     return stage;

@@ -7,7 +7,7 @@ import { fixtureGit } from "./source-bundle-setup.ts";
 import { preparationFixture } from "./update-deploy-prepare-setup.ts";
 import { git } from "./update-setup.ts";
 
-const PACKAGES = ["", "skills/dori-mode/scripts", "extension"] as const;
+const PACKAGES = ["", "skills/cataly-mode/scripts", "extension"] as const;
 const FROZEN = ["install", "--frozen-lockfile", "--ignore-scripts", "--silent"];
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
@@ -73,7 +73,7 @@ exec ${quote(process.execPath)} "$@"
       .map((line) => line.split("\t"));
     expect(calls).toEqual([
       [record.releasePath, ...FROZEN, "--production"],
-      [join(record.releasePath, "skills/dori-mode/scripts"), ...FROZEN, "--production"],
+      [join(record.releasePath, "skills/cataly-mode/scripts"), ...FROZEN, "--production"],
       [join(record.releasePath, "extension"), ...FROZEN],
     ]);
     const linked = (relative: string, name: string): boolean =>

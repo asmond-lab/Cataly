@@ -1,7 +1,8 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute } from "node:path";
-import { readPaneState } from "../../skills/dori-mode/scripts/src/lane-state.ts";
+import { readPaneState } from "../../skills/cataly-mode/scripts/src/lane-state.ts";
 import type { DeploymentCli } from "./deployment-cli.ts";
+import { deploymentEnvArgs, legacyDeploymentSource } from "./deployment-legacy-brand.ts";
 import { completedLegacyRollbackForeground, legacyRollbackForeground } from "./deployment-legacy-monitors.ts";
 import { captureRuntime, requireShell } from "./deployment-native.ts";
 import { runtimeUsesToolchain } from "./deployment-prior.ts";
@@ -18,6 +19,17 @@ import { terminateBoundProcess } from "./deployment-signal.ts";
 import { assertRuntimeToolchain } from "./deployment-toolchain.ts";
 import type { DeploymentConfig, DeploymentRecord, ProcessIdentity } from "./deployment-types.ts";
 import { procCmdline } from "./proc.ts";
+
+const ROLE_FLAGS = /^--(?:cataly|dori)-role(?:=|$)/;
+const matchingRole = (argv: readonly string[]): boolean => {
+  const selected = argv.findIndex((arg) => ROLE_FLAGS.test(arg));
+  return (
+    selected >= 0 &&
+    !argv.slice(selected + 1).some((arg) => ROLE_FLAGS.test(arg)) &&
+    ((argv[selected] === "--cataly-role" && argv[selected + 1] === "cataly") ||
+      (argv[selected] === "--dori-role" && argv[selected + 1] === "dori"))
+  );
+};
 
 /** A matching live launch remains present while its foreground receipts converge. */
 export class LaunchedProcessHeld extends DeploymentHeld {
@@ -41,21 +53,24 @@ export async function launchRuntime(
   const toolchain = prior ? record.oldToolchain : record.toolchain;
   if (!previous || !toolchain) throw new DeploymentHeld("native launch lacks its identity/toolchain journal");
   assertRuntimeToolchain(config, toolchain);
-  const command = managedOmpCommand(toolchain, prior ? record.oldSource : record.releasePath);
+  const source = prior ? record.oldSource : record.releasePath;
+  const command = managedOmpCommand(toolchain, source);
   await requireShell(config, cli);
+  const legacy = legacyDeploymentSource(source, prior ? record.oldSourceHash : record.sourceHash);
   const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
-  const env = { ...actorEnv(config, toolchain), DORI_MANAGED_STARTUP: "1" };
+  const env = deploymentEnvArgs({ ...actorEnv(config, toolchain), CATALY_MANAGED_STARTUP: "1" }, legacy);
   const argv = [
     "/usr/bin/env",
     "-i",
-    ...Object.entries(env).map(([key, value]) => `${key}=${value}`),
+    ...env,
     ...command,
     `--resume=${previous.sessionFile}`,
-    "--dori-role",
-    "dori",
+    ...(legacy ? ["--dori-role", "dori"] : ["--cataly-role", "cataly"]),
     "--model",
     config.model,
-    ...(bootstrap && config.monitorBootstrapFile ? [`--dori-monitor-bootstrap=${config.monitorBootstrapFile}`] : []),
+    ...(bootstrap && config.monitorBootstrapFile
+      ? [`--${legacy ? "dori" : "cataly"}-monitor-bootstrap=${config.monitorBootstrapFile}`]
+      : []),
   ];
   await cli.start(config.pane, `cd ${quote(previous.cwd)} && ${argv.map(quote).join(" ")}`);
 }
@@ -84,12 +99,9 @@ export async function launchedProcess(
     const argv = procCmdline(entry.pid).split("\0");
     if (
       !argv.includes(`--resume=${previous.sessionFile}`) ||
-      !argv.includes("--dori-role") ||
-      !argv.includes("dori") ||
-      !argv.includes("--model") ||
-      !argv.includes(config.model) ||
-      !argv.includes("--config") ||
-      !argv.includes(toolchain.nativeConfig) ||
+      !matchingRole(argv) ||
+      !argv.some((arg, i) => arg === "--model" && argv[i + 1] === config.model) ||
+      !argv.some((arg, i) => arg === "--config" && argv[i + 1] === toolchain.nativeConfig) ||
       (identity.executable !== toolchain.ompEntry &&
         !argv.includes(toolchain.omp) &&
         !argv.includes(toolchain.ompEntry) &&
@@ -179,7 +191,7 @@ export async function stopLaunchedProcess(
         state.sessionId === config.sessionId &&
         (state.approvalPending || state.agentStatus === "working")
       )
-        throw new DeploymentHeld("resumed Dori has owner work or an approval; rollback is held until idle");
+        throw new DeploymentHeld("resumed Cataly has owner work or an approval; rollback is held until idle");
       if (state?.pid === expected.pid && state.sessionId === config.sessionId) {
         const runtime = await captureRuntime(config, cli);
         if (!sameProcess(expected, runtime)) throw new DeploymentHeld("startup owner changed before rollback");

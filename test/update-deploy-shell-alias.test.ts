@@ -28,7 +28,7 @@ afterEach(async () => {
 });
 
 async function shellAliasFixture(otherImage?: string) {
-  const root = mkdtempSync(join(tmpdir(), "dori-shell-alias-"));
+  const root = mkdtempSync(join(tmpdir(), "cataly-shell-alias-"));
   const config = { ...deploymentConfig(root), omp: join(root, "omp"), bun: process.execPath };
   ownReleaseRoot(config);
   const nativeConfig = join(config.releaseRoot, "native-config.json");
@@ -91,7 +91,7 @@ await Bun.stdin.text();
     step: "start",
     oldRuntime: {
       ...processIdentity(process.pid)!,
-      role: "dori",
+      role: "cataly",
       pane: config.pane,
       sessionId: config.sessionId,
       sessionFile,

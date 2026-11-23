@@ -4,10 +4,11 @@
 import { log } from "./backlog.ts";
 import type { Deps } from "./harness.ts";
 import { tellLead } from "./inbox.ts";
-import { startLane } from "./lanes.ts";
+import { LaneStartupHeld } from "./lane-start-native.ts";
+import { LaneStartNoticeFailure, startLane } from "./lanes.ts";
 import { audit, HOUR } from "./loop-audit.ts";
 import { acquire, holds, release } from "./loop-lock.ts";
-import { refText } from "./refs.ts";
+import { distillStep } from "./owner-distill.ts";
 import type { LoopRun } from "./store-types.ts";
 
 export { HOUR };
@@ -48,7 +49,7 @@ async function sync(d: Deps, run: LoopRun): Promise<void> {
             item.status = "done";
             log(d, item, "done", "PR merged");
             run.synced.push(`${item.id} done (PR merged)`);
-            run.findings.push(`${item.id} READY and its PR merged: dori harness done ${item.id}`);
+            run.findings.push(`${item.id} READY and its PR merged: cataly harness done ${item.id}`);
           }
         }
       } else if (item.status === "open" && item.source) {
@@ -105,25 +106,39 @@ async function pull(
       await startLane(d, item.id, item.brief, { cwd: item.cwd, priority: item.priority });
     } catch (e) {
       const why = e instanceof Error ? e.message : String(e);
-      const lane = d.store.lane(item.id);
-      if (!lane || !isOpenLane(lane.status) || lane.createdAt < run.at) {
-        item.startFailures = (item.startFailures ?? 0) + 1;
-        if (item.startFailures >= MAX_ATTEMPTS)
-          item.decision = `lane start failed ${item.startFailures} times (${why.slice(0, 120)}); fix the brief or cwd, or drop?`;
-        log(d, item, "start", `failed: ${why}`);
-        run.findings.push(`start ${item.id} failed: ${why}`);
+      if (e instanceof LaneStartNoticeFailure) {
+        run.findings.push(why);
+      } else {
+        const current = d.store.item(item.id);
+        const held = e instanceof LaneStartupHeld;
+        if (held) run.held.push(why);
+        else run.findings.push(`start ${item.id} failed: ${why}`);
+        if (current?.status === "open" && current.createdAt === item.createdAt && !current.decision) {
+          if (held) {
+            // Even if the host subsequently exits, a held native activation isn't retried without a decision.
+            current.decision = "native lane startup held; inspect the reservation before deciding how to proceed";
+            log(d, current, "start", `held: ${why}`);
+          } else {
+            current.startFailures = (current.startFailures ?? 0) + 1;
+            if (current.startFailures >= MAX_ATTEMPTS)
+              current.decision = `lane start failed ${current.startFailures} times (${why.slice(0, 120)}); fix the brief or cwd, or drop?`;
+            log(d, current, "start", `failed: ${why}`);
+          }
+        }
         continue;
       }
-      run.findings.push(`${item.id} started in ${refText(lane.sessionRef)} but the lead was not told: ${why}`);
     }
-    item.status = "running";
-    log(d, item, "start", "lane opened by the hourly loop");
     run.started.push(`${item.id} (p${item.priority})`);
+    const current = d.store.item(item.id);
+    if (current?.status !== "open" || current.createdAt !== item.createdAt || current.decision) continue;
+    current.status = "running";
+    log(d, current, "start", "lane opened by the hourly loop");
   }
   const waiting = candidates.length - tried;
   if (waiting > 0) {
+    const occupied = d.store.lanes().filter((l) => isOpenLane(l.status)).length;
     run.held.push(
-      `${waiting} item(s) waiting: ${Math.max(0, maxLanes - open - run.started.length)} free of ${maxLanes} lanes, max ${maxStarts}/run`,
+      `${waiting} item(s) waiting: ${Math.max(0, maxLanes - occupied)} free of ${maxLanes} lanes, max ${maxStarts}/run`,
     );
   }
 }
@@ -132,7 +147,7 @@ function ask(d: Deps, run: LoopRun): void {
   const now = d.now();
   for (const item of d.store.items()) {
     if (item.status !== "open" || !item.decision) continue;
-    const line = `[DECIDE ${item.id}] ${item.decision} -> dori harness backlog decide ${item.id} --text '...' | dori harness backlog drop ${item.id}`;
+    const line = `[DECIDE ${item.id}] ${item.decision} -> cataly harness backlog decide ${item.id} --text '...' | cataly harness backlog drop ${item.id}`;
     if (item.askedAt === undefined) {
       item.askedAt = now;
       log(d, item, "ask", item.decision);
@@ -145,7 +160,7 @@ function ask(d: Deps, run: LoopRun): void {
   }
 }
 
-export function summary(run: LoopRun): string {
+export function summary(run: LoopRun, includeDistill = true): string {
   if (run.skipped) return `[LOOP ${new Date(run.at).toISOString().slice(0, 16)}Z] skipped: ${run.skipped}`;
   const s = run.status!;
   const lines = [
@@ -156,6 +171,7 @@ export function summary(run: LoopRun): string {
   for (const k of ["synced", "findings", "started", "held"] as const)
     if (run[k].length) lines.push(`${k}: ${run[k].join("; ")}`);
   lines.push(...run.asked);
+  if (includeDistill && run.distill) lines.push(run.distill);
   return lines.join("\n");
 }
 
@@ -179,6 +195,7 @@ export async function loopTick(d: Deps, opts: LoopOpts = {}): Promise<LoopRun> {
     await audit(d, run);
     await pull(d, run, maxLanes, maxStarts, opts.maxLoad, lock.nonce);
     ask(d, run);
+    distillStep(d, run);
     const items = d.store.items();
     const running = new Set(items.filter((i) => i.status === "running").map((i) => i.id));
     const lanes = d.store.lanes().filter((l) => isOpenLane(l.status));
@@ -195,7 +212,8 @@ export async function loopTick(d: Deps, opts: LoopOpts = {}): Promise<LoopRun> {
     };
     const record = d.store.saveRun(run);
     try {
-      await tellLead(d, summary(run), "loop");
+      // The date-bound distill is a separate, deduplicated inbox entry; never include it again in the delivery.
+      await tellLead(d, summary(run, false), "loop");
     } catch (e) {
       run.findings.push(`report to the lead failed: ${e instanceof Error ? e.message : String(e)}`);
       d.store.saveRun(run, record);

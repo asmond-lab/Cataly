@@ -1,11 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
-  closeSync,
   lstatSync,
   mkdirSync,
-  openSync,
   readFileSync,
-  readSync,
   readlinkSync,
   renameSync,
   rmdirSync,
@@ -16,15 +13,21 @@ import {
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { platform } from "../platform/index.ts";
-import { contains } from "../update/config.ts";
 import { processIdentity, sameProcess } from "../update/deployment-process.ts";
 import type { ProcessIdentity } from "../update/deployment-types.ts";
 import { saveDeploymentJson } from "../update/deployment-files.ts";
 import { processExists } from "../update/proc.ts";
+import { consumerLayout, isPrimaryConsumer } from "./layout.ts";
+
+export { fileDigest } from "./file-digest.ts";
+export { isPrimaryConsumer } from "./layout.ts";
 
 export type ConsumerPaths = {
   readonly home: string;
+  readonly cataly: string;
+  /** Historical renderer ABI: archived v1 references import this property. */
   readonly dori: string;
+  readonly layout: "legacy" | "cataly";
   readonly root: string;
   readonly live: string;
   readonly state: string;
@@ -36,34 +39,37 @@ export type ConsumerPaths = {
   readonly staging: string;
   readonly links: readonly (readonly [string, string])[];
 };
-export const consumerPaths = (home = homedir(), doriHome = join(home, ".dori")): ConsumerPaths => {
+export const consumerPaths = (home = homedir(), selectedHome = join(home, ".cataly")): ConsumerPaths => {
   home = resolve(home);
-  const dori = resolve(doriHome);
-  const primary = join(home, ".dori");
-  if (dori !== primary && (contains(primary, dori) || contains(dori, primary)))
-    throw new Error("An isolated consumer home must not contain or be inside the primary ~/.dori home");
-  const root = join(dori, "releases");
+  const cataly = resolve(selectedHome);
+  const primary = isPrimaryConsumer({ home, cataly });
+  const layout = consumerLayout(home, cataly, readOptionalJson);
+  const skill = layout === "legacy" ? "dori-mode" : "cataly-mode";
+  const command = layout === "legacy" ? "dori" : "cataly";
+  const extension = layout === "legacy" ? "omp-dori" : "omp-cataly";
+  const root = join(cataly, "releases");
   return {
     home,
-    dori,
+    cataly,
+    dori: cataly,
+    layout,
     root,
-    live: join(dori, "src"),
+    live: join(cataly, "src"),
     state: join(root, "consumer-installed.json"),
     journal: join(root, "consumer-journal.json"),
-    config: join(dori, "config.json"),
+    config: join(cataly, "config.json"),
     releases: join(root, "releases"),
     manifests: join(root, "consumer-manifests"),
     dependencies: join(root, "consumer-dependencies"),
     staging: join(root, "consumer-staging"),
-    links:
-      dori !== primary
-        ? []
-        : ([
-            [join(home, ".agents/skills/dori-mode"), join(dori, "src/skills/dori-mode")],
-            [join(home, ".omp/agent/extensions/omp-dori"), join(dori, "src/extension")],
-            [join(dori, "bin/dori"), join(dori, "src/skills/dori-mode/scripts/src/cli.ts")],
-            [join(dori, "bin/dori-harness"), join(dori, "src/src/cli.ts")],
-          ] as const),
+    links: !primary
+      ? []
+      : ([
+          [join(home, ".agents/skills", skill), join(cataly, "src/skills", skill)],
+          [join(home, ".omp/agent/extensions", extension), join(cataly, "src/extension")],
+          [join(cataly, "bin", command), join(cataly, "src/skills", skill, "scripts/src/cli.ts")],
+          [join(cataly, "bin", `${command}-harness`), join(cataly, "src/src/cli.ts")],
+        ] as const),
   };
 };
 
@@ -97,26 +103,14 @@ export function regularFile(path: string): boolean {
   return true;
 }
 
-/** Hash every byte through one descriptor without allocating a whole-file Buffer. */
-export function fileDigest(input: string | number): string {
-  const fd = typeof input === "number" ? input : openSync(input, "r");
-  try {
-    const hash = createHash("sha256");
-    const buffer = Buffer.allocUnsafe(1024 * 1024);
-    for (;;) {
-      const count = readSync(fd, buffer, 0, buffer.length, null);
-      if (count === 0) return hash.digest("hex");
-      hash.update(buffer.subarray(0, count));
-    }
-  } finally {
-    if (typeof input === "string") closeSync(fd);
-  }
-}
-
 export function readJson(path: string): unknown {
   if (!regularFile(path)) throw new Error(`Missing file: ${path}`);
   if (lstatSync(path).size > 4 * 1024 * 1024) throw new Error(`Metadata is too large: ${path}`);
   return JSON.parse(readFileSync(path, "utf8"));
+}
+
+export function readOptionalJson(path: string): unknown {
+  return regularFile(path) ? readJson(path) : undefined;
 }
 
 export function saveJson(path: string, value: unknown): void {
@@ -159,7 +153,7 @@ export function replacePointer(path: string, expected: string | undefined, targe
 export function initialize(paths: ConsumerPaths): void {
   for (const dir of [
     paths.home,
-    paths.dori,
+    paths.cataly,
     paths.root,
     paths.releases,
     paths.manifests,

@@ -4,7 +4,7 @@ import { ompWorld } from "./omp-setup.ts";
 const packageRoot = "/private/native/source/packages/coding-agent/";
 const preload = `${packageRoot}scripts/omp.ts`;
 const cli = `${packageRoot}scripts/../src/cli.ts`;
-const argv = ["bun", "--preload", preload, cli, "--dori-role", "lane"];
+const argv = ["bun", "--preload", preload, cli, "--cataly-role", "lane"];
 const packageRoots = [packageRoot, "/private/home space ; literal/source/packages/coding-agent/"];
 const sourceEntries = packageRoots.flatMap((root) =>
   [`${root}src/cli.ts`, `${root}scripts/../src/cli.ts`].map((entry) => [`${root}scripts/omp.ts`, entry] as const),
@@ -27,7 +27,7 @@ for (const kind of ["herdr", "hc"] as const) {
 
     test.each(sourceEntries)("attests %s and %s and holds approvals", async (preload, entry) => {
       const s = ompWorld(kind);
-      const command = ["/private/bin/bun", "--preload", preload, entry, "--dori-role", "lane"];
+      const command = ["/private/bin/bun", "--preload", preload, entry, "--cataly-role", "lane"];
       s.pane.foreground = [{ name: "bun", argv: command }];
       s.w.hc.terminals.get("t1")!.foreground = { name: "bun", argv: command, pid: 101 };
       s.control.table = `100 1 /bin/bash\n101 100 ${command.join(" ")}\n`;

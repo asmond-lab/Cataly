@@ -51,10 +51,10 @@ export function createArgv(spec: CreateSpec, shell: string, name: string | undef
   if (space !== undefined && !SPACE_ID.test(space))
     throw new Error(`Herdr space id ${JSON.stringify(space)} is invalid`);
   const labels = [
-    `dori.group=${spec.group ?? "dori"}`,
-    `dori.role=${spec.role}`,
-    `dori.name=${spec.name}`,
-    ...(spec.role === "lane" ? [`dori.lane=${spec.name}`] : []),
+    `cataly.group=${spec.group ?? "cataly"}`,
+    `cataly.role=${spec.role}`,
+    `cataly.name=${spec.name}`,
+    ...(spec.role === "lane" ? [`cataly.lane=${spec.name}`] : []),
     ...(space === undefined ? [] : [`herdr.space=${space}`]),
   ];
   return [
@@ -74,7 +74,7 @@ export function createArgv(spec: CreateSpec, shell: string, name: string | undef
 }
 
 /**
- * A terminal running the user's shell with the env set, no parent and no notes (Dori's inbox is the only delivery
+ * A terminal running the user's shell with the env set, no parent and no notes (Cataly's inbox is the only delivery
  * path). The slug name is used only when no live terminal holds it; a name taken in between is retried without one.
  * Identity is the address plus labels, never the name.
  */
@@ -90,7 +90,7 @@ export async function create(exec: Exec, spec: CreateSpec, shell: string, space?
   }
   const id = str(result["address"]);
   if (id === undefined) throw new Error("hc run did not return an address");
-  return { runtime: "hc", id, group: spec.group ?? "dori" };
+  return { runtime: "hc", id, group: spec.group ?? "cataly" };
 }
 
 /** Types the command into the session's shell: a shell reports no status, so there is no `--if` gate. */
@@ -98,9 +98,8 @@ export async function start(exec: Exec, id: string, command: string): Promise<vo
   await hcCall(exec, ["send", id, "--", command]);
 }
 
-/** This core's live terminals, all of them or those labelled `dori.group=<group>`. */
-export async function list(exec: Exec, group: string | undefined): Promise<SessionInfo[]> {
-  const result = await hcCall(exec, ["ls", ...(group === undefined ? [] : ["--label", `dori.group=${group}`])]);
+async function listRows(exec: Exec, label?: string): Promise<Record<string, unknown>[]> {
+  const result = await hcCall(exec, ["ls", ...(label === undefined ? [] : ["--label", label])]);
   const terminals = result["terminals"];
   if (
     !Array.isArray(terminals) ||
@@ -114,12 +113,21 @@ export async function list(exec: Exec, group: string | undefined): Promise<Sessi
     )
   )
     throw new Error("hc did not return a valid terminal list");
-  const out: SessionInfo[] = [];
-  for (const t of rows(result)) {
+  return rows(result);
+}
+
+/** This core's live terminals, including v0.1.3 terminals of the exact same group. */
+export async function list(exec: Exec, group: string | undefined): Promise<SessionInfo[]> {
+  const terminals =
+    group === undefined
+      ? await listRows(exec)
+      : (await Promise.all([listRows(exec, `cataly.group=${group}`), listRows(exec, `dori.group=${group}`)])).flat();
+  const out = new Map<string, SessionInfo>();
+  for (const t of terminals) {
     const id = str(t["address"]);
-    if (!isLocal(id) || t["state"] !== "live") continue;
+    if (!isLocal(id) || t["state"] !== "live" || out.has(id)) continue;
     const [name, cwd, status, agent] = [str(t["name"]), str(t["cwd"]), statusWord(t["status"]), str(t["agent"])];
-    out.push({
+    out.set(id, {
       ref: { runtime: "hc", id, ...(group === undefined ? {} : { group }) },
       ...(name === undefined ? {} : { name }),
       ...(cwd === undefined ? {} : { cwd }),
@@ -127,7 +135,7 @@ export async function list(exec: Exec, group: string | undefined): Promise<Sessi
       ...(agent === undefined ? {} : { agent }),
     });
   }
-  return out;
+  return [...out.values()];
 }
 
 /**
@@ -154,7 +162,7 @@ export async function close(
       if (isKind(e, "not_found")) return;
       if (!isKind(e, "live")) throw e;
       if (attempt >= RM_RETRIES) {
-        log(`dori: hc terminal ${id} still running after kill; left in place`);
+        log(`cataly: hc terminal ${id} still running after kill; left in place`);
         return;
       }
       await sleep(RM_RETRY_MS);

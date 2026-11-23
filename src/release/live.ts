@@ -1,19 +1,21 @@
 import { lstatSync, readdirSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
+import { dataDir, laneEntry, privateDir, readPrivate } from "../runtime/headless-record.ts";
+import { HEADLESS_ADDRESS } from "../runtime/types.ts";
+import { object } from "../update/config.ts";
 import { processIdentity, sameProcess } from "../update/deployment-process.ts";
 import { processExists } from "../update/proc.ts";
-import { type ConsumerPaths, readJson, realDirectory, regularFile } from "./files.ts";
-
-const object = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
+import { type ConsumerPaths, readJson, readOptionalJson, realDirectory, regularFile } from "./files.ts";
+import { registeredNativeStates } from "./launch-leases.ts";
 
 function live(value: unknown): number | undefined {
-  if (!object(value) || value["role"] !== "dori" || !Number.isSafeInteger(value["pid"])) return undefined;
+  if (!object(value) || (value["role"] !== "cataly" && value["role"] !== "dori") || !Number.isSafeInteger(value["pid"]))
+    return undefined;
   const pid = value["pid"] as number;
-  if (pid <= 0) throw new Error("Dori runtime PID metadata is invalid");
+  if (pid <= 0) throw new Error("Cataly runtime PID metadata is invalid");
   const observed = processIdentity(pid);
   if (!observed) {
-    if (processExists(pid)) throw new Error(`Dori PID ${pid} identity is unavailable; activation remains held`);
+    if (processExists(pid)) throw new Error(`Cataly PID ${pid} identity is unavailable; activation remains held`);
     return undefined;
   }
   if (typeof value["startTicks"] === "string" && typeof value["bootId"] === "string") {
@@ -36,21 +38,93 @@ function live(value: unknown): number | undefined {
   return pid;
 }
 
-/** Read only runtime/monitor receipts and process identity. Native session contents are never opened. */
-export function assertNoLiveDori(paths: ConsumerPaths): void {
-  const states = new Set<string>([join(paths.dori, "state")]);
+function assertNoNativeReservations(state: string): void {
+  const directory = dataDir(state);
+  realDirectory(directory);
+  if (!lstatSync(directory, { throwIfNoEntry: false })) return;
+  privateDir(directory);
+  for (const id of readdirSync(directory).filter((name) => HEADLESS_ADDRESS.test(name))) {
+    const entry = laneEntry(state, { runtime: "headless", id });
+    const stopped = entry && readPrivate<unknown>(join(entry.dir, "stopped.json"));
+    if (
+      !object(stopped) ||
+      Object.entries(stopped).some(
+        ([key, value]) =>
+          !["detail", "closedSessionId"].includes(key) ||
+          typeof value !== "string" ||
+          (key === "closedSessionId" && !value),
+      )
+    )
+      throw new Error(`Native session ${id} holds release activation; stop it through Cataly, then retry`);
+  }
+}
+
+export function assertNoLegacyRoleRegistrations(paths: ConsumerPaths): void {
+  const path = join(paths.cataly, "roles.json");
+  if (regularFile(path)) {
+    const roles = readJson(path);
+    if (!object(roles)) throw new Error("Uncertain harness roles hold release activation");
+    if (Object.keys(roles).length)
+      throw new Error(
+        "Harness roles hold release activation. For current releases, use cataly harness stop. For v0.1.3, close your terminals in the original servers, then use the verified new install.sh --retire-legacy-roles --home PATH. For a primary home name the original server(s) with --legacy-session NAME and, if used, --legacy-migrated-session NAME. Do not edit roles.json.",
+      );
+  }
+}
+
+function assertNoNativeHarnessRoles(paths: ConsumerPaths): void {
+  const native = readPrivate<unknown>(join(paths.cataly, "harness-native.json"));
+  if (native === undefined) return;
+  if (
+    !object(native) ||
+    Object.keys(native).sort().join() !== "roles,stateDir,version" ||
+    native["version"] !== 1 ||
+    typeof native["stateDir"] !== "string" ||
+    !isAbsolute(native["stateDir"]) ||
+    !object(native["roles"])
+  )
+    throw new Error("Uncertain native harness roles hold release activation");
+  if (Object.keys(native["roles"]).length)
+    throw new Error("Native harness roles hold release activation; stop Cataly with its harness, then retry");
+}
+
+function assertNoControllerLocks(paths: ConsumerPaths): void {
+  for (const name of ["duty/lock", "loop/lock", "loop/runner.lock"]) {
+    const record = readOptionalJson(join(paths.cataly, name));
+    if (record === undefined) continue;
+    if (!object(record)) throw new Error(`Uncertain Cataly controller lock ${name} holds release activation`);
+    const { pid, nonce } = record;
+    if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0 || typeof nonce !== "string" || !nonce)
+      throw new Error(`Uncertain Cataly controller lock ${name} holds release activation`);
+    if (processExists(pid))
+      throw new Error(`Live Cataly PID ${pid} holds ${name}; stop the controller before retrying`);
+  }
+}
+
+/** Read only lifecycle receipts and process identity. Native session contents are never opened. */
+export function assertNoLiveCataly(paths: ConsumerPaths): void {
+  assertStoppedRuntime(paths);
+  assertNoLegacyRoleRegistrations(paths);
+}
+
+/** The legacy cleanup command can check that the home is stopped without treating its own input as a live role. */
+export function assertStoppedRuntime(paths: ConsumerPaths): void {
+  assertNoNativeHarnessRoles(paths);
+  assertNoControllerLocks(paths);
+  const states = new Set<string>([join(paths.cataly, "state"), ...registeredNativeStates(paths)]);
   if (regularFile(paths.config)) {
     const config = readJson(paths.config);
-    if (!object(config)) throw new Error("Dori config metadata is invalid; check it before activating a release");
+    if (!object(config)) throw new Error("Cataly config metadata is invalid; check it before activating a release");
     const state = config["stateDir"];
     if (state !== undefined) {
-      if (typeof state !== "string" || !state) throw new Error("Dori config stateDir is invalid");
+      if (typeof state !== "string" || !state) throw new Error("Cataly config stateDir is invalid");
       const expanded = state.startsWith("~/") ? join(paths.home, state.slice(2)) : state;
       states.add(resolve(expanded));
     }
   }
-  const configured = process.env["DORI_STATE_DIR"];
-  if (configured) states.add(configured.startsWith("~/") ? join(paths.home, configured.slice(2)) : resolve(configured));
+  for (const configured of [process.env["CATALY_STATE_DIR"], process.env["DORI_STATE_DIR"]]) {
+    if (configured)
+      states.add(configured.startsWith("~/") ? join(paths.home, configured.slice(2)) : resolve(configured));
+  }
   const inspect = (path: string): void => {
     if (!regularFile(path)) return;
     const record = readJson(path);
@@ -59,11 +133,12 @@ export function assertNoLiveDori(paths: ConsumerPaths): void {
     for (const candidate of records) {
       const pid = live(candidate);
       if (pid !== undefined)
-        throw new Error(`Live Dori PID ${pid} holds release activation; stop Dori yourself, then retry`);
+        throw new Error(`Live Cataly PID ${pid} holds release activation; stop Cataly yourself, then retry`);
     }
   };
   for (const state of states) {
     if (!isAbsolute(state)) throw new Error("Runtime state directory must be absolute");
+    assertNoNativeReservations(state);
     for (const kind of ["runtime", "monitors"]) {
       const directory = join(state, kind);
       realDirectory(directory);

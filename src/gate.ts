@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { agentCommand, harnessLaunchEnv, prompt, type Deps } from "./harness.ts";
 import { Refusal } from "./refusal.ts";
 import { loadHooks, substitute } from "./hooks.ts";
+import { laneMessengerOverrides } from "./release/runtime.ts";
+import { legacyRecipeEnv } from "./runtime/recipe-env.ts";
 import type { MergeOutcome } from "./telemetry.ts";
 
 export type PrRef = { repo: string; number: number; id: string };
@@ -41,17 +43,20 @@ export async function review(
     ? substitute(hook, { ...vars, text })
     : [
         "env",
-        ...Object.entries(harnessLaunchEnv(d)).map(([key, value]) => `${key}=${value}`),
+        ...Object.entries({ ...harnessLaunchEnv(d), ...laneMessengerOverrides }).map(
+          ([key, value]) => `${key}=${value}`,
+        ),
         "sh",
         "-c",
-        `unset HERDR_PANE_ID HERDR_WORKSPACE_ID HC_TERMINAL_ID DORI_MANAGED_STARTUP DORI_LANE; ${agentCommand(d, "lane")} "$@"`,
-        "dori-review",
+        `unset HERDR_PANE_ID HERDR_WORKSPACE_ID HC_TERMINAL_ID TERN_PANE CATALY_HEADLESS_ID CATALY_HARNESS_ROLE CATALY_MANAGED_STARTUP CATALY_LANE; ${agentCommand(d, "lane")} "$@"`,
+        "cataly-review",
         "-p",
         "--no-session",
         ...(model ? ["--model", model] : []),
         text,
       ];
-  const res = await d.exec(cmd ?? d.agentCmd, argv);
+  const env = hook && legacyRecipeEnv(hook, { configFile: join(d.store.root, "config.json"), env: process.env });
+  const res = await d.exec(cmd ?? d.agentCmd, argv, env ? { env } : undefined);
   const verdicts = [...res.stdout.matchAll(/^VERDICT:\s*(CLEAR|BLOCK)\b/gm)];
   const last = verdicts.at(-1);
   if (!last) {
@@ -74,7 +79,7 @@ export async function review(
     at: d.now(),
     summary: res.stdout.trim().slice(-4000),
   });
-  d.usage.record({ name: "dori.review_completed", verdict });
+  d.usage.record({ name: "cataly.review_completed", verdict });
   return { verdict, sha };
 }
 
@@ -86,19 +91,19 @@ export async function mergeGate(d: Deps, prId: string, opts: { dryRun?: boolean 
   const sha = await headSha(d, pr);
   const refused = await gateRefusal(d, pr, sha);
   if (refused) {
-    if (!opts.dryRun) d.usage.record({ name: "dori.merge_decided", outcome: refused[0] });
+    if (!opts.dryRun) d.usage.record({ name: "cataly.merge_decided", outcome: refused[0] });
     throw new Refusal(`MERGE_REFUSED ${refused[1]}`);
   }
   if (opts.dryRun) return `MERGE_OK ${pr.id} head=${sha} (dry run)`;
   await gh(d, ["pr", "merge", String(pr.number), "--repo", pr.repo, "--squash", "--match-head-commit", sha]);
-  d.usage.record({ name: "dori.merge_decided", outcome: "merged" });
+  d.usage.record({ name: "cataly.merge_decided", outcome: "merged" });
   return `MERGED ${pr.id} head=${sha}`;
 }
 
 async function gateRefusal(d: Deps, pr: PrRef, sha: string): Promise<[MergeOutcome, string] | undefined> {
   const receipt = d.store.receipt(pr.id, sha);
   if (!receipt)
-    return ["no_receipt", `no review receipt at head ${sha.slice(0, 12)} (run: dori harness review ${pr.id})`];
+    return ["no_receipt", `no review receipt at head ${sha.slice(0, 12)} (run: cataly harness review ${pr.id})`];
   if (receipt.verdict !== "CLEAR") return ["review_block", `review at ${sha.slice(0, 12)} is ${receipt.verdict}`];
   const checksRes = await d.exec("gh", ["pr", "checks", String(pr.number), "--repo", pr.repo, "--json", "name,bucket"]);
   const checks: Check[] = checksRes.stdout.trim().startsWith("[") ? JSON.parse(checksRes.stdout) : [];

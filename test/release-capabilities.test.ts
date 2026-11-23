@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { supportsReleaseProfile, validateReleaseManifest } from "../src/release/manifest.ts";
+import { supportsReleaseProfile } from "../src/release/capabilities.ts";
+import { validateReleaseManifest } from "../src/release/manifest.ts";
 import { digest } from "../src/update/source.ts";
 import { releaseFixture } from "./release-producer-setup.ts";
 

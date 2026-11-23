@@ -8,7 +8,7 @@ import { join, relative, sep } from "node:path";
 import { Glob } from "bun";
 
 const MAX_LINES = 250;
-const ROOTS = ["src", "test", "skills/dori-mode/scripts/src", "skills/dori-mode/scripts/test"] as const;
+const ROOTS = ["src", "test", "skills/cataly-mode/scripts/src", "skills/cataly-mode/scripts/test"] as const;
 
 const countLines = (text: string): number => {
   const pieces = text.split("\n");

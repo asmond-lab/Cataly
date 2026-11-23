@@ -1,3 +1,4 @@
+import { importLegacyEnvironment } from "../legacy-environment.ts";
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -8,14 +9,15 @@ import { consumerReleaseHome } from "./runtime.ts";
 import { assertInstalledPointer, hasConsumerState, loadInstalled, verifyRelease } from "./state.ts";
 
 export async function runAutomaticCommand(argv: string[]): Promise<number> {
+  importLegacyEnvironment();
   let unlock: (() => void) | undefined;
   try {
     const args = parseArgs({ args: argv, allowPositionals: true, strict: true, options: { home: { type: "string" } } });
     const mode = args.positionals[0] ?? "status";
     if (args.positionals.length > 1 || !["status", "enable", "disable"].includes(mode))
-      throw new Error("dori update auto <status|enable|disable> [--home PATH]");
+      throw new Error("cataly update auto <status|enable|disable> [--home PATH]");
     const installedHome = consumerReleaseHome(realpathSync(resolve(import.meta.dir, "../..")));
-    const home = args.values.home ?? installedHome ?? process.env["DORI_HOME"] ?? join(homedir(), ".dori");
+    const home = args.values.home ?? installedHome ?? process.env["CATALY_HOME"] ?? join(homedir(), ".cataly");
     if (!isAbsolute(home)) throw new Error("Consumer home must be absolute");
     const paths = consumerPaths(homedir(), home);
     if (!hasConsumerState(paths)) throw new Error("Automatic updates are only available for managed consumer releases");
@@ -27,14 +29,14 @@ export async function runAutomaticCommand(argv: string[]): Promise<number> {
     const automatic = mode === "status" ? readAutomaticState(paths) : setAutomaticEnabled(paths, mode === "enable");
     console.log(
       JSON.stringify(
-        { installed: installed.current.tag, automatic, environmentPaused: process.env["DORI_AUTO_UPDATE"] === "0" },
+        { installed: installed.current.tag, automatic, environmentPaused: process.env["CATALY_AUTO_UPDATE"] === "0" },
         null,
         2,
       ),
     );
     return 0;
   } catch (error) {
-    console.error(`OMP-Dori automatic update held: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Cataly automatic update held: ${error instanceof Error ? error.message : String(error)}`);
     return 2;
   } finally {
     unlock?.();

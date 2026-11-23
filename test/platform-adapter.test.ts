@@ -45,12 +45,12 @@ describe("capability matrix", () => {
     expect(adapterFor("win32").posixOwnership).toBe(false);
   });
 
-  test("macOS defaults to the hc runtime", () => {
-    expect(adapterFor("darwin").defaultRuntime()).toBe("hc");
+  test("macOS legacy releases use hc", () => {
+    expect(adapterFor("darwin").legacyReleaseRuntime()).toBe("hc");
   });
 
-  test("Linux defaults to the herdr runtime", () => {
-    expect(adapterFor("linux").defaultRuntime()).toBe("herdr");
+  test("Linux legacy releases use herdr", () => {
+    expect(adapterFor("linux").legacyReleaseRuntime()).toBe("herdr");
   });
 
   test("Windows strips .exe from a program word", () => {
@@ -78,8 +78,11 @@ describe("capability matrix", () => {
 
   test("release profiles are the ones provision.ts admitted", () => {
     expect(adapterFor("darwin").supportsReleaseProfile("darwin", "arm64", "hc")).toBe(true);
+    expect(adapterFor("darwin").supportsReleaseProfile("darwin", "arm64", "headless")).toBe(true);
     expect(adapterFor("darwin").supportsReleaseProfile("linux", "x64", "herdr")).toBe(false);
     expect(adapterFor("linux").supportsReleaseProfile("linux", "x64", "herdr")).toBe(true);
+    expect(adapterFor("linux").supportsReleaseProfile("linux", "x64", "headless")).toBe(true);
+    expect(adapterFor("linux").supportsReleaseProfile("linux", "arm64", "headless")).toBe(false);
     expect(adapterFor("linux").supportsReleaseProfile("linux", "arm64", "herdr")).toBe(false);
     expect(adapterFor("win32").supportsReleaseProfile("linux", "x64", "herdr")).toBe(false);
   });

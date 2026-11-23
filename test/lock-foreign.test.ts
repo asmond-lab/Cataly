@@ -11,7 +11,7 @@ import { Refusal } from "../src/refusal.ts";
 import { setup } from "./harness-setup.ts";
 import { lockWorld } from "./lock-setup.ts";
 
-// The shared state dir (DORI_HOME/state, also OMP's default runtime state) holds other tools' locks.
+// The shared state dir (CATALY_HOME/state, also OMP's default runtime state) holds other tools' locks.
 beforeEach(() => void spyOn(console, "error").mockImplementation(() => {}));
 afterEach(() => mock.restore());
 
@@ -30,15 +30,18 @@ function fakeRun(root: string, now: () => number) {
   return { env, ran };
 }
 
-const lines = (run: () => void): string[] => {
+const lines = async (run: () => Promise<void>): Promise<string[]> => {
   const out: string[] = [];
   const log = spyOn(console, "log").mockImplementation((...a: unknown[]) => void out.push(a.join(" ")));
-  run();
-  log.mockRestore();
+  try {
+    await run();
+  } finally {
+    log.mockRestore();
+  }
   return out;
 };
 
-test("status lists only lock directories: other tools' *.lock files and dot-named directories are not locks", () => {
+test("status lists only lock directories: other tools' *.lock files and dot-named directories are not locks", async () => {
   const { d } = setup();
   const state = join(d.store.root, "state");
   mkdirSync(state, { recursive: true });
@@ -48,7 +51,7 @@ test("status lists only lock directories: other tools' *.lock files and dot-name
   mkdirSync(lockDir(d.store.root, "demo"));
   writeFileSync(join(lockDir(d.store.root, "demo"), "owner"), `holder ${stamp(d.now())} pid=${process.pid}\n`);
 
-  const out = lines(() => status(d));
+  const out = await lines(() => status(d));
 
   expect(out.filter((l) => l.startsWith("lock "))).toEqual([`lock demo: held by holder 0m (pid ${process.pid})`]);
 });
@@ -106,7 +109,7 @@ test("a valid unrecorded --lane still runs without creating a lane record", asyn
   expect(readdirSync(join(d.store.root, "state", "locks", "demo"))).toEqual([]);
 });
 
-test("status removes only a dead waiter's ticket: other JSON under state/locks is left alone", () => {
+test("status removes only a dead waiter's ticket: other JSON under state/locks is left alone", async () => {
   const { d } = setup();
   const dead = Bun.spawnSync(["true"]).pid;
   const dirs = [join(d.store.root, "state", "locks", ".cache"), join(d.store.root, "state", "locks", "demo")];
@@ -117,7 +120,7 @@ test("status removes only a dead waiter's ticket: other JSON under state/locks i
   }
   writeFileSync(join(dirs[1]!, "1-gone.json"), JSON.stringify({ lane: "gone", pid: dead, at: 1, priority: 5, seq: 1 }));
 
-  expect(lines(() => status(d)).filter((l) => l.startsWith("lock "))).toEqual([]);
+  expect((await lines(() => status(d))).filter((l) => l.startsWith("lock "))).toEqual([]);
 
   expect(readdirSync(dirs[0]!).sort()).toEqual(["note.json", "pid-text.json"]);
   expect(readdirSync(dirs[1]!).sort()).toEqual(["note.json", "pid-text.json"]);

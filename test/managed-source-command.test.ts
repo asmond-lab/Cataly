@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { loadConfig } from "../skills/dori-mode/scripts/src/config.ts";
+import { loadConfig } from "../skills/cataly-mode/scripts/src/config.ts";
 import { shq } from "../src/delivery.ts";
 import { setup } from "./install-setup.ts";
 import { executable, managedCommand, shell } from "./managed-command-setup.ts";
@@ -9,7 +9,7 @@ import { executable, managedCommand, shell } from "./managed-command-setup.ts";
 // POSIX-only: the fixture runs scripts/install-source.sh and shebang stubs through a ':' PATH.
 const posix = test.skipIf(process.platform === "win32");
 
-const suffix = ["--dori-role", "lane", "--model", "{model}", "{prompt}"];
+const suffix = ["--cataly-role", "lane", "--model", "{model}", "{prompt}"];
 
 posix(
   "reinstall preserves a historical lexical side default and managed selection recognizes its directory alias",
@@ -19,7 +19,7 @@ posix(
     const alias = join(s.home, "side alias 'quote'");
     mkdirSync(physical);
     symlinkSync(physical, alias);
-    writeFileSync(join(physical, ".omp-dori"), "side\n");
+    writeFileSync(join(physical, ".omp-cataly"), "side\n");
     const stored = `${JSON.stringify(
       {
         agentCommand: [join(alias, "bin/omp"), ...suffix],
@@ -31,7 +31,7 @@ posix(
     )}\n`;
     const path = join(alias, "config.json");
     writeFileSync(path, stored);
-    const installed = s.install({ DORI_INSTALL_MODE: "side", DORI_NO_PULL: "1", OMP_DORI_HOME: alias });
+    const installed = s.install({ CATALY_INSTALL_MODE: "side", CATALY_NO_PULL: "1", OMP_CATALY_HOME: alias });
     expect(installed.code).toBe(0);
     expect(readFileSync(path, "utf8")).toBe(stored);
     const f = managedCommand();
@@ -42,7 +42,7 @@ posix(
   },
 );
 
-test.each([".omp-dori", "releases/consumer-owner.json"])(
+test.each([".omp-cataly", "releases/consumer-owner.json"])(
   "%s ownership recognizes only the configuration's lexical and canonical defaults even when omp is absent",
   async (marker) => {
     const f = managedCommand();
@@ -50,7 +50,7 @@ test.each([".omp-dori", "releases/consumer-owner.json"])(
     const alias = join(f.root, "configuration alias");
     const unrelatedAlias = join(f.root, "external alias");
     mkdirSync(dirname(join(physical, marker)), { recursive: true });
-    writeFileSync(join(physical, marker), marker === ".omp-dori" ? "side\n" : "{}\n");
+    writeFileSync(join(physical, marker), marker === ".omp-cataly" ? "side\n" : "{}\n");
     symlinkSync(physical, alias);
     symlinkSync(physical, unrelatedAlias);
     const path = join(alias, "config.json");
@@ -77,13 +77,13 @@ posix(
     const native = join(s.root, "bin/omp");
     executable(native);
     const base = join(s.home, "side space 'quote'; literal");
-    const installed = s.install({ DORI_INSTALL_MODE: "side", DORI_NO_PULL: "1", OMP_DORI_HOME: base });
+    const installed = s.install({ CATALY_INSTALL_MODE: "side", CATALY_NO_PULL: "1", OMP_CATALY_HOME: base });
     expect(installed.code).toBe(0);
-    expect(existsSync(join(s.home, "extensions/omp-dori"))).toBe(false);
+    expect(existsSync(join(s.home, "extensions/omp-cataly"))).toBe(false);
     const f = managedCommand();
     const ordinary = join(s.root, "ordinary workspace");
     mkdirSync(ordinary);
-    const configModule = new URL("../skills/dori-mode/scripts/src/config.ts", import.meta.url).href;
+    const configModule = new URL("../skills/cataly-mode/scripts/src/config.ts", import.meta.url).href;
     const harnessModule = new URL("../src/harness.ts", import.meta.url).href;
     const code = `
     import { fill, loadConfig } from ${JSON.stringify(configModule)};
@@ -91,25 +91,25 @@ posix(
     const config = await loadConfig();
     const argv = fill(config.agentCommand, {model: "fixture/model", prompt: "literal prompt"});
     const lane = Bun.spawnSync(argv);
-    const dori = Bun.spawnSync(["/bin/sh", "-c", agentCommand(defaultDeps(), "dori") + " probe"]);
+    const cataly = Bun.spawnSync(["/bin/sh", "-c", agentCommand(defaultDeps(), "cataly") + " probe"]);
     console.log(JSON.stringify({
       argv, ulw: config.ompUlwPath, scope: process.env.OMP_ULW_SCOPE_FILE,
       lane: { code: lane.exitCode, argv: lane.stdout.toString().split("\\0").slice(0, -1) },
-      dori: { code: dori.exitCode, argv: dori.stdout.toString().split("\\0").slice(0, -1) }
+      cataly: { code: cataly.exitCode, argv: cataly.stdout.toString().split("\\0").slice(0, -1) }
     }));
   `;
     const child = shell(`. ${shq(join(base, "env.sh"))}; exec ${shq(process.execPath)} -e ${shq(code)}`, ordinary, {
       ...f.env,
       HOME: s.home,
-      DORI_AGENT_CMD: "stale shell",
-      DORI_AGENT_EXECUTABLE: "retired",
+      CATALY_AGENT_CMD: "stale shell",
+      CATALY_AGENT_EXECUTABLE: "retired",
       OMP_ULW_SCOPE_FILE: "local scope",
     });
     expect(child.exitCode).toBe(0);
     const result = JSON.parse(child.stdout.toString());
     expect(result.argv).toEqual([
       join(base, "bin/omp"),
-      "--dori-role",
+      "--cataly-role",
       "lane",
       "--model",
       "fixture/model",
@@ -128,6 +128,6 @@ posix(
       join(base, "omp.yml"),
     ];
     expect(result.lane).toEqual({ code: 0, argv: [...wrapper, ...result.argv.slice(1)] });
-    expect(result.dori).toEqual({ code: 0, argv: [...wrapper, "--dori-role", "dori", "probe"] });
+    expect(result.cataly).toEqual({ code: 0, argv: [...wrapper, "--cataly-role", "cataly", "probe"] });
   },
 );

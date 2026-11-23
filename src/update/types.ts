@@ -13,7 +13,7 @@ export type UpdateCommand = {
 };
 export type UpdateConfig = {
   readonly version: 1;
-  readonly target: "dori";
+  readonly target: "cataly";
   readonly runtime: "herdr";
   readonly root: string;
   readonly remote: string;
@@ -107,7 +107,7 @@ export type PortResult = {
 };
 export type PreActionNotice = {
   readonly job: string;
-  readonly action: "main-publication" | "dori-replacement";
+  readonly action: "main-publication" | "cataly-replacement" | "dori-replacement";
   readonly intentHash: string;
   readonly commandIndex: number;
   state: "sending" | "accepted" | "failed" | "ambiguous";
@@ -148,8 +148,8 @@ export type UpdateState = {
   readonly jobs: Record<string, string>;
 };
 export type UpdateEvent = {
-  readonly type: "DORI_UPDATE";
-  readonly target: "dori";
+  readonly type: "CATALY_UPDATE";
+  readonly target: "cataly";
   readonly event: string;
   readonly job?: string;
   readonly phase?: UpdatePhase;

@@ -12,7 +12,7 @@ posix.each([
   ["darwin/arm64 primary", { platform: "darwin", arch: "arm64", runtime: "hc", side: false }],
   ["darwin/arm64 side", { platform: "darwin", arch: "arm64", runtime: "hc", side: true }],
 ] as const)(
-  "consumer %s holds missing runtime selection until the owner selects the launch runtime",
+  "legacy consumer target %s requires a historical profile without opting the current reader into terminals",
   (_, { platform, arch, runtime, side }) => {
     const f = fixture(true);
     const home = join(f.paths.home, side ? ".omp-dori" : ".dori");
@@ -27,8 +27,8 @@ posix.each([
     const env = {
       HOME: f.paths.home,
       PATH: `${bin}:${process.env["PATH"] ?? ""}`,
-      DORI_HOME: home,
-      DORI_CONFIG: config,
+      CATALY_HOME: home,
+      CATALY_CONFIG: config,
     };
     const host = `Object.defineProperty(process, "platform", {value:${JSON.stringify(platform)}});
 Object.defineProperty(process, "arch", {value:${JSON.stringify(arch)}});`;
@@ -49,8 +49,8 @@ process.exit(await runConsumerUpdate(${JSON.stringify(argv)}));`,
           process.execPath,
           "--eval",
           `${host}
-const { loadConfig } = await import(${JSON.stringify(resolve(import.meta.dir, "../skills/dori-mode/scripts/src/config.ts"))});
-const { runtimeChoice } = await import(${JSON.stringify(resolve(import.meta.dir, "../skills/dori-mode/scripts/src/run.ts"))});
+const { loadConfig } = await import(${JSON.stringify(resolve(import.meta.dir, "../skills/cataly-mode/scripts/src/config.ts"))});
+const { runtimeChoice } = await import(${JSON.stringify(resolve(import.meta.dir, "../skills/cataly-mode/scripts/src/run.ts"))});
 console.log(JSON.stringify(runtimeChoice(await loadConfig(), process.env)));`,
         ],
         { env },
@@ -58,12 +58,11 @@ console.log(JSON.stringify(runtimeChoice(await loadConfig(), process.env)));`,
       expect(result.exitCode, result.stderr.toString()).toBe(0);
       return JSON.parse(result.stdout.toString());
     };
-    expect(choice()).toEqual({ kind: "hc", source: "detect:path" });
+    expect(choice()).toEqual({ kind: "headless", source: "default" });
     const release = f.release("supported profile\n");
-    for (const command of ["check", "install", "rollback"]) {
+    for (const command of ["check", "install"]) {
       for (const selection of [[], ["--runtime", runtime]]) {
-        const argv = [command, "--home", home, ...selection];
-        if (command !== "rollback") argv.push("--from", release.dist);
+        const argv = [command, "--home", home, "--from", release.dist, ...selection];
         const result = cli(argv);
         expect(result.exitCode).toBe(2);
         expect(result.stderr.toString()).toContain("Preserved config must explicitly select runtime");
@@ -76,7 +75,7 @@ console.log(JSON.stringify(runtimeChoice(await loadConfig(), process.env)));`,
     writeFileSync(config, selected);
     const checked = cli(["check", "--home", home, "--from", release.dist]);
     expect(checked.exitCode, checked.stderr.toString()).toBe(0);
-    expect(choice()).toEqual({ kind: runtime, source: "config" });
+    expect(choice()).toEqual({ kind: "headless", source: "default" });
     expect(readFileSync(config, "utf8")).toBe(selected);
   },
 );

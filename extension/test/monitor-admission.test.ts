@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { takeLock } from "../../skills/dori-mode/scripts/src/checkpoint-lock";
-import { openOwes, recordOwes } from "../../skills/dori-mode/scripts/src/owes";
+import { takeLock } from "../../skills/cataly-mode/scripts/src/checkpoint-lock";
+import { openOwes, recordOwes } from "../../skills/cataly-mode/scripts/src/owes";
 import { Monitors } from "../monitor";
 import { readMonitorOutput } from "../monitor-output";
 import { until } from "./fake-pi";
@@ -96,7 +96,7 @@ test("real child batches remain serialized and bounded while delivery waits", as
 
 for (const ending of ["switch", "shutdown", "same-id restart"] as const) {
   test(`${ending} aborts the old generation before it can publish or wake`, async () => {
-    const root = mkdtempSync(join(tmpdir(), "omp-dori-admission-"));
+    const root = mkdtempSync(join(tmpdir(), "omp-cataly-admission-"));
     mkdirSync(join(root, "owes"), { mode: 0o700 });
     let release: (() => void) | undefined;
     const held = takeLock(join(root, "owes", "inbound.jsonl.lock"), Date.now(), (m) => new Error(m));

@@ -27,24 +27,24 @@ afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "dori-deploy-identity-"));
+  const root = mkdtempSync(join(tmpdir(), "cataly-deploy-identity-"));
   directories.push(root);
   const config = parseDeploymentConfig(
     {
       releaseRoot: "managed",
-      liveSource: "home/.dori/src",
+      liveSource: "home/.cataly/src",
       home: "home",
-      doriHome: "home/.dori",
-      doriConfig: "home/.dori/config.json",
-      stateDir: "home/.dori/state",
+      catalyHome: "home/.cataly",
+      catalyConfig: "home/.cataly/config.json",
+      stateDir: "home/.cataly/state",
       bun: process.execPath,
       omp: process.execPath,
       herdr: process.execPath,
       pane: "w1:p1",
       sessionId: "same-session",
       model: "openai-codex/gpt-6.1-sol",
-      restartLock: "home/.dori/restart.lock",
-      launcherPath: "home/.dori/bin/restart",
+      restartLock: "home/.cataly/restart.lock",
+      launcherPath: "home/.cataly/bin/restart",
       healthTimeoutMs: 100,
       quiesceCheckpointFile: "quiesce.json",
     },
@@ -52,7 +52,7 @@ function fixture() {
   );
   const runtime: RuntimeIdentity = {
     ...processIdentity(process.pid)!,
-    role: "dori",
+    role: "cataly",
     pane: config.pane,
     sessionId: config.sessionId,
     sessionFile: join(root, "existing-session.jsonl"),
@@ -150,9 +150,11 @@ posix("trusted monitor receipts bind a real descendant and reject the actor itse
       monitors: [{ name: "intake", argv: ["sleep", "60"], filter: ".", cwd: f.root }],
       running: [{ name: "intake", pid: child.pid }],
       intake: { path: join(f.root, "heartbeat"), monitor: "intake", maxAgeMs: 120_000 },
+      runtime: { ...f.runtime, role: "dori" },
     };
     writeFileSync(path, JSON.stringify(metadata), { mode: 0o600 });
     const wanted = readMonitorSet(path, f.runtime.sessionId, true);
+    expect(wanted.runtime?.role).toBe("cataly");
     const receipts = monitorProcessReceipts(f.config, f.runtime, wanted, true);
     expect(receipts[0]?.pid).toBe(child.pid);
     expect(receipts[0]?.startTicks).toBe(processIdentity(child.pid)?.startTicks);
@@ -166,45 +168,54 @@ posix("trusted monitor receipts bind a real descendant and reject the actor itse
   }
 });
 
-test("interrupted restart intent retains its original owner and archives only a persisted verified terminal state", () => {
-  const f = fixture();
-  ownReleaseRoot(f.config);
-  const id = "restart-abcd";
-  const record: DeploymentRecord = {
-    ...f.record,
-    id,
-    configHash: digest(JSON.stringify(f.config)),
-    directory: join(f.config.releaseRoot, "transactions", id),
-    oldRuntime: f.runtime,
-    status: "stopping",
-    step: "stop",
-  };
-  saveRestartIntent(f.config, record);
-  expect(readRestartIntent(f.config)?.oldRuntime?.startTicks).toBe(f.runtime.startTicks);
-  expect(() => finishRestartIntent(f.config, { ...record, status: "healthy", step: "done" })).toThrow();
-  expect(readRestartIntent(f.config)?.step).toBe("stop");
-  record.status = "starting";
-  record.step = "health";
-  record.launchRequestedAt = new Date().toISOString();
-  saveRestartIntent(f.config, record);
-  expect(readRestartIntent(f.config)?.oldRuntime?.pid).toBe(f.runtime.pid);
-  expect(readRestartIntent(f.config)?.step).toBe("health");
-  record.status = "healthy";
-  record.step = "done";
-  record.runtime = f.runtime;
-  saveRestartIntent(f.config, record);
-  finishRestartIntent(f.config, record);
-  expect(readRestartIntent(f.config)).toBeUndefined();
-  expect(lstatSync(join(record.directory, "completed-intent.json")).isFile()).toBe(true);
-  const unrelated = join(f.root, "outside");
-  saveDeploymentJson(join(f.config.releaseRoot, "restart-pending.json"), {
-    id,
-    directory: unrelated,
-    configHash: record.configHash,
-  });
-  expect(() => readRestartIntent(f.config)).toThrow();
-  expect(lstatSync(unrelated, { throwIfNoEntry: false })).toBeUndefined();
-});
+test.each(["current", "v0.1.3"])(
+  "%s interrupted restart retains its owner and archives only a verified terminal state",
+  (generation) => {
+    const f = fixture();
+    ownReleaseRoot(f.config);
+    const id = "restart-abcd";
+    const { releaseRoot, liveSource, home, catalyHome, catalyConfig, ...rest } = f.config;
+    const savedConfig =
+      generation === "current"
+        ? f.config
+        : { releaseRoot, liveSource, home, doriHome: catalyHome, doriConfig: catalyConfig, ...rest };
+    const record: DeploymentRecord = {
+      ...f.record,
+      id,
+      configHash: digest(JSON.stringify(savedConfig)),
+      directory: join(f.config.releaseRoot, "transactions", id),
+      oldRuntime: f.runtime,
+      status: "stopping",
+      step: "stop",
+    };
+    saveRestartIntent(f.config, record);
+    expect(readRestartIntent(f.config)?.oldRuntime?.startTicks).toBe(f.runtime.startTicks);
+    expect(() => readRestartIntent({ ...f.config, sessionId: "another-session" })).toThrow("intent differs");
+    expect(() => finishRestartIntent(f.config, { ...record, status: "healthy", step: "done" })).toThrow();
+    expect(readRestartIntent(f.config)?.step).toBe("stop");
+    record.status = "starting";
+    record.step = "health";
+    record.launchRequestedAt = new Date().toISOString();
+    saveRestartIntent(f.config, record);
+    expect(readRestartIntent(f.config)?.oldRuntime?.pid).toBe(f.runtime.pid);
+    expect(readRestartIntent(f.config)?.step).toBe("health");
+    record.status = "healthy";
+    record.step = "done";
+    record.runtime = f.runtime;
+    saveRestartIntent(f.config, record);
+    finishRestartIntent(f.config, record);
+    expect(readRestartIntent(f.config)).toBeUndefined();
+    expect(lstatSync(join(record.directory, "completed-intent.json")).isFile()).toBe(true);
+    const unrelated = join(f.root, "outside");
+    saveDeploymentJson(join(f.config.releaseRoot, "restart-pending.json"), {
+      id,
+      directory: unrelated,
+      configHash: record.configHash,
+    });
+    expect(() => readRestartIntent(f.config)).toThrow();
+    expect(lstatSync(unrelated, { throwIfNoEntry: false })).toBeUndefined();
+  },
+);
 
 test("a pre-stop busy restart can defer its intent while any recorded stop remains pending", () => {
   const f = fixture();

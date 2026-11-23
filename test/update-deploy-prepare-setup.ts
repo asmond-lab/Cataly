@@ -12,7 +12,7 @@ afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 export function preparationFixture() {
-  const directory = realpathSync(mkdtempSync(join(tmpdir(), "dori-deploy-prepare-")));
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "cataly-deploy-prepare-")));
   directories.push(directory);
   const remote = join(directory, "published");
   const buildHome = join(directory, "build-home");
@@ -23,7 +23,7 @@ export function preparationFixture() {
     writeFileSync(join(remote, path), value);
   };
   const tracked: string[] = [];
-  for (const relative of ["", "skills/dori-mode/scripts", "extension"]) {
+  for (const relative of ["", "skills/cataly-mode/scripts", "extension"]) {
     const prefix = relative ? `${relative}/` : "";
     put(
       `${prefix}fixture-dep/package.json`,
@@ -33,7 +33,7 @@ export function preparationFixture() {
     put(
       `${prefix}package.json`,
       JSON.stringify({
-        name: relative ? "deployment-fixture" : "dori-superagent",
+        name: relative ? "deployment-fixture" : "cataly",
         version: "1.0.0",
         type: "module",
         dependencies: { "fixture-dep": "file:./fixture-dep" },
@@ -54,13 +54,13 @@ export function preparationFixture() {
     );
   }
   put("src/app.ts", "export const release = 'published';\n");
-  put("skills/dori-mode/scripts/src/cli.ts", "#!/usr/bin/env bun\nconsole.log('fixture');\n");
-  chmodSync(join(remote, "skills/dori-mode/scripts/src/cli.ts"), 0o755);
+  put("skills/cataly-mode/scripts/src/cli.ts", "#!/usr/bin/env bun\nconsole.log('fixture');\n");
+  chmodSync(join(remote, "skills/cataly-mode/scripts/src/cli.ts"), 0o755);
   put("extension/index.ts", "export default function extension() {}\n");
   put("omp-ulw.lock", `${"a".repeat(40)}\n`);
-  tracked.push("src/app.ts", "skills/dori-mode/scripts/src/cli.ts", "extension/index.ts", "omp-ulw.lock");
+  tracked.push("src/app.ts", "skills/cataly-mode/scripts/src/cli.ts", "extension/index.ts", "omp-ulw.lock");
   git(remote, "init", "-b", "main");
-  git(remote, "config", "user.name", "Dori deployment fixture");
+  git(remote, "config", "user.name", "Cataly deployment fixture");
   git(remote, "config", "user.email", "deployment@example.invalid");
   git(remote, "add", "--", ...tracked);
   git(remote, "commit", "-m", "Published source fixture");
@@ -69,25 +69,25 @@ export function preparationFixture() {
   mkdirSync(join(candidate, "ref/omp-ulw"), { recursive: true });
   writeFileSync(join(candidate, "ref/omp-ulw/index.ts"), "export const opaquePin = 'preserved';\n");
   const home = join(directory, "operator-home");
-  mkdirSync(join(home, ".dori/state"), { recursive: true });
-  writeFileSync(join(home, ".dori/config.json"), '{"owner":"unchanged"}\n');
-  writeFileSync(join(home, ".dori/state/owner.json"), '{"cursor":17}\n');
+  mkdirSync(join(home, ".cataly/state"), { recursive: true });
+  writeFileSync(join(home, ".cataly/config.json"), '{"owner":"unchanged"}\n');
+  writeFileSync(join(home, ".cataly/state/owner.json"), '{"cursor":17}\n');
   const config = parseDeploymentConfig(
     {
       releaseRoot: "managed",
-      liveSource: "operator-home/.dori/src",
+      liveSource: "operator-home/.cataly/src",
       home,
-      doriHome: join(home, ".dori"),
-      doriConfig: join(home, ".dori/config.json"),
-      stateDir: join(home, ".dori/state"),
+      catalyHome: join(home, ".cataly"),
+      catalyConfig: join(home, ".cataly/config.json"),
+      stateDir: join(home, ".cataly/state"),
       bun: process.execPath,
       omp: process.execPath,
       herdr: process.execPath,
       pane: "w1:p1",
       sessionId: "same-session",
       model: "openai-codex/gpt-6.1-sol",
-      restartLock: "operator-home/.dori/restart.lock",
-      launcherPath: "operator-home/.dori/bin/managed-restart",
+      restartLock: "operator-home/.cataly/restart.lock",
+      launcherPath: "operator-home/.cataly/bin/managed-restart",
       healthTimeoutMs: 100,
     },
     directory,

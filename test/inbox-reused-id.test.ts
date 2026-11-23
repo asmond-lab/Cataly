@@ -99,7 +99,7 @@ describe("a name resolved before a migration or a switch finished is resolved ag
     expect({ old: s.pane.received.length, new: next.received.length }).toEqual({ old: 0, new: 1 });
   });
 
-  test("dori send --to-shell to a lane whose record switched before the message was queued queues it there", async () => {
+  test("cataly send --to-shell to a lane whose record switched before the message was queued queues it there", async () => {
     const s = await quietLane();
     const old = s.lane.sessionRef;
     s.w.addPane(NEW.id, "working");

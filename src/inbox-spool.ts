@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { appendQueue, inboxFile, owedFile, spoolDir, spooled } from "./inbox-files.ts";
 import { forwardOf, mergeSpool } from "./inbox-forward.ts";
@@ -48,7 +48,7 @@ export function mergeOwnSpool(root: string, ref: SessionRef): boolean {
 export function lockQueue(root: string, ref: SessionRef, now: number): (() => void) | undefined {
   const path = inboxFile(root, ref);
   const take = (): (() => void) | undefined => {
-    const unlock = takeInboxLock(`${path}.lock`, now);
+    const unlock = lockInboxFiles(root, ref, now);
     if (!unlock) return undefined;
     try {
       mergeOwnSpool(root, ref);
@@ -80,6 +80,36 @@ export function lockQueue(root: string, ref: SessionRef, now: number): (() => vo
  */
 export function lockRoute(root: string, ref: SessionRef, now: number): (() => void) | undefined {
   return takeInboxLock(`${inboxFile(root, ref)}.route`, now);
+}
+
+/** Pins the queue and its spool without merging them, so a shutdown preflight leaves pending entries alone. */
+export function lockInboxFiles(root: string, ref: SessionRef, now: number): (() => void) | undefined {
+  return takeInboxLock(`${inboxFile(root, ref)}.lock`, now);
+}
+
+const sealedPath = (root: string, ref: SessionRef): string => `${inboxFile(root, ref)}.sealed`;
+
+/**
+ * Seals an owned native role's UUID under its route lock, before shutdown can be admitted. The seal survives a
+ * partial stop or a crash before unregistering: an explicit or stale address must never queue onto the old UUID.
+ */
+export function sealNativeInbox(root: string, ref: SessionRef): void {
+  try {
+    writeFileSync(sealedPath(root, ref), "", { flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+}
+
+export function inboxSealed(root: string, ref: SessionRef): boolean {
+  if (ref.runtime !== "headless") return false;
+  try {
+    lstatSync(sealedPath(root, ref));
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
 }
 
 /**
@@ -146,6 +176,13 @@ export async function queueMessage(
         moved = recheck?.();
         if (moved === undefined || sameSession(moved, current)) {
           const at = destinationOf(root, current);
+          if (inboxSealed(root, current) || inboxSealed(root, at)) {
+            if (namedLead) {
+              spoolMessage(owedFile(root), msg);
+              return { kind: "kept" };
+            }
+            throw new Refusal(`the native inbox of ${refText(current)} is closed to new messages`);
+          }
           appendOrSpool(root, at, msg);
           return { kind: "queued", at };
         }

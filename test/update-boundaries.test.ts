@@ -3,12 +3,12 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, unlinkS
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { loadUpdateConfig } from "../src/update/load.ts";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { isolatedEnv } from "../src/update/environment.ts";
 import { restoreUpdate, snapshotUpdate } from "../src/update/recovery.ts";
 import { candidateReport } from "../src/update/report.ts";
 import { parseReview, readPortResult } from "../src/update/review.ts";
-import { assertDoriScope, assertSource, sourceManifest } from "../src/update/source.ts";
+import { assertCatalyScope, assertSource, sourceManifest } from "../src/update/source.ts";
 import { REVIEW_ITEMS } from "../src/update/types.ts";
 import { fixture, git, it } from "./update-setup.ts";
 
@@ -23,9 +23,9 @@ const structuredReview = () => ({
   findings: [],
   limitations: ["Environment/path isolation is not an OS sandbox."],
 });
-const line = (value: unknown) => `DORI_UPDATE_REVIEW ${JSON.stringify(value)}`;
+const line = (value: unknown) => `CATALY_UPDATE_REVIEW ${JSON.stringify(value)}`;
 
-describe("Dori candidate boundaries", () => {
+describe("Cataly candidate boundaries", () => {
   test("review parser requires exact source, all eight evidenced items, limits and one unambiguous verdict", () => {
     expect(parseReview(line(structuredReview()), hash).verdict).toBe("approve");
     expect(() => parseReview(line(structuredReview()), "b".repeat(64))).toThrow("stale source");
@@ -56,7 +56,7 @@ describe("Dori candidate boundaries", () => {
     f.write(job.candidate, "src/new-file.ts", "export const newFile = true;\n");
     expect(() => assertSource(job)).toThrow("stale");
     f.write(job.candidate, "omp-ulw.lock", `${"b".repeat(40)}\n`);
-    expect(() => assertDoriScope(job.inputs!, sourceManifest(job.candidate))).toThrow("ULW lock/library");
+    expect(() => assertCatalyScope(job.inputs!, sourceManifest(job.candidate))).toThrow("ULW lock/library");
     job.phase = "ready";
     expect(() => candidateReport(f.updater.context, job)).toThrow("lacks passed checks");
   });
@@ -83,7 +83,7 @@ describe("Dori candidate boundaries", () => {
       expect(existsSync(join(job.candidate, path))).toBe(false);
       expect(existsSync(join(job.directory, "inputs/local", path))).toBe(false);
     }
-    expect(() => assertDoriScope(job.inputs!, sourceManifest(job.candidate))).not.toThrow();
+    expect(() => assertCatalyScope(job.inputs!, sourceManifest(job.candidate))).not.toThrow();
     job.sourceHash = sourceManifest(job.candidate).hash;
     expect(() => assertSource(job)).not.toThrow();
     writeFileSync(
@@ -105,7 +105,7 @@ describe("Dori candidate boundaries", () => {
     expect(sourceManifest(join(restored, "candidate")).hash).toBe(job.sourceHash);
     f.write(job.candidate, libraryFile, "export const pinnedRuntime = 'changed';\n");
     expect(() => assertSource(job)).toThrow("stale");
-    expect(() => assertDoriScope(job.inputs!, sourceManifest(job.candidate))).toThrow("ULW lock/library");
+    expect(() => assertCatalyScope(job.inputs!, sourceManifest(job.candidate))).toThrow("ULW lock/library");
 
     const absent = fixture();
     const withoutLibrary = (await absent.updater.once("stage")).job!;
@@ -114,7 +114,7 @@ describe("Dori candidate boundaries", () => {
     withoutLibrary.sourceHash = sourceManifest(withoutLibrary.candidate).hash;
     mkdirSync(join(withoutLibrary.candidate, "ref/omp-ulw"), { recursive: true });
     expect(() => assertSource(withoutLibrary)).toThrow("stale");
-    expect(() => assertDoriScope(withoutLibrary.inputs!, sourceManifest(withoutLibrary.candidate))).toThrow(
+    expect(() => assertCatalyScope(withoutLibrary.inputs!, sourceManifest(withoutLibrary.candidate))).toThrow(
       "ULW lock/library",
     );
   });
@@ -151,15 +151,15 @@ describe("Dori candidate boundaries", () => {
     process.env["UPDATER_FIXTURE_SECRET"] = "fixture-secret-value";
     process.env["HERDR_PANE_ID"] = "parent-pane";
     try {
-      const updater = new DoriUpdater({ ...f.config, modelEnv: ["UPDATER_FIXTURE_SECRET"] });
+      const updater = new CatalyUpdater({ ...f.config, modelEnv: ["UPDATER_FIXTURE_SECRET"] });
       const model = isolatedEnv(updater.context, join(f.directory, "model-runtime"), "model");
       const check = isolatedEnv(updater.context, join(f.directory, "check-runtime"), "check");
       expect(model["UPDATER_FIXTURE_SECRET"]).toBe("fixture-secret-value");
       expect(check["UPDATER_FIXTURE_SECRET"]).toBeUndefined();
       expect(model["HERDR_PANE_ID"]).toBeUndefined();
       expect(model["HC_TERMINAL_ID"]).toBeUndefined();
-      expect(model["DORI_RUNTIME"]).toBe("herdr");
-      expect(check["DORI_TELEMETRY"]).toBe("0");
+      expect(model["CATALY_RUNTIME"]).toBe("herdr");
+      expect(check["CATALY_TELEMETRY"]).toBe("0");
       expect(check["DO_NOT_TRACK"]).toBe("1");
       expect(model["HOME"]).not.toBe(check["HOME"]);
       expect(model["PI_CODING_AGENT_DIR"]).not.toBe(check["PI_CODING_AGENT_DIR"]);

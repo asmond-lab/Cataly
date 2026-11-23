@@ -46,7 +46,7 @@ posix("the report names what uses each identity and removes none, the unused one
   for (const source of [wrapped.source, running.source, superseded.source]) rmSync(source, { recursive: true });
   mkdirSync(join(c.root, "dori/bin"), { recursive: true });
   writeFileSync(join(c.root, "dori/bin/omp"), `#!/bin/sh\nexec ${wrapped.receipt.omp} "$@"\n`);
-  const unknown = join(c.home, ".cache/omp-dori", `native-${process.platform}-${process.arch}-${"e".repeat(64)}`);
+  const unknown = join(c.home, ".cache/omp-cataly", `native-${process.platform}-${process.arch}-${"e".repeat(64)}`);
   mkdirSync(unknown, { mode: 0o700 });
   const holder = Bun.spawn(["/bin/sh", "-c", "echo ready; read line", "dori-native-holder", running.receipt.omp], {
     stdin: "pipe",
@@ -178,9 +178,9 @@ posix("dori update cache reports by default; --prune quarantines, trusting only 
   const cli = resolve(import.meta.dir, "../src/release/cli.ts");
   const run = (...argv: string[]) =>
     Bun.spawnSync([process.execPath, cli, "cache", ...argv], {
-      env: { HOME: c.home, PATH: process.env["PATH"], OMP_DORI_HOME: join(c.root, "side") },
+      env: { HOME: c.home, PATH: process.env["PATH"], OMP_CATALY_HOME: join(c.root, "side") },
     });
-  const cacheRoot = join(c.home, ".cache/omp-dori");
+  const cacheRoot = join(c.home, ".cache/omp-cataly");
   const before = snapshot(cacheRoot);
   const listed = run();
   expect(listed.exitCode).toBe(0);
@@ -204,7 +204,7 @@ posix("dori update cache reports by default; --prune quarantines, trusting only 
   expect(result.rootCwdTrusted > 0).toBe(report.privileged.length > 0);
   // Another lane's launch or a process that started after the report may still hold it; nothing else may.
   const late =
-    /^(?:Dori cache writer process |unreadable (?:working directory|open files) of process |lease of process )/;
+    /^(?:Cataly cache writer process |unreadable (?:working directory|open files) of process |lease of process )/;
   const kept = result.kept.flatMap((entry: { protectedBy: string[] }) => entry.protectedBy);
   expect(kept.filter((reason: string) => !late.test(reason))).toEqual([]);
   // Unused, it is only moved aside: removal requires an explicitly asked later prune after the grace period.

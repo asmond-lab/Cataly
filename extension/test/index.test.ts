@@ -1,16 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, lstatSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 
-import { paneStatePath, readPaneState, writePaneState } from "../../skills/dori-mode/scripts/src/lane-state";
+import { paneStatePath, readPaneState, writePaneState } from "../../skills/cataly-mode/scripts/src/lane-state";
+import { extensionInstallation } from "../installation.ts";
 import { ROLE_INVARIANTS } from "../role-invariants.ts";
 import { calls, type FakePi, type FakeSession, load, until, useConfig } from "./fake-pi";
 
 const FAKE_ULW = join(import.meta.dir, "fake-ulw.ts");
 const REAL_ULW = join(import.meta.dir, "../../ref/omp-ulw/index.ts");
 const PANE = "w1:p2";
-const ROLE = "omp-dori:role";
+const ROLE = "omp-cataly:role";
 const posix = test.skipIf(process.platform === "win32");
 
 const session = (id: string, entries: FakeSession["entries"] = []): FakeSession => ({
@@ -19,6 +20,7 @@ const session = (id: string, entries: FakeSession["entries"] = []): FakeSession 
   entries,
 });
 const roleEntry = (role: string) => ({ type: "custom", customType: ROLE, data: role });
+const wireRole = (role: "dori" | "lane") => ({ type: "custom", customType: "omp-dori:role", data: role });
 const agentStart = { type: "before_agent_start", prompt: "ulw fix the bug", systemPrompt: ["base prompt"] };
 
 let stateDir: string;
@@ -27,24 +29,166 @@ beforeEach(() => {
   stateDir = useConfig(FAKE_ULW);
   process.env.HERDR_PANE_ID = PANE;
   delete process.env.HC_TERMINAL_ID;
+  delete process.env.TERN_PANE;
 });
 afterEach(() => {
   delete process.env.HERDR_PANE_ID;
   delete process.env.HC_TERMINAL_ID;
+  delete process.env.TERN_PANE;
 });
 
 describe("role", () => {
-  test("--dori-role is recorded on session start and restored from the session without the flag", async () => {
+  const legacyLead = { type: "custom", customType: "omp-dori:role", data: "dori" };
+  test.each([
+    { entries: [legacyLead], role: "cataly" },
+    { entries: [legacyLead, roleEntry("lane")], role: "lane" },
+    { entries: [roleEntry("lane"), legacyLead], role: "cataly" },
+    { entries: [legacyLead, { ...roleEntry("lane"), customType: "foreign:role" }], role: "cataly" },
+  ] as const)("the newest recognized v0.1.3/current role owns the resumed session %#", async ({ entries, role }) => {
+    const recorded = [...entries];
+    const s = session("mixed-role", recorded);
+    const pi = await load({ session: s, flags: { "cataly-role": role === "lane" ? "cataly" : "lane" } });
+    try {
+      await pi.emit("session_start");
+      expect(readPaneState(stateDir, PANE)?.role).toBe(role);
+      expect(pi.active.includes("monitor")).toBe(role === "cataly");
+      expect(await pi.emit("before_agent_start", agentStart)).toContainEqual({
+        systemPrompt: ["base prompt", ROLE_INVARIANTS[role], "<fake-ulw-policy>"],
+      });
+      expect(
+        s.entries.filter((entry) => entry.customType === ROLE || entry.customType === legacyLead.customType),
+      ).toEqual([...entries].filter((entry) => entry.customType !== "foreign:role"));
+    } finally {
+      await pi.emit("session_shutdown");
+    }
+  });
+
+  test("an explicit v0.1.3 role flag records a lead the retained reader can resume", async () => {
+    const s = session("legacy-flag");
+    const pi = await load({ session: s, flags: { "dori-role": "dori" } });
+    try {
+      await pi.emit("session_start");
+      expect(s.entries).toEqual([wireRole("dori")]);
+      expect(pi.active).toContain("monitor");
+    } finally {
+      await pi.emit("session_shutdown");
+    }
+  });
+
+  test("a flagless historical role uses its selected config without giving a plain TUI its pane", async () => {
+    const names = ["CATALY_CONFIG", "CATALY_HOME", "DORI_CONFIG", "DORI_HOME"] as const;
+    const previous = names.map((name) => [name, process.env[name]] as const);
+    const legacyHome = join(dirname(stateDir), ".dori");
+    const legacyState = join(legacyHome, "historic-state");
+    const legacyConfig = join(legacyHome, "operator-config.json");
+    mkdirSync(legacyHome);
+    writeFileSync(legacyConfig, JSON.stringify({ stateDir: legacyState, ompUlwPath: FAKE_ULW }));
+    const retired = {
+      paneId: PANE,
+      role: "lane",
+      sessionId: "flagless-legacy",
+      cwd: tmpdir(),
+      pid: 0,
+      startedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      goal: { status: "none" },
+      approvalPending: false,
+    } as const;
+    writePaneState(legacyState, retired);
+    delete process.env.CATALY_CONFIG;
+    delete process.env.CATALY_HOME;
+    process.env.DORI_CONFIG = legacyConfig;
+    process.env.DORI_HOME = legacyHome;
+    let pi: FakePi | undefined;
+    try {
+      const physicalSource = join(legacyHome, "releases", "releases", `${"a".repeat(40)}-${"b".repeat(16)}`);
+      mkdirSync(physicalSource, { recursive: true });
+      delete process.env.DORI_HOME;
+      delete process.env.DORI_CONFIG;
+      const physicalHome = realpathSync(legacyHome);
+      expect(extensionInstallation(physicalSource)).toMatchObject({
+        configFile: join(physicalHome, "config.json"),
+        env: { CATALY_HOME: physicalHome },
+        ordinaryPaneRoot: false,
+      });
+      process.env.DORI_CONFIG = legacyConfig;
+      process.env.DORI_HOME = legacyHome;
+      pi = await load({ session: session("unrelated"), mode: "tui" });
+      await pi.emit("session_start");
+      expect(readPaneState(legacyState, PANE)).toEqual(retired);
+      expect(pi.handlers.has("tool_approval_requested")).toBe(false);
+      expect(await pi.emit("before_agent_start", agentStart)).toEqual([undefined]);
+
+      pi.session = session(retired.sessionId, [wireRole("lane")]);
+      await pi.emit("session_switch", { type: "session_switch", reason: "resume" });
+      await pi.emit("tool_approval_requested", { toolCallId: "legacy-approval" });
+      expect(readPaneState(legacyState, PANE)).toMatchObject({
+        sessionId: retired.sessionId,
+        pid: process.pid,
+        approvalPending: true,
+      });
+      expect(await pi.emit("before_agent_start", agentStart)).toContainEqual({
+        systemPrompt: ["base prompt", ROLE_INVARIANTS.lane, "<fake-ulw-policy>"],
+      });
+      expect(readPaneState(stateDir, PANE)).toBeNull();
+      expect(process.env.CATALY_HOME).toBeUndefined();
+      expect(process.env.CATALY_CONFIG).toBeUndefined();
+      expect(process.env.DORI_HOME).toBe(legacyHome);
+      expect(process.env.DORI_CONFIG).toBe(legacyConfig);
+    } finally {
+      await pi?.emit("session_shutdown");
+      for (const [name, value] of previous) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  });
+
+  posix.each([".omp-dori", ".omp-cataly"])("binds only a marked primary in-home source checkout (%s)", (marker) => {
+    const names = ["CATALY_CONFIG", "CATALY_HOME", "DORI_CONFIG", "DORI_HOME"] as const;
+    const previous = names.map((name) => [name, process.env[name]] as const);
+    const home = realpathSync(dirname(stateDir));
+    const install = join(home, ".dori");
+    const source = join(install, "src");
+    const markerFile = join(install, marker);
+    mkdirSync(source, { recursive: true, mode: 0o700 });
+    writeFileSync(join(source, "omp-ulw.lock"), `${"a".repeat(40)}\n`);
+    for (const name of names) delete process.env[name];
+    try {
+      writeFileSync(markerFile, "primary\n", { mode: 0o600 });
+      expect(extensionInstallation(source, home).env.CATALY_HOME).toBeUndefined();
+      mkdirSync(join(source, ".git"), { mode: 0o700 });
+      expect(extensionInstallation(source, home)).toMatchObject({
+        configFile: join(install, "config.json"),
+        env: { CATALY_HOME: install },
+        ordinaryPaneRoot: false,
+      });
+      expect(extensionInstallation(source, install).env.CATALY_HOME).toBeUndefined();
+      chmodSync(markerFile, 0o622);
+      expect(extensionInstallation(source, home).env.CATALY_HOME).toBeUndefined();
+      chmodSync(markerFile, 0o600);
+      writeFileSync(markerFile, "side\n");
+      expect(extensionInstallation(source, home).env.CATALY_HOME).toBeUndefined();
+      expect(process.env.CATALY_HOME).toBeUndefined();
+    } finally {
+      for (const [name, value] of previous) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  });
+
+  test("--cataly-role is recorded on session start and restored from the session without the flag", async () => {
     const s = session("s1");
-    const first = await load({ session: s, flags: { "dori-role": "lane" } });
+    const first = await load({ session: s, flags: { "cataly-role": "lane" } });
     await first.emit("session_start");
-    expect(s.entries).toEqual([roleEntry("lane")]);
+    expect(s.entries).toEqual([wireRole("lane")]);
 
     // a later process resumes the same session file (herdr restore, `omp --resume`) without the flag
     calls.length = 0;
     const resumed = await load({ session: s });
     await resumed.emit("session_start");
-    expect(s.entries).toEqual([roleEntry("lane")]);
+    expect(s.entries).toEqual([wireRole("lane")]);
     expect(readPaneState(stateDir, PANE)?.role).toBe("lane");
     expect(await resumed.emit("before_agent_start", agentStart)).toContainEqual({
       systemPrompt: ["base prompt", ROLE_INVARIANTS.lane, "<fake-ulw-policy>"],
@@ -53,13 +197,13 @@ describe("role", () => {
 
   test("a flagged role whose session start fails for another reason than a rejected bootstrap is still recorded", async () => {
     const s = session("tools-fail");
-    const lane = await load({ session: s, flags: { "dori-role": "lane" } });
+    const lane = await load({ session: s, flags: { "cataly-role": "lane" } });
     lane.api.setActiveTools = async () => {
       throw new Error("tool list unavailable");
     };
     await expect(lane.emit("session_start")).rejects.toThrow("tool list unavailable");
     // The process keeps the role it was started with, so a later resume without the flag must restore it too.
-    expect(s.entries).toEqual([roleEntry("lane")]);
+    expect(s.entries).toEqual([wireRole("lane")]);
   });
 
   test("a session without a role runs no omp-ulw handler and never sends a user message", async () => {
@@ -73,10 +217,10 @@ describe("role", () => {
     expect(calls).toEqual([]);
     expect(normal.userMessages).toEqual([]);
     expect(normal.notes).toEqual([
-      "/ulw works only in Dori sessions (omp --dori-role dori|lane).",
-      "fake_ulw_tool works only in Dori sessions (omp --dori-role dori|lane).",
+      "/ulw works only in Cataly sessions (omp --cataly-role cataly|lane).",
+      "fake_ulw_tool works only in Cataly sessions (omp --cataly-role cataly|lane).",
     ]);
-    expect(result?.content[0]?.text).toContain("works only in Dori sessions");
+    expect(result?.content[0]?.text).toContain("works only in Cataly sessions");
     expect(normal.session.entries).toEqual([]);
     expect(normal.active).toEqual(["read", "bash"]);
     expect(existsSync(paneStatePath(stateDir, PANE))).toBe(false);
@@ -84,10 +228,10 @@ describe("role", () => {
     expect(normal.handlers.has("tool_approval_requested")).toBe(false);
   });
 
-  test("dori -> normal -> dori switching follows each session's role", async () => {
-    const doriSession = session("dori-1");
+  test("cataly -> normal -> cataly switching follows each session's role", async () => {
+    const catalySession = session("cataly-1");
     const normalSession = session("plain-1");
-    const pi = await load({ session: doriSession, flags: { "dori-role": "dori" } });
+    const pi = await load({ session: catalySession, flags: { "cataly-role": "cataly" } });
     await pi.emit("session_start");
     expect(pi.active).toContain("monitor");
     await pi.command("ulw", "x");
@@ -103,19 +247,23 @@ describe("role", () => {
     expect(existsSync(paneStatePath(stateDir, PANE))).toBe(false);
 
     calls.length = 0;
-    pi.session = doriSession;
+    pi.session = catalySession;
     await pi.emit("session_switch", { type: "session_switch", reason: "resume" });
-    expect(calls).toEqual(["restore:dori-1"]);
+    expect(calls).toEqual(["restore:cataly-1"]);
     expect(pi.active).toContain("monitor");
-    expect(readPaneState(stateDir, PANE)).toMatchObject({ role: "dori", sessionId: "dori-1" });
+    expect(readPaneState(stateDir, PANE)).toMatchObject({ role: "cataly", sessionId: "cataly-1" });
     await pi.command("ulw", "z");
     expect(pi.userMessages).toEqual(["ulw x", "ulw z"]);
   });
 
   test("subagents inherit their parent's role; children of normal sessions stay plain", async () => {
-    const parent = await load({ session: session("lane-parent"), flags: { "dori-role": "lane" } });
+    const parent = await load({ session: session("lane-parent"), flags: { "cataly-role": "lane" } });
     await parent.emit("session_start");
-    const child = await load({ session: session("child"), agent: { kind: "sub", id: "0-Explore", parentId: "Main" } });
+    const child = await load({
+      session: session("child"),
+      agent: { kind: "sub", id: "0-Explore", parentId: "Main" },
+      active: ["read", "bash", "cataly_report"],
+    });
     await child.emit("session_start");
     expect(await child.emit("before_agent_start", agentStart)).toContainEqual({
       systemPrompt: ["base prompt", "<fake-ulw-policy>"],
@@ -129,7 +277,7 @@ describe("role", () => {
     expect(await grandchild.emit("before_agent_start", agentStart)).toContainEqual({
       systemPrompt: ["base prompt", "<fake-ulw-policy>"],
     });
-    // children never touch the pane file or the tool set
+    // A child never owns the pane or the explicitly selected lane-only report tool.
     expect(readPaneState(stateDir, PANE)?.sessionId).toBe("lane-parent");
     expect(child.active).toEqual(["read", "bash"]);
 
@@ -151,7 +299,7 @@ describe("role", () => {
     await normal.emit("session_start");
     expect(normal.notes).toEqual([]);
 
-    const lane = await load({ session: session("lane"), flags: { "dori-role": "lane" } });
+    const lane = await load({ session: session("lane"), flags: { "cataly-role": "lane" } });
     await lane.emit("session_start");
     await lane.emit("session_switch", { type: "session_switch", reason: "resume" });
     expect(lane.notes).toHaveLength(1);
@@ -161,7 +309,7 @@ describe("role", () => {
 
   test("an empty ompUlwPath leaves omp-ulw to a standalone extension: nothing is imported and nothing warns", async () => {
     stateDir = useConfig("");
-    const lane = await load({ session: session("lane"), flags: { "dori-role": "lane" } });
+    const lane = await load({ session: session("lane"), flags: { "cataly-role": "lane" } });
     await lane.emit("session_start");
     expect(await lane.emit("before_agent_start", agentStart)).toEqual([
       { systemPrompt: ["base prompt", ROLE_INVARIANTS.lane] },
@@ -174,9 +322,9 @@ describe("role", () => {
 
 describe("goal tool", () => {
   test("is activated only for lanes that have no goal yet", async () => {
-    const lane = await load({ session: session("lane"), flags: { "dori-role": "lane" } });
+    const lane = await load({ session: session("lane"), flags: { "cataly-role": "lane" } });
     await lane.emit("session_start");
-    expect(lane.active).toEqual(["read", "bash", "goal"]);
+    expect(lane.active).toEqual(["read", "bash", "cataly_report", "goal"]);
 
     const goalEntry = {
       type: "mode_change",
@@ -185,11 +333,11 @@ describe("goal tool", () => {
     };
     const laneWithGoal = await load({ session: session("lane-goal", [roleEntry("lane"), goalEntry]) });
     await laneWithGoal.emit("session_start");
-    expect(laneWithGoal.active).toEqual(["read", "bash"]);
+    expect(laneWithGoal.active).toEqual(["read", "bash", "cataly_report"]);
 
-    const dori = await load({ session: session("dori"), flags: { "dori-role": "dori" } });
-    await dori.emit("session_start");
-    expect(dori.active).toEqual(["read", "bash", "monitor"]);
+    const cataly = await load({ session: session("cataly"), flags: { "cataly-role": "cataly" } });
+    await cataly.emit("session_start");
+    expect(cataly.active).toEqual(["read", "bash", "monitor"]);
 
     const normal = await load({ session: session("plain") });
     await normal.emit("session_start");
@@ -199,7 +347,7 @@ describe("goal tool", () => {
   // A plain session is reached by switching to its file, never by creating one in this process (`reason: "new"`),
   // which keeps the process's own role.
   test("is taken back when a goal-less lane switches to a normal session", async () => {
-    const pi = await load({ session: session("lane"), flags: { "dori-role": "lane" } });
+    const pi = await load({ session: session("lane"), flags: { "cataly-role": "lane" } });
     await pi.emit("session_start");
     pi.session = session("plain");
     await pi.emit("session_switch", { type: "session_switch", reason: "resume" });
@@ -207,7 +355,7 @@ describe("goal tool", () => {
   });
 
   test("is taken back from a normal session even after the lane created its goal", async () => {
-    const pi = await load({ session: session("lane"), flags: { "dori-role": "lane" } });
+    const pi = await load({ session: session("lane"), flags: { "cataly-role": "lane" } });
     await pi.emit("session_start");
     await pi.emit("goal_updated", { type: "goal_updated", goal: { objective: "fix #12", status: "active" } });
     pi.session = session("plain");
@@ -216,7 +364,7 @@ describe("goal tool", () => {
   });
 
   test("stays for a normal session whose own goal omp manages", async () => {
-    const pi = await load({ session: session("lane"), flags: { "dori-role": "lane" } });
+    const pi = await load({ session: session("lane"), flags: { "cataly-role": "lane" } });
     await pi.emit("session_start");
     const goalEntry = {
       type: "mode_change",
@@ -236,9 +384,9 @@ describe("monitor restore", () => {
   };
   const tick = { op: "start", name: "tick", argv: ["sh", "-c", "echo up; exec sleep 30"], filter: "^up" };
 
-  test("a resumed Dori session restarts the monitors it recorded and their lines wake it again", async () => {
-    const s = session("dori-r1");
-    const first = await load({ session: s, flags: { "dori-role": "dori" } });
+  test("a resumed Cataly session restarts the monitors it recorded and their lines wake it again", async () => {
+    const s = session("cataly-r1");
+    const first = await load({ session: s, flags: { "cataly-role": "cataly" } });
     await first.emit("session_start");
     await monitorCall(first, { ...tick, restart: "on-failure" });
     await first.emit("session_shutdown"); // omp exits: the monitor process dies with it
@@ -261,10 +409,10 @@ describe("monitor restore", () => {
   });
 
   // POSIX-only: records the monitor metadata file's 0o600 mode bits.
-  posix("a fresh Dori session restores carried monitors from a native branch snapshot", async () => {
-    const started = session("dori-c1", [roleEntry("dori")]);
-    const fresh = session("dori-c2");
-    const pi = await load({ session: started, flags: { "dori-role": "dori" } });
+  posix("a fresh Cataly session restores carried monitors from a native branch snapshot", async () => {
+    const started = session("cataly-c1", [roleEntry("cataly")]);
+    const fresh = session("cataly-c2");
+    const pi = await load({ session: started, flags: { "cataly-role": "cataly" } });
     let resumed: FakePi | undefined;
     const pids: number[] = [];
     const alive = (pid: number): boolean => {
@@ -291,12 +439,12 @@ describe("monitor restore", () => {
       await pi.emit("session_switch", { type: "session_switch", reason: "new" });
       expect(snapshot).toEqual([]);
       expect(fresh.entries).toEqual([
-        roleEntry("dori"),
-        { type: "custom", customType: "omp-dori:monitor", data: { ...tick, cwd: tmpdir() } },
+        wireRole("dori"),
+        { type: "custom", customType: "omp-dori:monitor", data: { ...tick, cwd: tmpdir(), id: expect.any(String) } },
       ]);
       expect(pi.active).toContain("monitor");
       expect(await pi.emit("before_agent_start", agentStart)).toContainEqual({
-        systemPrompt: ["base prompt", ROLE_INVARIANTS.dori, "<fake-ulw-policy>"],
+        systemPrompt: ["base prompt", ROLE_INVARIANTS.cataly, "<fake-ulw-policy>"],
       });
       const carried = await monitorCall(pi, { op: "list" });
       expect(carried).toContain("tick (pid");
@@ -316,10 +464,12 @@ describe("monitor restore", () => {
         monitors: [{ name: tick.name, argv: tick.argv, filter: tick.filter, cwd: tmpdir() }],
       });
       expect(lstatSync(metadata).mode & 0o777).toBe(0o600);
-      expect(readPaneState(stateDir, PANE)).toMatchObject({ role: "dori", sessionId: fresh.id });
+      expect(readPaneState(stateDir, PANE)).toMatchObject({ role: "cataly", sessionId: fresh.id });
       await pi.emit("session_shutdown");
       await until(() => pids.every((pid) => !alive(pid)));
-      expect(await monitorCall(pi, { op: "list" })).toBe("no monitors running");
+      const stopped = await monitorCall(pi, { op: "list" });
+      expect(stopped).toContain("tick [mode=persistent status=recorded]");
+      expect(stopped).not.toContain("pid ");
 
       // A later process needs only the destination records, not the original role flag or monitor process.
       resumed = await load({ session: fresh });
@@ -340,8 +490,8 @@ describe("monitor restore", () => {
   });
 
   test("a monitor stopped by name, even after it exited on its own, is not restored", async () => {
-    const s = session("dori-r2");
-    const first = await load({ session: s, flags: { "dori-role": "dori" } });
+    const s = session("cataly-r2");
+    const first = await load({ session: s, flags: { "cataly-role": "cataly" } });
     await first.emit("session_start");
     await monitorCall(first, { ...tick, name: "once", argv: ["sh", "-c", "echo up"] });
     await until(() => first.messages.some((m) => m.content.includes("[once] monitor exited")));
@@ -351,11 +501,11 @@ describe("monitor restore", () => {
     const resumed = await load({ session: s });
     await resumed.emit("session_start");
     expect(resumed.messages).toEqual([]);
-    expect(await monitorCall(resumed, { op: "list" })).toBe("no monitors running");
+    expect(await monitorCall(resumed, { op: "list" })).toBe("no monitors running or recorded");
   });
 
-  test("only Dori sessions restore monitors", async () => {
-    const recorded = { type: "custom", customType: "omp-dori:monitor", data: { ...tick, cwd: "/tmp" } };
+  test("only Cataly sessions restore monitors", async () => {
+    const recorded = { type: "custom", customType: "omp-cataly:monitor", data: { ...tick, cwd: "/tmp" } };
     const lane = await load({ session: session("lane-r", [roleEntry("lane"), recorded]) });
     await lane.emit("session_start");
     const normal = await load({ session: session("plain-r", [recorded]) });
@@ -368,14 +518,14 @@ describe("pane state", () => {
   test("a nested run preserves the live owner's record and a later session can replace its dead record", async () => {
     const owner = Bun.spawn(["sleep", "30"], { stdin: "ignore", stdout: "ignore", stderr: "inherit" });
     try {
-      const lead = await load({ session: session("lead"), flags: { "dori-role": "dori" } });
+      const lead = await load({ session: session("lead"), flags: { "cataly-role": "cataly" } });
       await lead.emit("session_start");
       const owned = readPaneState(stateDir, PANE);
       if (owned === null) throw new Error("the lead session did not record its pane");
-      expect(owned).toMatchObject({ pid: process.pid, sessionId: "lead", role: "dori" });
+      expect(owned).toMatchObject({ pid: process.pid, sessionId: "lead", role: "cataly" });
       writePaneState(stateDir, { ...owned, pid: owner.pid });
 
-      const nested = await load({ session: session("nested"), flags: { "dori-role": "lane" } });
+      const nested = await load({ session: session("nested"), flags: { "cataly-role": "lane" } });
       await nested.emit("session_start");
       await nested.emit("goal_updated", { goal: { objective: "nested work", status: "active" } });
       expect(readPaneState(stateDir, PANE)).toEqual({ ...owned, pid: owner.pid });
@@ -384,7 +534,7 @@ describe("pane state", () => {
 
       owner.kill();
       await owner.exited;
-      const replacement = await load({ session: session("replacement"), flags: { "dori-role": "lane" } });
+      const replacement = await load({ session: session("replacement"), flags: { "cataly-role": "lane" } });
       await replacement.emit("session_start");
       expect(readPaneState(stateDir, PANE)).toMatchObject({ pid: process.pid, sessionId: "replacement" });
       await replacement.emit("session_shutdown");
@@ -413,7 +563,7 @@ describe("pane state", () => {
           goal: { status: "none" },
           approvalPending: false,
         });
-        const fresh = await load({ session: session("fresh"), flags: { "dori-role": "lane" } });
+        const fresh = await load({ session: session("fresh"), flags: { "cataly-role": "lane" } });
         await fresh.emit("session_start");
         await fresh.emit("agent_start");
         expect(readPaneState(stateDir, PANE)).toMatchObject({ pid: process.pid, sessionId: "fresh" });
@@ -429,13 +579,13 @@ describe("pane state", () => {
   test.each([0, undefined, "17", -1, 1.5, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER + 1])(
     "an invalid incumbent pid %j cannot wedge pane recording or cleanup",
     async (pid) => {
-      const first = await load({ session: session("first"), flags: { "dori-role": "lane" } });
+      const first = await load({ session: session("first"), flags: { "cataly-role": "lane" } });
       await first.emit("session_start");
       const owned = readPaneState(stateDir, PANE);
       if (owned === null) throw new Error("the first session did not record its pane");
       writeFileSync(paneStatePath(stateDir, PANE), JSON.stringify({ ...owned, pid }));
 
-      const next = await load({ session: session("next"), flags: { "dori-role": "lane" } });
+      const next = await load({ session: session("next"), flags: { "cataly-role": "lane" } });
       await next.emit("session_start");
       expect(readPaneState(stateDir, PANE)).toMatchObject({ pid: process.pid, sessionId: "next" });
       await next.emit("goal_updated", { goal: { objective: "recover pane", status: "active" } });
@@ -447,7 +597,7 @@ describe("pane state", () => {
   );
 
   test("records the session on start, goal updates and open approvals", async () => {
-    const pi = await load({ session: session("lane-1"), flags: { "dori-role": "lane" } });
+    const pi = await load({ session: session("lane-1"), flags: { "cataly-role": "lane" } });
     await pi.emit("session_start");
     expect(readPaneState(stateDir, PANE)).toMatchObject({
       paneId: PANE,
@@ -467,12 +617,36 @@ describe("pane state", () => {
     await pi.emit("goal_updated", { type: "goal_updated", goal: { objective: "fix #12", status: "budget-limited" } });
     expect(readPaneState(stateDir, PANE)?.goal.status).toBe("blocked");
 
-    await pi.emit("tool_approval_requested", { type: "tool_approval_requested", toolCallId: "a" });
-    await pi.emit("tool_approval_requested", { type: "tool_approval_requested", toolCallId: "b" });
+    await pi.emit("tool_approval_requested", {
+      type: "tool_approval_requested",
+      sessionId: pi.session.id,
+      toolName: "bash",
+      approvalMode: "always-ask",
+      toolCallId: "a",
+    });
+    await pi.emit("tool_approval_requested", {
+      type: "tool_approval_requested",
+      sessionId: pi.session.id,
+      toolName: "bash",
+      approvalMode: "always-ask",
+      toolCallId: "b",
+    });
     expect(readPaneState(stateDir, PANE)?.approvalPending).toBe(true);
-    await pi.emit("tool_approval_resolved", { type: "tool_approval_resolved", toolCallId: "a", approved: true });
+    await pi.emit("tool_approval_resolved", {
+      type: "tool_approval_resolved",
+      sessionId: pi.session.id,
+      toolName: "bash",
+      toolCallId: "a",
+      approved: true,
+    });
     expect(readPaneState(stateDir, PANE)?.approvalPending).toBe(true);
-    await pi.emit("tool_approval_resolved", { type: "tool_approval_resolved", toolCallId: "b", approved: false });
+    await pi.emit("tool_approval_resolved", {
+      type: "tool_approval_resolved",
+      sessionId: pi.session.id,
+      toolName: "bash",
+      toolCallId: "b",
+      approved: false,
+    });
     expect(readPaneState(stateDir, PANE)).toMatchObject({ approvalPending: false, startedAt });
   });
 
@@ -516,11 +690,11 @@ describe("pane state", () => {
     });
     await pi.emit("session_start");
     expect(readPaneState(stateDir, PANE)?.goal).toEqual({ status: "none" });
-    expect(pi.active).toEqual(["read", "bash", "goal"]);
+    expect(pi.active).toEqual(["read", "bash", "cataly_report", "goal"]);
   });
 
   test("is retired to a pid-less tombstone at session shutdown, unless another process has taken the pane since", async () => {
-    const pi = await load({ session: session("lane-4"), flags: { "dori-role": "lane" } });
+    const pi = await load({ session: session("lane-4"), flags: { "cataly-role": "lane" } });
     await pi.emit("session_start");
     expect(existsSync(paneStatePath(stateDir, PANE))).toBe(true);
     await pi.emit("session_shutdown");
@@ -534,7 +708,7 @@ describe("pane state", () => {
       agentStatus: "idle",
     });
 
-    const again = await load({ session: session("lane-5"), flags: { "dori-role": "lane" } });
+    const again = await load({ session: session("lane-5"), flags: { "cataly-role": "lane" } });
     await again.emit("session_start");
     const other = readPaneState(stateDir, PANE);
     if (!other) throw new Error("pane state missing");
@@ -544,17 +718,17 @@ describe("pane state", () => {
   });
 
   test("headless sessions preserve a retired pane until an interactive plain session takes over", async () => {
-    const lead = await load({ session: session("dori-9"), flags: { "dori-role": "dori" } });
+    const lead = await load({ session: session("cataly-9"), flags: { "cataly-role": "cataly" } });
     await lead.emit("session_start");
     await lead.emit("session_shutdown");
-    expect(readPaneState(stateDir, PANE)?.sessionId).toBe("dori-9");
+    expect(readPaneState(stateDir, PANE)?.sessionId).toBe("cataly-9");
 
     for (const mode of ["print", "rpc"]) {
       const headless = await load({ session: session(`headless-${mode}`), mode });
       await headless.emit("session_start");
-      expect(readPaneState(stateDir, PANE)).toMatchObject({ pid: 0, sessionId: "dori-9" });
+      expect(readPaneState(stateDir, PANE)).toMatchObject({ pid: 0, sessionId: "cataly-9" });
       await headless.emit("session_shutdown");
-      expect(readPaneState(stateDir, PANE)).toMatchObject({ pid: 0, sessionId: "dori-9" });
+      expect(readPaneState(stateDir, PANE)).toMatchObject({ pid: 0, sessionId: "cataly-9" });
     }
 
     const plain = await load({ session: session("plain-9"), mode: "tui" });
@@ -564,18 +738,24 @@ describe("pane state", () => {
     expect(readPaneState(stateDir, PANE)).toBeNull();
   });
 
-  test("approvals in a normal session reached from a Dori session leave no pane file", async () => {
-    const pi = await load({ session: session("dori-2"), flags: { "dori-role": "dori" } });
+  test("approvals in a normal session reached from a Cataly session leave no pane file", async () => {
+    const pi = await load({ session: session("cataly-2"), flags: { "cataly-role": "cataly" } });
     await pi.emit("session_start");
     pi.session = session("plain-2");
     await pi.emit("session_switch", { type: "session_switch", reason: "resume" });
-    await pi.emit("tool_approval_requested", { type: "tool_approval_requested", toolCallId: "a" });
+    await pi.emit("tool_approval_requested", {
+      type: "tool_approval_requested",
+      sessionId: pi.session.id,
+      toolName: "bash",
+      approvalMode: "always-ask",
+      toolCallId: "a",
+    });
     expect(existsSync(paneStatePath(stateDir, PANE))).toBe(false);
   });
 
   test("hc uses its terminal id even when an inherited herdr pane id is present", async () => {
     process.env.HC_TERMINAL_ID = "t1b";
-    const pi = await load({ session: session("hc-lane"), flags: { "dori-role": "lane" } });
+    const pi = await load({ session: session("hc-lane"), flags: { "cataly-role": "lane" } });
     await pi.emit("session_start");
     expect(readPaneState(stateDir, "t1b")).toMatchObject({
       paneId: "t1b",
@@ -583,7 +763,13 @@ describe("pane state", () => {
       approvalPending: false,
     });
     expect(readPaneState(stateDir, PANE)).toBeNull();
-    await pi.emit("tool_approval_requested", { type: "tool_approval_requested", toolCallId: "hc-approval" });
+    await pi.emit("tool_approval_requested", {
+      type: "tool_approval_requested",
+      sessionId: pi.session.id,
+      toolName: "bash",
+      approvalMode: "always-ask",
+      toolCallId: "hc-approval",
+    });
     expect(readPaneState(stateDir, "t1b")?.approvalPending).toBe(true);
     await pi.emit("goal_updated", { type: "goal_updated", goal: { objective: "hc port", status: "paused" } });
     expect(readPaneState(stateDir, "t1b")?.goal.status).toBe("paused");
@@ -591,9 +777,31 @@ describe("pane state", () => {
     expect(readPaneState(stateDir, "t1b")).toMatchObject({ pid: 0, sessionId: "hc-lane" });
   });
 
+  test("a Tern block reports under TERN_PANE only when no hc or herdr id is set", async () => {
+    process.env.TERN_PANE = "5001";
+    const inherited = await load({ session: session("herdr-lane"), flags: { "dori-role": "lane" } });
+    await inherited.emit("session_start");
+    expect(readPaneState(stateDir, PANE)?.sessionId).toBe("herdr-lane");
+    expect(readPaneState(stateDir, "5001")).toBeNull();
+    await inherited.emit("session_shutdown");
+
+    delete process.env.HERDR_PANE_ID;
+    const pi = await load({ session: session("tern-lane"), flags: { "dori-role": "lane" } });
+    await pi.emit("session_start");
+    expect(readPaneState(stateDir, "5001")).toMatchObject({
+      paneId: "5001",
+      sessionId: "tern-lane",
+      approvalPending: false,
+    });
+    await pi.emit("tool_approval_requested", { type: "tool_approval_requested", toolCallId: "tern-approval" });
+    expect(readPaneState(stateDir, "5001")?.approvalPending).toBe(true);
+    await pi.emit("session_shutdown");
+    expect(readPaneState(stateDir, "5001")).toMatchObject({ pid: 0, sessionId: "tern-lane" });
+  });
+
   test("is not written without a runtime session id", async () => {
     delete process.env.HERDR_PANE_ID;
-    const pi = await load({ session: session("lane-3"), flags: { "dori-role": "lane" } });
+    const pi = await load({ session: session("lane-3"), flags: { "cataly-role": "lane" } });
     await pi.emit("session_start");
     expect(existsSync(join(stateDir, "sessions"))).toBe(false);
   });
@@ -604,8 +812,8 @@ describe.skipIf(!existsSync(REAL_ULW))("with the real omp-ulw", () => {
     useConfig(REAL_ULW);
     // This dependency requires the genuine native settings scope, not FakePI's reduced context.
     const { nativeComposition } = await import("../../test/fixtures/omp-native-host/compose.ts");
-    const dori = join(import.meta.dir, "../index.ts");
-    const normal = await nativeComposition([dori], ["base prompt"], {
+    const cataly = join(import.meta.dir, "../index.ts");
+    const normal = await nativeComposition([cataly], ["base prompt"], {
       command: { name: "ulw", args: "fix it", beforePrompt: true },
     });
     expect(normal.userMessages).toEqual([]);
@@ -615,14 +823,16 @@ describe.skipIf(!existsSync(REAL_ULW))("with the real omp-ulw", () => {
     expect(normal.second).toBeUndefined();
     expect(normal.entries).toEqual([]);
 
-    const lane = await nativeComposition([dori], ["base prompt"], {
+    const lane = await nativeComposition([cataly], ["base prompt"], {
       role: "lane",
       command: { name: "ulw", args: "fix it" },
     });
     expect(JSON.stringify(lane.first)).toContain("<omp-ulw-policy>");
     expect(
-      lane.entries.flatMap((entry) => (entry.type === "custom" && entry.customType === ROLE ? [entry.data] : [])),
-    ).toEqual(["lane"]);
+      lane.entries.filter(
+        (entry) => entry.type === "custom" && (entry.customType === ROLE || entry.customType === "omp-dori:role"),
+      ),
+    ).toEqual([expect.objectContaining(wireRole("lane"))]);
     expect(lane.userMessages).toEqual(["ulw fix it"]);
   });
 
@@ -630,12 +840,12 @@ describe.skipIf(!existsSync(REAL_ULW))("with the real omp-ulw", () => {
     "native OMP loads the standalone %s preset without losing the retained host boundary",
     async (id) => {
       const { nativeComposition, SOL_MODEL } = await import("../../test/fixtures/omp-native-host/compose.ts");
-      const dori = join(import.meta.dir, "../index.ts");
+      const cataly = join(import.meta.dir, "../index.ts");
       const host = "intro\n⁂ Role\nHOST_ROLE\n⁂ Runtime\nrt\n⁂ Tool Policy\npolicy\n⁂ Workflow\nwf";
       for (const { embedded, entries } of [
-        { embedded: true, entries: [dori] },
-        { embedded: false, entries: [dori, REAL_ULW] },
-        { embedded: false, entries: [REAL_ULW, dori] },
+        { embedded: true, entries: [cataly] },
+        { embedded: false, entries: [cataly, REAL_ULW] },
+        { embedded: false, entries: [REAL_ULW, cataly] },
       ]) {
         useConfig(embedded ? REAL_ULW : "");
         const base = [host, "Retained downstream context"];
@@ -651,8 +861,8 @@ describe.skipIf(!existsSync(REAL_ULW))("with the real omp-ulw", () => {
         expect(prompt.match(/<omp-model-preset>/g)).toHaveLength(1);
         expect(prompt).not.toContain("HOST_ROLE");
         expect(prompt).toContain("Retained downstream context");
-        // Dori's bookkeeping contract deliberately remains GPT-6.1 Sol only.
-        expect(prompt).not.toContain("<omp-dori-lane-bookkeeping>");
+        // Cataly's bookkeeping contract deliberately remains GPT-6.1 Sol only.
+        expect(prompt).not.toContain("<omp-cataly-lane-bookkeeping>");
         expect(result.first.filter((block) => block === ROLE_INVARIANTS.lane)).toHaveLength(1);
         expect(result.first).toEqual(result.afterAll[0]);
         expect(result.second).toEqual(result.first);
@@ -663,20 +873,20 @@ describe.skipIf(!existsSync(REAL_ULW))("with the real omp-ulw", () => {
   );
 
   test("native OMP composes root guidance and Sol bookkeeping without changing ULW", async () => {
-    if (!process.env["DORI_TEST_OMP_ROOT"])
+    if (!process.env["CATALY_TEST_OMP_ROOT"])
       throw new Error("the real bound ULW fixture requires the exact native OMP host fixture; see CONTRIBUTING.md");
-    const compat = process.env["DORI_TEST_COMPAT_ULW_ENTRY"];
+    const compat = process.env["CATALY_TEST_COMPAT_ULW_ENTRY"];
     if (!compat || !isAbsolute(compat))
       throw new Error("the real bound ULW fixture also requires an absolute exact explicit-override fixture entry");
     // Fixture-free runs keep the existing skips; load this isolated SDK only inside the real-dependency guard.
     const { nativeComposition, SOL_MODEL } = await import("../../test/fixtures/omp-native-host/compose.ts");
-    const dori = join(import.meta.dir, "../index.ts");
+    const cataly = join(import.meta.dir, "../index.ts");
     const host = "intro\n⁂ Role\nHOST_ROLE\n⁂ Runtime\nrt\n⁂ Tool Policy\npolicy\n⁂ Workflow\nwf";
     const parent = { kind: "main", id: "NativeParent", name: "Main", depth: 0 } as const;
     for (const { embedded, entries } of [
-      { embedded: true, entries: [dori] },
-      { embedded: false, entries: [dori, REAL_ULW] },
-      { embedded: false, entries: [REAL_ULW, dori] },
+      { embedded: true, entries: [cataly] },
+      { embedded: false, entries: [cataly, REAL_ULW] },
+      { embedded: false, entries: [REAL_ULW, cataly] },
     ]) {
       useConfig(embedded ? REAL_ULW : "");
       const base = [host, "Retained downstream context"];
@@ -690,13 +900,13 @@ describe.skipIf(!existsSync(REAL_ULW))("with the real omp-ulw", () => {
       expect(base).toEqual(original);
       const prompt = JSON.stringify(result.first);
       expect(prompt.match(/<omp-model-preset>/g)).toHaveLength(1);
-      expect(prompt.match(/<omp-dori-lane-bookkeeping>/g)).toHaveLength(1);
+      expect(prompt.match(/<omp-cataly-lane-bookkeeping>/g)).toHaveLength(1);
       expect(result.first.filter((block) => block === ROLE_INVARIANTS.lane)).toHaveLength(1);
       expect(prompt).not.toContain("HOST_ROLE");
       expect(prompt).toContain("Retained downstream context");
     }
     const exclusions = [
-      { role: "dori" as const },
+      { role: "cataly" as const },
       {},
       { role: "lane" as const, model: { ...SOL_MODEL, id: "gpt-6.1-terra", name: "GPT-6.1 Terra" } },
       {
@@ -708,13 +918,15 @@ describe.skipIf(!existsSync(REAL_ULW))("with the real omp-ulw", () => {
       useConfig("");
       const base = [host, "Retained downstream context"];
       const original = [...base];
-      const result = await nativeComposition([REAL_ULW, dori], base, { ...excluded, observeBefore: dori });
-      expect(result.beforeDori).toHaveLength(2);
+      const result = await nativeComposition([REAL_ULW, cataly], base, { ...excluded, observeBefore: cataly });
+      expect(result.beforeCataly).toHaveLength(2);
       const invariant = excluded.role && !excluded.agent ? ROLE_INVARIANTS[excluded.role] : undefined;
-      expect(result.afterAll).toEqual(result.beforeDori.map((blocks) => (invariant ? [...blocks, invariant] : blocks)));
+      expect(result.afterAll).toEqual(
+        result.beforeCataly.map((blocks) => (invariant ? [...blocks, invariant] : blocks)),
+      );
       expect(result.second).toEqual(result.first);
       if (result.first !== undefined) expect(result.first).toEqual(result.afterAll[0]);
-      expect(JSON.stringify(result.afterAll)).not.toContain("<omp-dori-lane-bookkeeping>");
+      expect(JSON.stringify(result.afterAll)).not.toContain("<omp-cataly-lane-bookkeeping>");
       expect(base).toEqual(original);
     }
     // Legacy explicit imports are compared as opaque baseline data, without assuming current preset markers.
@@ -727,7 +939,7 @@ describe.skipIf(!existsSync(REAL_ULW))("with the real omp-ulw", () => {
     expect(legacy.afterAll[1]).toEqual(legacy.afterAll[0]);
     expect(legacyBase).toEqual(original);
     useConfig(compat);
-    const embedded = await nativeComposition([dori], legacyBase, { role: "lane", agent: parent });
+    const embedded = await nativeComposition([cataly], legacyBase, { role: "lane", agent: parent });
     if (!embedded.first) throw new Error("embedded explicit override returned no native prompt");
     const legacyPrompt = legacy.afterAll[0];
     if (!legacyPrompt) throw new Error("the native runner did not observe the legacy baseline prompt");
@@ -735,13 +947,13 @@ describe.skipIf(!existsSync(REAL_ULW))("with the real omp-ulw", () => {
     expect(embedded.second).toEqual(embedded.first);
     expect(embedded.afterAll[1]).toEqual(embedded.first);
     expect(legacyBase).toEqual(original);
-    expect(JSON.stringify(legacyPrompt)).not.toContain("<omp-dori-lane-bookkeeping>");
-    expect(JSON.stringify(embedded.first).match(/<omp-dori-lane-bookkeeping>/g)).toHaveLength(1);
-    expect(embedded.first.filter((block) => block.includes("<omp-dori-lane-bookkeeping>"))).toHaveLength(1);
+    expect(JSON.stringify(legacyPrompt)).not.toContain("<omp-cataly-lane-bookkeeping>");
+    expect(JSON.stringify(embedded.first).match(/<omp-cataly-lane-bookkeeping>/g)).toHaveLength(1);
+    expect(embedded.first.filter((block) => block.includes("<omp-cataly-lane-bookkeeping>"))).toHaveLength(1);
     expect(embedded.first.filter((block) => block === ROLE_INVARIANTS.lane)).toHaveLength(1);
     expect(
       embedded.first.filter(
-        (block) => block !== ROLE_INVARIANTS.lane && !block.includes("<omp-dori-lane-bookkeeping>"),
+        (block) => block !== ROLE_INVARIANTS.lane && !block.includes("<omp-cataly-lane-bookkeeping>"),
       ),
     ).toEqual(legacyPrompt);
     for (const excluded of exclusions) {
@@ -753,14 +965,14 @@ describe.skipIf(!existsSync(REAL_ULW))("with the real omp-ulw", () => {
       expect(baseline.second).toEqual(baseline.first);
       expect(base).toEqual(before);
       useConfig(compat);
-      const result = await nativeComposition([dori], base, excluded);
+      const result = await nativeComposition([cataly], base, excluded);
       const invariant = excluded.role && !excluded.agent ? ROLE_INVARIANTS[excluded.role] : undefined;
       expect(result.first).toEqual(invariant ? result.afterAll[0] : baseline.first);
       expect(result.second).toEqual(result.first);
       for (const blocks of result.afterAll)
         expect(blocks.filter((block) => block === invariant)).toHaveLength(invariant ? 1 : 0);
       expect(result.afterAll.map((blocks) => blocks.filter((block) => block !== invariant))).toEqual(baseline.afterAll);
-      expect(JSON.stringify(result.afterAll)).not.toContain("<omp-dori-lane-bookkeeping>");
+      expect(JSON.stringify(result.afterAll)).not.toContain("<omp-cataly-lane-bookkeeping>");
       expect(base).toEqual(before);
     }
   }, 30_000);

@@ -27,7 +27,7 @@ for (const mode of ["primary", "side"]) {
     `${mode} holds an override through %s before version, checkout or install mutations`,
     (alias) => {
       const s = setup();
-      const base = join(s.home, mode === "primary" ? ".dori" : ".omp-dori");
+      const base = join(s.home, mode === "primary" ? ".cataly" : ".omp-cataly");
       const wrapper = join(base, "bin/omp");
       const tools = join(s.root, "tools");
       mkdirSync(join(base, "bin"), { recursive: true });
@@ -57,8 +57,8 @@ for (const mode of ["primary", "side"]) {
       const installed = Bun.spawnSync([script], {
         cwd: s.root,
         env: s.env({
-          DORI_INSTALL_MODE: mode,
-          DORI_OMP: selected,
+          CATALY_INSTALL_MODE: mode,
+          CATALY_OMP: selected,
           INSTALL_TEST_OMP_PROBE: join(s.root, "version.log"),
         }),
       });
@@ -76,7 +76,7 @@ for (const mode of ["primary", "side"]) {
         join(s.home, "skills"),
         join(s.home, "extensions"),
         join(s.home, "global-bin"),
-        ...[".omp-dori", "backups", "env.sh", "omp.yml"].map((name) => join(base, name)),
+        ...[".omp-cataly", "backups", "env.sh", "omp.yml"].map((name) => join(base, name)),
       ]) {
         expect(existsSync(path)).toBe(false);
       }
@@ -85,19 +85,19 @@ for (const mode of ["primary", "side"]) {
 
   posix(`${mode} infers its destination before holding a selected wrapper`, () => {
     const s = setup();
-    const base = join(s.home, mode === "primary" ? ".dori" : ".omp-dori");
+    const base = join(s.home, mode === "primary" ? ".cataly" : ".omp-cataly");
     const wrapper = join(base, "bin/omp");
     mkdirSync(join(base, "bin"), { recursive: true });
     writeFileSync(wrapper, executable, { mode: 0o755 });
-    if (mode === "side") writeFileSync(join(base, ".omp-dori"), "side\n");
-    const result = s.install({ DORI_OMP: wrapper });
+    if (mode === "side") writeFileSync(join(base, ".omp-cataly"), "side\n");
+    const result = s.install({ CATALY_OMP: wrapper });
     expect(result.code).toBe(1);
     expect(result.err).toContain(`aliases generated wrapper ${wrapper}`);
     expect(readFileSync(wrapper, "utf8")).toBe(executable);
     expect(existsSync(join(base, "config.json"))).toBe(false);
     expect(existsSync(join(s.root, "bun.log"))).toBe(false);
-    if (mode === "side") expect(readFileSync(join(base, ".omp-dori"), "utf8")).toBe("side\n");
-    else expect(existsSync(join(base, ".omp-dori"))).toBe(false);
+    if (mode === "side") expect(readFileSync(join(base, ".omp-cataly"), "utf8")).toBe("side\n");
+    else expect(existsSync(join(base, ".omp-cataly"))).toBe(false);
   });
 
   posix(`${mode} also holds the bound dependency producer when its launcher aliases a wrapper`, () => {
@@ -106,11 +106,11 @@ for (const mode of ["primary", "side"]) {
     const native = overlayFixture(s.src, join(s.root, "native-upstream"), true);
     const receipt = nativeCacheFixture(s.src, s.home, native.checkout);
     const bytes = readFileSync(receipt.omp);
-    const base = join(s.home, mode === "primary" ? ".dori" : ".omp-dori");
+    const base = join(s.home, mode === "primary" ? ".cataly" : ".omp-cataly");
     const wrapper = join(base, "bin/omp");
     mkdirSync(join(base, "bin"), { recursive: true });
     symlinkSync(receipt.omp, wrapper);
-    const result = s.install({ DORI_INSTALL_MODE: mode, DORI_OMP: "", DORI_NO_PULL: "1" });
+    const result = s.install({ CATALY_INSTALL_MODE: mode, CATALY_OMP: "", CATALY_NO_PULL: "1" });
     expect(result.code).toBe(1);
     expect(result.err).toContain(`aliases generated wrapper ${wrapper}`);
     expect(readFileSync(receipt.omp)).toEqual(bytes);
@@ -121,14 +121,14 @@ for (const mode of ["primary", "side"]) {
   });
 }
 
-posix.each(["dori", "omp-dori"])("side holds an override before replacing its %s wrapper", (name) => {
+posix.each(["cataly", "omp-cataly"])("side holds an override before replacing its %s wrapper", (name) => {
   const s = setup();
-  const base = join(s.home, ".omp-dori");
+  const base = join(s.home, ".omp-cataly");
   const selected = join(base, "bin", name);
   mkdirSync(join(base, "bin"), { recursive: true });
   writeFileSync(selected, executable, { mode: 0o755 });
   writeFileSync(join(base, "bin/omp"), "previous omp wrapper\n");
-  const result = s.install({ DORI_INSTALL_MODE: "side", DORI_OMP: selected });
+  const result = s.install({ CATALY_INSTALL_MODE: "side", CATALY_OMP: selected });
   expect(result.code).toBe(1);
   expect(result.err).toContain(`aliases generated wrapper ${selected}`);
   expect(readFileSync(selected, "utf8")).toBe(executable);
@@ -137,13 +137,13 @@ posix.each(["dori", "omp-dori"])("side holds an override before replacing its %s
   expect(existsSync(join(s.root, "bun.log"))).toBe(false);
 });
 
-posix.each(["dori", "omp-dori"])("primary preserves the independent %s executable it does not wrap", (name) => {
+posix.each(["cataly", "omp-cataly"])("primary preserves the independent %s executable it does not wrap", (name) => {
   const s = setup();
-  const base = join(s.home, ".dori");
+  const base = join(s.home, ".cataly");
   const selected = join(base, "bin", name);
   mkdirSync(join(base, "bin"), { recursive: true });
   writeFileSync(selected, executable, { mode: 0o755 });
-  const env = s.env({ DORI_INSTALL_MODE: "primary", DORI_NO_PULL: "1", DORI_OMP: selected });
+  const env = s.env({ CATALY_INSTALL_MODE: "primary", CATALY_NO_PULL: "1", CATALY_OMP: selected });
   const installed = Bun.spawnSync([script], { cwd: s.root, env });
   expect(installed.exitCode).toBe(0);
   expect(readFileSync(selected, "utf8")).toBe(executable);
@@ -155,14 +155,14 @@ posix.each(["dori", "omp-dori"])("primary preserves the independent %s executabl
 
 posix("primary holds its existing generated wrapper instead of trusting its embedded executable", () => {
   const s = setup();
-  const options = { DORI_INSTALL_MODE: "primary", DORI_NO_PULL: "1" };
+  const options = { CATALY_INSTALL_MODE: "primary", CATALY_NO_PULL: "1" };
   expect(s.install(options).code).toBe(0);
-  const wrapper = join(s.home, ".dori/bin/omp");
+  const wrapper = join(s.home, ".cataly/bin/omp");
   const bytes = readFileSync(wrapper);
   const native = join(s.root, "bin/omp");
   const nativeBytes = readFileSync(native);
   const installs = readFileSync(join(s.root, "bun.log"));
-  const result = s.install({ ...options, DORI_OMP: wrapper });
+  const result = s.install({ ...options, CATALY_OMP: wrapper });
   expect(result.code).toBe(1);
   expect(result.err).toContain(`aliases generated wrapper ${wrapper}`);
   expect(readFileSync(wrapper)).toEqual(bytes);

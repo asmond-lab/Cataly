@@ -1,5 +1,6 @@
 import { chmodSync, copyFileSync, lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { legacyDeploymentSource } from "./deployment-legacy-brand.ts";
 import { command, DeploymentHeld } from "./deployment-process.ts";
 import type { DeploymentConfig, DeploymentInput, DeploymentRecord } from "./deployment-types.ts";
 import { assertSourceAdmission, digest, sameManifest, sourceManifest } from "./source.ts";
@@ -65,12 +66,12 @@ export async function prepareRelease(
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_TERMINAL_PROMPT: "0",
     BUN_INSTALL_CACHE_DIR: join(record.directory, "bun-cache"),
-    DORI_TELEMETRY: "0",
+    CATALY_TELEMETRY: "0",
     DO_NOT_TRACK: "1",
   };
   const git = (argv: readonly string[], cwd = record.releasePath): Promise<string> =>
     command(
-      ["/bin/sh", "-c", 'umask 077; exec "$@"', "dori-managed-git", ...SAFE_GIT, ...argv],
+      ["/bin/sh", "-c", 'umask 077; exec "$@"', "cataly-managed-git", ...SAFE_GIT, ...argv],
       cwd,
       env,
       300_000,
@@ -131,7 +132,8 @@ export async function prepareRelease(
     (numbers[0] === 1 && numbers[1] === 4 && (numbers[2] ?? 0) < 4)
   )
     throw new DeploymentHeld("private Bun 1.4.4 or newer is required");
-  for (const relative of ["", "skills/dori-mode/scripts", "extension"]) {
+  const skill = legacyDeploymentSource(record.releasePath, record.sourceHash) ? "dori-mode" : "cataly-mode";
+  for (const relative of ["", `skills/${skill}/scripts`, "extension"]) {
     for (const name of ["package.json", "bun.lock"]) {
       if (!input.publicManifest.files.some((file) => file.path === (relative ? `${relative}/${name}` : name)))
         throw new DeploymentHeld("published release lacks a frozen dependency manifest");
@@ -141,7 +143,7 @@ export async function prepareRelease(
         "/bin/sh",
         "-c",
         'umask 077; exec "$@"',
-        "dori-managed-install",
+        "cataly-managed-install",
         config.bun,
         "install",
         "--frozen-lockfile",

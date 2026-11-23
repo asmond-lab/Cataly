@@ -11,7 +11,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 afterEach(() => mock.restore());
 
 test("three crashed reclaimers leave actual claims that a fourth taker recovers with bounded names", async () => {
-  const dir = fs.mkdtempSync(join(tmpdir(), "dori-inbox-crash-"));
+  const dir = fs.mkdtempSync(join(tmpdir(), "cataly-inbox-crash-"));
   const path = join(dir, "w1_p2.jsonl.lock");
   const dead = Bun.spawn(["true"]);
   await dead.exited;
@@ -24,7 +24,7 @@ test("three crashed reclaimers leave actual claims that a fourth taker recovers 
   try {
     for (let i = 1; i <= 3; i++) {
       const reclaimer = Bun.spawn([process.execPath, "test", fixture], {
-        env: { ...process.env, DORI_TEST_INBOX_RECLAIMER: JSON.stringify({ path, now: i }) },
+        env: { ...process.env, CATALY_TEST_INBOX_RECLAIMER: JSON.stringify({ path, now: i }) },
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
@@ -92,7 +92,7 @@ test("three crashed reclaimers leave actual claims that a fourth taker recovers 
 }, 15_000);
 
 test("physical directory aliases share one stale-claim namespace", async () => {
-  const dir = fs.mkdtempSync(join(tmpdir(), "dori-inbox-alias-"));
+  const dir = fs.mkdtempSync(join(tmpdir(), "cataly-inbox-alias-"));
   const physical = join(dir, "physical");
   fs.mkdirSync(physical);
   const alias = join(dir, "alias");
@@ -141,7 +141,7 @@ test("physical directory aliases share one stale-claim namespace", async () => {
 });
 
 test("a prior release cannot remove a replacement acquired in the same timestamp", () => {
-  const dir = fs.mkdtempSync(join(tmpdir(), "dori-inbox-same-time-"));
+  const dir = fs.mkdtempSync(join(tmpdir(), "cataly-inbox-same-time-"));
   const path = join(dir, "w1_p2.jsonl.lock");
   let first: (() => void) | undefined;
   let second: (() => void) | undefined;

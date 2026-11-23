@@ -1,23 +1,25 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
+import { isCatalyEntry, SESSION_WIRE } from "../skills/cataly-mode/scripts/src/session-compat.ts";
 import { readMonitorSet } from "../src/update/deployment-monitors.ts";
 import type { IntakeSpec, MonitorSpec } from "../src/update/deployment-types.ts";
-import type { DoriApi } from "./index.ts";
+import type { CatalyApi } from "./index.ts";
 
 type Entry = { type: string; customType?: string; data?: unknown };
-const BOOTSTRAP_ENTRY = "omp-dori:monitor-bootstrap";
-const INTAKE_ENTRY = "omp-dori:intake";
-export const MONITOR_BOOTSTRAP_FLAG = "dori-monitor-bootstrap";
+const BOOTSTRAP_ENTRY = "omp-cataly:monitor-bootstrap";
+const INTAKE_ENTRY = "omp-cataly:intake";
+export const MONITOR_BOOTSTRAP_FLAG = "cataly-monitor-bootstrap";
+export const LEGACY_MONITOR_BOOTSTRAP_FLAG = "dori-monitor-bootstrap";
 
 /** Explicit, session-bound, private operator file. This is never inferred from an old model transcript. */
 export function bootstrapMonitors(
-  pi: DoriApi,
+  pi: CatalyApi,
   branch: readonly Entry[],
   sessionId: string,
   previous: ReadonlyMap<string, MonitorSpec>,
 ): boolean {
-  const path = pi.getFlag(MONITOR_BOOTSTRAP_FLAG);
+  const path = pi.getFlag(MONITOR_BOOTSTRAP_FLAG) ?? pi.getFlag(LEGACY_MONITOR_BOOTSTRAP_FLAG);
   if (path === undefined) return false;
   if (typeof path !== "string" || !isAbsolute(path))
     throw new Error("monitor bootstrap needs an absolute private file");
@@ -27,7 +29,7 @@ export function bootstrapMonitors(
     branch.some(
       (entry) =>
         entry.type === "custom" &&
-        entry.customType === BOOTSTRAP_ENTRY &&
+        isCatalyEntry(entry.customType, BOOTSTRAP_ENTRY) &&
         typeof entry.data === "object" &&
         entry.data !== null &&
         "hash" in entry.data &&
@@ -35,10 +37,10 @@ export function bootstrapMonitors(
     )
   )
     return false;
-  for (const name of previous.keys()) pi.appendEntry("omp-dori:monitor", { op: "stop", name });
-  for (const spec of bootstrap.monitors) pi.appendEntry("omp-dori:monitor", { op: "start", ...spec });
-  pi.appendEntry(INTAKE_ENTRY, bootstrap.intake);
-  pi.appendEntry(BOOTSTRAP_ENTRY, { version: 1, sessionId, hash });
+  for (const name of previous.keys()) pi.appendEntry(SESSION_WIRE.monitor, { op: "stop", name });
+  for (const spec of bootstrap.monitors) pi.appendEntry(SESSION_WIRE.monitor, { op: "start", ...spec });
+  pi.appendEntry(SESSION_WIRE.intake, bootstrap.intake);
+  pi.appendEntry(SESSION_WIRE.monitorBootstrap, { version: 1, sessionId, hash });
   return true;
 }
 
@@ -47,7 +49,7 @@ export function recordedIntake(branch: readonly Entry[]): IntakeSpec | undefined
   for (const entry of branch) {
     if (
       entry.type !== "custom" ||
-      entry.customType !== INTAKE_ENTRY ||
+      !isCatalyEntry(entry.customType, INTAKE_ENTRY) ||
       typeof entry.data !== "object" ||
       entry.data === null
     )

@@ -63,7 +63,7 @@ posix(
       }),
     ]);
     expect(later.removed[0]!.bytes).toBeGreaterThan(0);
-    expect(readdirSync(join(c.home, ".cache/omp-dori")).filter((name) => name.includes(free.identity))).toEqual([]);
+    expect(readdirSync(join(c.home, ".cache/omp-cataly")).filter((name) => name.includes(free.identity))).toEqual([]);
     expect(existsSync(used.omp)).toBe(true);
   },
 );
@@ -192,8 +192,8 @@ posix("a running Dori writer for this cache or an older writer's preparation kee
   const writer = `bun /old/scripts/source-dependencies.ts assert-native /old ${c.home}`;
   const other = `bun /old/scripts/source-dependencies.ts native /old ${c.refs}`;
   const held = c.prune({ table: () => `4242 ${uid} ${writer}\n4343 ${uid} ${other}\n` });
-  expect(keptFor(held, x.directory)).toEqual([`Dori cache writer process 4242 (${writer})`]);
-  const stage = join(c.home, ".cache/omp-dori/native-stage-abc123");
+  expect(keptFor(held, x.directory)).toEqual([`Cataly cache writer process 4242 (${writer})`]);
+  const stage = join(c.home, ".cache/omp-cataly/native-stage-abc123");
   mkdirSync(stage);
   expect(keptFor(c.prune(), x.directory)).toEqual([`native preparation of an older writer ${stage}`]);
   expect(existsSync(x.omp)).toBe(true);

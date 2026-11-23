@@ -2,21 +2,21 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { prompt } from "../src/harness.ts";
 
-const skill = readFileSync(new URL("../skills/dori-mode/SKILL.md", import.meta.url), "utf8");
-const sessions = readFileSync(new URL("../skills/dori-mode/references/sessions.md", import.meta.url), "utf8");
+const skill = readFileSync(new URL("../skills/cataly-mode/SKILL.md", import.meta.url), "utf8");
+const sessions = readFileSync(new URL("../skills/cataly-mode/references/sessions.md", import.meta.url), "utf8");
 let promptOverride: string | undefined;
 beforeEach(() => {
-  promptOverride = process.env["DORI_PROMPTS_DIR"];
-  delete process.env["DORI_PROMPTS_DIR"];
+  promptOverride = process.env["CATALY_PROMPTS_DIR"];
+  delete process.env["CATALY_PROMPTS_DIR"];
 });
 afterEach(() => {
-  if (promptOverride === undefined) delete process.env["DORI_PROMPTS_DIR"];
-  else process.env["DORI_PROMPTS_DIR"] = promptOverride;
+  if (promptOverride === undefined) delete process.env["CATALY_PROMPTS_DIR"];
+  else process.env["CATALY_PROMPTS_DIR"] = promptOverride;
 });
 
 for (const [name, render] of Object.entries({
-  "lane footer": () => prompt("lane-footer.md", { key: "goal-owner", dori: "dori" }),
-  "Dori skill": () => skill,
+  "lane footer": () => prompt("lane-footer.md", { key: "goal-owner", cataly: "cataly" }),
+  "Cataly skill": () => skill,
 })) {
   test(`${name} reuses native or durable workflow ownership`, () => {
     const text = render();
@@ -68,19 +68,19 @@ test("hand-back guidance distinguishes reopening a session from reactivating a p
     "While main owns the work, an explicit hand-back must go through the lead conversation or main session",
   );
   expect(skill).toContain("A reply in the original work thread or a monitor recovery is not a hand-back");
-  expect(sessions).toContain("When work is assigned back to a closed lane, use `dori reopen <key> [--note TEXT]`");
+  expect(sessions).toContain("When work is assigned back to a closed lane, use `cataly reopen <key> [--note TEXT]`");
   expect(sessions).toContain("If the native goal is paused, it confirms `/goal resume` through extension state");
   expect(sessions).toContain("The session can also reopen with no goal or with a completed or dropped goal");
   for (const doc of [sessions, skill]) {
     expect(doc.toLowerCase()).toContain("a successful reopen alone does not prove a native goal is active");
   }
   expect(sessions).toContain(
-    "This is process recovery, not `dori reopen` for a closed lane. If recovery restores a paused goal, report the held work and wait for the user's explicit resume instruction.",
+    "This is process recovery, not `cataly reopen` for a closed lane. If recovery restores a paused goal, report the held work and wait for the user's explicit resume instruction.",
   );
 });
 
 test("the lane stop condition does not grant authority for external effects", () => {
-  const footer = prompt("lane-footer.md", { key: "goal-owner", dori: "dori" });
+  const footer = prompt("lane-footer.md", { key: "goal-owner", cataly: "cataly" });
   expect(footer).toContain(
     "For authorized, unpaused work, continue until the assigned deliverable meets its observable stop condition.",
   );

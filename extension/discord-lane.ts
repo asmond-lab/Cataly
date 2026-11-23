@@ -1,33 +1,46 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-import { withDeliveryLock } from "../skills/dori-mode/scripts/src/delivery-lock.ts";
-import { isDiscordWakePending } from "../skills/dori-mode/scripts/src/discord-lane-wake-pending.ts";
-import { readPaneState } from "../skills/dori-mode/scripts/src/lane-state.ts";
+import { withDeliveryLock } from "../skills/cataly-mode/scripts/src/delivery-lock.ts";
 import {
-  routeDiscordAskReply,
-  routeUnreferencedDiscordAskText,
-} from "../skills/dori-mode/scripts/src/messenger/discord-ask-mailbox.ts";
+  headlessDiscordLaneAvailable,
+  publishHeadlessDiscordReceiver,
+} from "../skills/cataly-mode/scripts/src/discord-lane-headless-state.ts";
+import { isDiscordWakePending } from "../skills/cataly-mode/scripts/src/discord-lane-wake-pending.ts";
+import { type GoalStatus, readPaneState } from "../skills/cataly-mode/scripts/src/lane-state.ts";
+import { routeDiscordAsk } from "../skills/cataly-mode/scripts/src/messenger/discord-ask-routing.ts";
 import {
   type DiscordAskReceiverPublication,
   discordAskReceivers,
   openDiscordAskReceiver,
-} from "../skills/dori-mode/scripts/src/messenger/discord-ask-receiver.ts";
-import { discordInbound, markDiscordInboundSeen } from "../skills/dori-mode/scripts/src/messenger/discord-inbound.ts";
-import { discordInboundQueue } from "../skills/dori-mode/scripts/src/messenger/discord-inbound-queue.ts";
+} from "../skills/cataly-mode/scripts/src/messenger/discord-ask-receiver.ts";
+import { discordInbound, markDiscordInboundSeen } from "../skills/cataly-mode/scripts/src/messenger/discord-inbound.ts";
+import { discordInboundQueue } from "../skills/cataly-mode/scripts/src/messenger/discord-inbound-queue.ts";
+import { isDiscordSnowflake } from "../skills/cataly-mode/scripts/src/messenger/discord-inbound-state.ts";
 import {
   type DiscordLaneInbox,
-  discordLaneTarget,
   openDiscordLaneInbox,
+} from "../skills/cataly-mode/scripts/src/messenger/discord-lane-inbox.ts";
+import {
+  discordLaneTarget,
   uniqueDiscordLane,
-} from "../skills/dori-mode/scripts/src/messenger/discord-lane-inbox.ts";
-import { Discord } from "../skills/dori-mode/scripts/src/messenger/discord.ts";
-import { fetchHttp } from "../skills/dori-mode/scripts/src/messenger/http.ts";
-import { Registry, sameLaneGeneration, sessionOf, statusOf } from "../skills/dori-mode/scripts/src/registry.ts";
-import { realClock } from "../skills/dori-mode/scripts/src/run.ts";
+} from "../skills/cataly-mode/scripts/src/messenger/discord-lane-routing.ts";
+import { Discord, discordApiBase } from "../skills/cataly-mode/scripts/src/messenger/discord.ts";
+import { fetchHttp } from "../skills/cataly-mode/scripts/src/messenger/http.ts";
+import {
+  type Lane,
+  Registry,
+  sameLaneGeneration,
+  sessionOf,
+  statusOf,
+} from "../skills/cataly-mode/scripts/src/registry.ts";
+import { realClock } from "../skills/cataly-mode/scripts/src/run.ts";
+import { isMonitorMessage, SESSION_WIRE } from "../skills/cataly-mode/scripts/src/session-compat.ts";
+import { selfSession } from "../src/runtime/registry.ts";
+import type { SessionRef } from "../src/runtime/types.ts";
 import { discordAskToken, routeFor } from "./discord-ask.ts";
 import { type AskLane, laneChannel } from "./discord-ask-auto.ts";
 import { DiscordLaneReplies, type NativeDelivery, nativeDiscordReceipt } from "./discord-lane-reply.ts";
-import type { DoriApi, DoriContext } from "./index.ts";
+import type { CatalyApi, CatalyContext } from "./index.ts";
 
 const POLL_MS = 3_000;
 const PREFIX = "[discord] ";
@@ -35,13 +48,14 @@ const HELD = "Discord lane input was held; it will not be retried automatically.
 
 type LaneAdmission = {
   readonly idle: () => boolean;
+  readonly approvalFree: () => boolean;
   readonly goalAllows: (optedIn: boolean, claimed?: boolean) => boolean;
   readonly consumePause: () => void;
 };
 
 type NativeAttempt = {
   readonly input: NativeDelivery;
-  readonly check: (ctx: DoriContext) => Promise<boolean>;
+  readonly check: (ctx: CatalyContext) => Promise<boolean>;
   readonly hold: () => void;
   prepared: boolean;
 };
@@ -49,14 +63,21 @@ type NativeAttempt = {
 /** Lane intake belongs to the foreground OMP session rather than its terminal or the lead's model. */
 export class DiscordLane {
   private stopLoop?: () => void;
+  retire?: (goal: GoalStatus) => void;
   agentStart?: (session: string) => void;
   agentEnd?: (session: string, event: unknown) => void;
-  beforeAgentStart?: (event: unknown, ctx: DoriContext) => Promise<void>;
-  beforeProviderRequest?: (ctx: DoriContext) => void;
+  beforeAgentStart?: (event: unknown, ctx: CatalyContext) => Promise<void>;
+  beforeProviderRequest?: (ctx: CatalyContext) => void;
+
+  constructor(
+    private readonly readyForHeadless = headlessDiscordLaneAvailable,
+    private readonly apiOverride = process.env["CATALY_DISCORD_API_BASE"] ?? "",
+  ) {}
 
   stop(): void {
     this.stopLoop?.();
     this.stopLoop = undefined;
+    this.retire = undefined;
     this.agentStart = undefined;
     this.agentEnd = undefined;
     this.beforeAgentStart = undefined;
@@ -64,21 +85,38 @@ export class DiscordLane {
   }
 
   start(
-    pi: DoriApi,
+    pi: CatalyApi,
     root: string,
-    ctx: DoriContext,
+    ctx: CatalyContext,
     binding: AskLane | undefined,
     dedicated: boolean,
     admission: LaneAdmission,
+    headless?: SessionRef,
+    env = process.env,
   ): void {
     this.stop();
-    if (ctx.mode !== "tui") return;
+    if (!headless && ctx.mode !== "tui") return;
     const paneId = process.env.HC_TERMINAL_ID || process.env.HERDR_PANE_ID;
-    if (!paneId) return;
+    const ref: SessionRef | undefined =
+      headless ?? (paneId ? { id: paneId, runtime: process.env.HC_TERMINAL_ID ? "hc" : "herdr" } : undefined);
+    if (!ref) return;
     const session = ctx.sessionManager.getSessionId();
-    const wakeSession = process.env.DORI_DISCORD_WAKE_SESSION;
-    const wakeModel = process.env.DORI_DISCORD_WAKE_MODEL;
-    const matchesModel = (model: DoriContext["model"]) =>
+    const file = ctx.sessionManager.getSessionFile();
+    const wakeSession = env.CATALY_DISCORD_WAKE_SESSION || undefined;
+    const wakeModel = env.CATALY_DISCORD_WAKE_MODEL || undefined;
+    let cwd = ctx.cwd;
+    // A broker-owned lane may drain the shared local inbox; it does not take over a Discord connection.
+    if (headless) {
+      if (dedicated || !file) return;
+      try {
+        cwd = realpathSync(cwd);
+        if (!publishHeadlessDiscordReceiver(root, ref, session, file, cwd, undefined, wakeModel)) return;
+      } catch {
+        ctx.ui.notify("Discord native lane receiver identity could not be recorded.", "warning");
+        return;
+      }
+    }
+    const matchesModel = (model: CatalyContext["model"]) =>
       wakeModel === undefined
         ? wakeSession === undefined
         : model?.provider !== undefined && `${model.provider}/${model.id}` === wakeModel;
@@ -87,9 +125,19 @@ export class DiscordLane {
     const { signal } = lifecycle;
     const ownsPane = () => {
       if (signal.aborted || ctx.sessionManager.getSessionId() !== session) return false;
-      const state = readPaneState(root, paneId);
+      if (headless) return ctx.sessionManager.getSessionFile() === file && selfSession(process.env)?.id === ref.id;
+      const state = readPaneState(root, ref.id);
       return state?.role === "lane" && state.pid === process.pid && state.sessionId === session;
     };
+    if (headless && file)
+      this.retire = (goal) => {
+        if (!ownsPane() || !admission.idle() || ctx.isIdle?.() === false || ctx.hasPendingMessages?.()) return;
+        try {
+          publishHeadlessDiscordReceiver(root, ref, session, file, cwd, goal, wakeModel);
+        } catch {
+          // An unreadable retirement record must never authorize wake, or prevent the native owner from exiting.
+        }
+      };
     let timer: ReturnType<typeof setTimeout> | undefined;
     let inbox: DiscordLaneInbox | undefined;
     let rootInbox: DiscordLaneInbox | undefined;
@@ -123,7 +171,7 @@ export class DiscordLane {
       ctx.sessionManager
         .getBranch()
         .some(
-          (entry) => entry.type === "custom_message" && entry.customType === "dori-monitor" && entry.content === text,
+          (entry) => entry.type === "custom_message" && isMonitorMessage(entry.customType) && entry.content === text,
         );
 
     const replies = new DiscordLaneReplies(() => (ownsPane() ? ctx.sessionManager.getBranch() : []));
@@ -157,11 +205,27 @@ export class DiscordLane {
     };
     this.beforeProviderRequest = (liveCtx) => {
       const attempt = native;
-      if (!attempt || liveCtx.sessionManager.getSessionId() !== session || matchesModel(liveCtx.model)) return;
+      if (!attempt || liveCtx.sessionManager.getSessionId() !== session) return;
+      if (admission.approvalFree() && matchesModel(liveCtx.model)) return;
       // Request middleware receives the actual provider model, unlike the launch or UI selection.
       if (!attempt.prepared && !nativeDiscordReceipt(liveCtx.sessionManager.getBranch(), attempt.input)) return;
       liveCtx.abort();
       attempt.hold();
+    };
+
+    const sameOwner = (lane: Lane) => {
+      const target = sessionOf(lane);
+      return target?.id === ref.id && target.runtime === ref.runtime;
+    };
+    const registeredHere = (lane: Lane) =>
+      sameOwner(lane) &&
+      (lane.session === session || (!headless && wakeSession === undefined && lane.session === undefined)) &&
+      (!headless || (lane.sessionFile === file && lane.cwd !== undefined && realpathSync(lane.cwd) === cwd));
+    const eligible = (lane: Lane) => {
+      const status = statusOf(lane);
+      return headless
+        ? !lane.hold && (status === "working" || status === "not-done")
+        : status !== "paused" && status !== "closed";
     };
 
     const drain = async (source: DiscordLaneInbox, target: { channel: string; key: string; allowReply?: boolean }) => {
@@ -171,10 +235,18 @@ export class DiscordLane {
         key,
         async () => {
           const current = await delivery.registry.read(key);
-          if (!current || current.nativeCloseIntent || isDiscordWakePending(current.lifecycleEpoch)) return;
-          const status = statusOf(current);
-          if (status === "closed" || status === "paused") return;
-          if (!dedicated) {
+          if (
+            !current ||
+            !registeredHere(current) ||
+            current.nativeCloseIntent ||
+            isDiscordWakePending(current.lifecycleEpoch)
+          )
+            return;
+          if (!eligible(current)) return;
+          if (headless) {
+            const route = await uniqueDiscordLane(root, (lane) => lane.thread === `discord:${channel}`);
+            if (!route || route.key !== key || !registeredHere(route) || !sameLaneGeneration(current, route)) return;
+          } else if (!dedicated) {
             const route = await discordLaneTarget(root, channel);
             if (route?.session !== session || route.key !== key) return;
           }
@@ -190,6 +262,9 @@ export class DiscordLane {
             return;
           }
           if (confirm || !admission.idle() || ctx.isIdle?.() === false || !ownsPane()) return;
+          // The broker sees RPC UI requests that may not be represented by the tool approval event stream.
+          if (headless && (!(await this.readyForHeadless(root, current, true)) || !admission.idle() || !ownsPane()))
+            return;
           if (
             (wakeSession !== undefined && (wakeSession !== session || current.session !== session)) ||
             ((optedIn || wakeSession !== undefined) && !matchesModel(ctx.model))
@@ -201,9 +276,9 @@ export class DiscordLane {
             return;
           }
           modelWarned = false;
-          if (!optedIn) {
+          if (!optedIn && !headless) {
             pi.sendMessage(
-              { customType: "dori-monitor", content: text, display: true },
+              { customType: SESSION_WIRE.monitorMessage, content: text, display: true },
               { triggerTurn: true, deliverAs: "aside" },
             );
             confirm = () => {
@@ -213,30 +288,35 @@ export class DiscordLane {
             };
             return;
           }
-          if (!allowOptedIn || ctx.hasPendingMessages?.()) return;
+          if ((optedIn ? !allowOptedIn : !allowLegacy) || ctx.hasPendingMessages?.()) return;
           const input = replies.armNative(text, (parts) =>
-            source.enqueueReply(session, channel, { id: message.id, parts }),
+            optedIn ? source.enqueueReply(session, channel, { id: message.id, parts }) : undefined,
           );
           if (!input) return;
-          if (!source.claimInput(session, channel, message.id)) {
+          if (!source.claimInput(session, channel, message.id, !optedIn)) {
             replies.discardNative(input);
             return;
           }
-          admission.consumePause();
+          if (optedIn) admission.consumePause();
           let held = false;
           const attempt: NativeAttempt = {
             input,
             prepared: false,
             check: async (liveCtx) => {
               const lane = await delivery.registry.read(key);
+              const route =
+                !dedicated && (await uniqueDiscordLane(root, (entry) => entry.thread === `discord:${channel}`));
               return (
                 lane?.key === key &&
-                sessionOf(lane)?.id === paneId &&
-                (lane.session === session || (wakeSession === undefined && lane.session === undefined)) &&
+                registeredHere(lane) &&
+                (dedicated || (!!route && route.key === key && sameLaneGeneration(lane, route))) &&
+                eligible(lane) &&
                 sameLaneGeneration(current, lane) &&
                 !lane.nativeCloseIntent &&
+                !isDiscordWakePending(lane.lifecycleEpoch) &&
                 ownsPane() &&
-                admission.goalAllows(true, true) &&
+                admission.approvalFree() &&
+                admission.goalAllows(optedIn, true) &&
                 matchesModel(liveCtx.model)
               );
             },
@@ -260,7 +340,7 @@ export class DiscordLane {
             }
             if (held) return;
             confirm = () => {
-              if (nativeDiscordReceipt(ctx.sessionManager.getBranch(), input) && ownsPane()) {
+              if (attempt.prepared && nativeDiscordReceipt(ctx.sessionManager.getBranch(), input) && ownsPane()) {
                 source.acknowledge(session, channel, message.id);
                 replies.acceptNative(input);
                 return true;
@@ -309,11 +389,11 @@ export class DiscordLane {
         }
         if (explicit && explicit.receiverStateDir !== root) {
           const stateDir = explicit.receiverStateDir;
-          const lane = await uniqueDiscordLane(root, (entry) => entry.sessionRef?.id === paneId, true);
+          const lane = await uniqueDiscordLane(root, sameOwner, true);
           if (!lane || (lane.session !== undefined && lane.session !== session) || !ownsPane()) return;
           const token = discordAskToken(explicit);
           if (
-            discordAskReceivers(root, token).some(
+            discordAskReceivers(root, token, this.apiOverride).some(
               (item) => item.owner === explicit.owner && item.watched.includes(explicit.channel),
             )
           )
@@ -333,6 +413,7 @@ export class DiscordLane {
                 }),
               realClock,
               token,
+              discordApiBase(this.apiOverride),
             );
             const scopedIntake = await discordInbound(discord, queue.storeFor, {
               ownerId: explicit.owner,
@@ -347,7 +428,7 @@ export class DiscordLane {
               explicit.owner,
               [explicit.channel],
               scopedIntake.channels,
-              15_000,
+              { progressWindowMs: 15_000, apiOverride: this.apiOverride },
             );
           }
           if (!ownsPane()) return;
@@ -356,10 +437,7 @@ export class DiscordLane {
           const { receiver: scopedIntake, discord } = intake;
           await scopedIntake.poll(async (message) => {
             signal.throwIfAborted();
-            if (
-              routeDiscordAskReply(stateDir, message, explicit.owner) ||
-              (message.unreferencedText && routeUnreferencedDiscordAskText(stateDir, message, explicit.owner))
-            ) {
+            if (await routeDiscordAsk(stateDir, message, explicit.owner)) {
               await markDiscordInboundSeen(discord, message);
               return;
             }
@@ -377,6 +455,16 @@ export class DiscordLane {
           receiver?.refresh();
           await drain(inbox, { channel: explicit.channel, key: lane.key });
         } else if (existsSync(join(root, "discord-lanes", "inbox.sqlite"))) {
+          if (headless) {
+            const lane = await uniqueDiscordLane(root, sameOwner);
+            if (lane && registeredHere(lane) && lane.thread.startsWith("discord:") && ownsPane()) {
+              const channel = lane.thread.slice("discord:".length);
+              if (!isDiscordSnowflake(channel)) return;
+              rootInbox ??= openDiscordLaneInbox(root);
+              await drain(rootInbox, { channel, key: lane.key, allowReply: true });
+            }
+            return;
+          }
           const channel = await laneChannel(root, session, binding);
           const target = channel ? await discordLaneTarget(root, channel) : undefined;
           if (target?.session === session && channel && ownsPane()) {

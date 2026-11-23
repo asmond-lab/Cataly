@@ -18,25 +18,27 @@ posix("isolated wrappers quote the loaded release and clear foreign selection in
   const f = fixture(true);
   const paths = consumerPaths(
     f.paths.home,
-    join(f.paths.home, "Library/Application Support/omp-dori 'quote';$(touch injected)"),
+    join(f.paths.home, "Library/Application Support/omp-cataly 'quote';$(touch injected)"),
   );
   initialize(paths);
   const bound = boundRelease({ ...f, paths }, "wrapper");
   // Carry the shipped harness and resolver unchanged so their default source root is the physical release.
-  for (const path of ["src", "skills/dori-mode/scripts/src", "package.json"])
+  for (const path of ["src", "skills/cataly-mode/scripts/src", "package.json", "release-headless.json"])
     cpSync(resolve(import.meta.dir, "..", path), join(bound.source, path), { recursive: true });
   const probe = `import { agentCommand, defaultDeps } from "./harness.ts";
+import { bindCliEnvironment } from "./cli-environment.ts";
+bindCliEnvironment();
 const deps = defaultDeps();
-const roles = Object.fromEntries(["dori", "lane"].map(role => {
+const roles = Object.fromEntries(["cataly", "lane"].map(role => {
   const command = agentCommand(deps, role);
   const parsed = Bun.spawnSync(["/bin/sh", "-c", "set -- " + command + "; printf '%s\\\\0' \\"$@\\""]);
   return [role, { code: parsed.exitCode, argv: parsed.stdout.toString().split("\\0").slice(0, -1) }];
 }));
 console.log(JSON.stringify({
-  home: process.env.DORI_HOME, config: process.env.DORI_CONFIG,
-  agent: process.env.DORI_AGENT_CMD ?? null, argv: process.env.DORI_AGENT_ARGV ?? null,
-  state: process.env.DORI_STATE_DIR ?? null, runtime: process.env.DORI_RUNTIME ?? null,
-  ulw: process.env.DORI_OMP_ULW_PATH ?? null, startup: process.env.DORI_MANAGED_STARTUP ?? null,
+  home: process.env.CATALY_HOME, config: process.env.CATALY_CONFIG,
+  agent: process.env.CATALY_AGENT_CMD ?? null, argv: process.env.CATALY_AGENT_ARGV ?? null,
+  state: process.env.CATALY_STATE_DIR ?? null, runtime: process.env.CATALY_RUNTIME ?? null,
+  ulw: process.env.CATALY_OMP_ULW_PATH ?? null, startup: process.env.CATALY_MANAGED_STARTUP ?? null,
   command: deps.agentCmd, roles,
 }));
 `;
@@ -54,20 +56,20 @@ console.log(JSON.stringify({
   const release = releasePath(paths, installed.current);
   const cwd = join(f.root, "workspace");
   mkdirSync(cwd);
-  const result = Bun.spawnSync(["/bin/bash", join(paths.dori, "bin/dori-harness")], {
+  const result = Bun.spawnSync(["/bin/bash", join(paths.dori, "bin/cataly-harness")], {
     cwd,
     env: {
       HOME: paths.home,
       PATH: process.env["PATH"],
-      DORI_HOME: f.paths.dori,
-      DORI_CONFIG: f.paths.config,
-      DORI_AGENT_CMD: "touch inherited-command-ran",
-      DORI_AGENT_ARGV: '["/foreign/omp"]',
-      DORI_STATE_DIR: "foreign-state",
-      DORI_RUNTIME: "foreign-runtime",
-      DORI_OMP_ULW_PATH: "/foreign/ulw/index.ts",
-      DORI_MANAGED_STARTUP: "1",
-      DORI_TELEMETRY: "0",
+      CATALY_HOME: f.paths.dori,
+      CATALY_CONFIG: f.paths.config,
+      CATALY_AGENT_CMD: "touch inherited-command-ran",
+      CATALY_AGENT_ARGV: '["/foreign/omp"]',
+      CATALY_STATE_DIR: "foreign-state",
+      CATALY_RUNTIME: "headless",
+      CATALY_OMP_ULW_PATH: "/foreign/ulw/index.ts",
+      CATALY_MANAGED_STARTUP: "1",
+      CATALY_TELEMETRY: "0",
     },
   });
   expect(result.exitCode, result.stderr.toString()).toBe(0);
@@ -88,14 +90,38 @@ console.log(JSON.stringify({
     agent: join(paths.dori, "bin/omp"),
     argv: null,
     state: null,
-    runtime: null,
+    runtime: "headless",
     ulw: null,
     startup: null,
     command: expected.map(shq).join(" "),
   });
-  for (const role of ["dori", "lane"]) {
-    expect(observed.roles[role]).toEqual({ code: 0, argv: [...expected, "--dori-role", role] });
+  for (const role of ["cataly", "lane"]) {
+    expect(observed.roles[role]).toEqual({ code: 0, argv: [...expected, "--cataly-role", role] });
   }
+  // A historical wrapper publishes only DORI_* during rollback, before the retained CLI link changes.
+  const historical = Bun.spawnSync([process.execPath, join(release, "src/cli.ts")], {
+    cwd,
+    env: {
+      HOME: paths.home,
+      PATH: process.env["PATH"],
+      DORI_HOME: paths.dori,
+      DORI_CONFIG: paths.config,
+      DORI_AGENT_CMD: join(paths.dori, "bin/omp"),
+      CATALY_HOME: f.paths.dori,
+      CATALY_CONFIG: f.paths.config,
+      CATALY_STATE_DIR: "foreign-state",
+      CATALY_AGENT_ARGV: '["/foreign/omp"]',
+      CATALY_TELEMETRY: "0",
+    },
+  });
+  expect(historical.exitCode, historical.stderr.toString()).toBe(0);
+  expect(JSON.parse(historical.stdout.toString())).toMatchObject({
+    home: paths.dori,
+    config: paths.config,
+    state: null,
+    argv: null,
+    command: expected.map(shq).join(" "),
+  });
   expect(existsSync(join(cwd, "injected"))).toBe(false);
   expect(existsSync(join(cwd, "inherited-command-ran"))).toBe(false);
 });

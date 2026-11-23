@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
-import { readPaneState, writePaneState } from "../../skills/dori-mode/scripts/src/lane-state";
+import { readPaneState, writePaneState } from "../../skills/cataly-mode/scripts/src/lane-state";
 import { load, useConfig } from "./fake-pi";
 
 test("HC receives native role-session status, approval holds and role-removal invalidation", async () => {
@@ -14,19 +14,31 @@ test("HC receives native role-session status, approval holds and role-removal in
     if (typeof chunk === "string") frames.push(chunk);
     return true;
   });
-  const pi = await load({ session: { id: "hc-status", entries: [] }, flags: { "dori-role": "lane" } });
+  const pi = await load({ session: { id: "hc-status", entries: [] }, flags: { "cataly-role": "lane" } });
   try {
     await pi.emit("session_start");
     expect(frames).toEqual(["\x1b]7501;state=idle:app=omp\x1b\\"]);
     await pi.emit("agent_start");
     expect(frames.at(-1)).toBe("\x1b]7501;state=working:app=omp\x1b\\");
     expect(readPaneState(stateDir, "t7")?.agentStatus).toBe("working");
-    await pi.emit("tool_approval_requested", { toolCallId: "approval" });
+    await pi.emit("tool_approval_requested", {
+      type: "tool_approval_requested",
+      sessionId: pi.session.id,
+      toolName: "bash",
+      approvalMode: "always-ask",
+      toolCallId: "approval",
+    });
     expect(frames.at(-1)).toBe("\x1b]7501;state=blocked:app=omp\x1b\\");
     await pi.emit("agent_end");
     expect(frames.at(-1)).toBe("\x1b]7501;state=blocked:app=omp\x1b\\");
     expect(readPaneState(stateDir, "t7")).toMatchObject({ agentStatus: "idle", approvalPending: true });
-    await pi.emit("tool_approval_resolved", { toolCallId: "approval" });
+    await pi.emit("tool_approval_resolved", {
+      type: "tool_approval_resolved",
+      sessionId: pi.session.id,
+      toolName: "bash",
+      toolCallId: "approval",
+      approved: false,
+    });
     expect(frames.at(-1)).toBe("\x1b]7501;state=idle:app=omp\x1b\\");
     pi.session = { id: "plain", entries: [] };
     await pi.emit("session_switch");
@@ -76,7 +88,7 @@ test.each(["absent", "retired", "live-owner", "replaced"] as const)(
     const plain = await load({
       session: { id: "plain-tui", entries: [] },
       mode: "tui",
-      ...(record === "replaced" ? { flags: { "dori-role": "lane" } } : {}),
+      ...(record === "replaced" ? { flags: { "cataly-role": "lane" } } : {}),
     });
     try {
       if (record === "replaced") {

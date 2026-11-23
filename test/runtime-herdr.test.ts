@@ -6,7 +6,7 @@ import { fail, ok, omoFront, recorder, ref, world } from "./herdr-recorder.ts";
 
 const pane = { pane_id: "w1:p2", tab_id: "w1:t2", workspace_id: "w1" };
 const spec = (over: Partial<CreateSpec> = {}): CreateSpec => ({
-  name: "dori",
+  name: "cataly",
   cwd: "/w",
   env: {},
   role: "lead",
@@ -43,7 +43,7 @@ describe("herdr argv", () => {
       ),
     );
     const h = new HerdrRuntime(r.exec, "");
-    expect(await h.createGroup("dori", "/w")).toBe("w1");
+    expect(await h.createGroup("cataly", "/w")).toBe("w1");
     expect(await h.create(spec())).toEqual(ref("w1:p2", "w1", "w1:t2"));
     await h.create(spec({ name: "solo", env: { A: "1" } }));
     expect(
@@ -53,20 +53,20 @@ describe("herdr argv", () => {
           container: "tab",
           group: "w3",
           role: "lane",
-          env: { DORI_LANE: "fix-login", NOTE: "a b" },
+          env: { CATALY_LANE: "fix-login", NOTE: "a b" },
         }),
       ),
     ).toEqual(ref("w3:p4", "w3", "w3:t4"));
     await h.create(spec({ name: "other", container: "tab" }));
     expect(
       await h.create(
-        spec({ name: "duty", container: "split-below", env: { DORI_ROLE: "duty" }, near: ref("w1:p1", "w1") }),
+        spec({ name: "duty", container: "split-below", env: { CATALY_ROLE: "duty" }, near: ref("w1:p1", "w1") }),
       ),
     ).toEqual(ref("w1:p2", "w1", "w1:t2"));
-    await h.start(ref("w1:p2"), "dori duty");
+    await h.start(ref("w1:p2"), "cataly duty");
     expect(r.calls).toEqual([
-      ["workspace", "create", "--label", "dori", "--cwd", "/w", "--no-focus"],
-      ["workspace", "create", "--label", "dori", "--cwd", "/w", "--no-focus"],
+      ["workspace", "create", "--label", "cataly", "--cwd", "/w", "--no-focus"],
+      ["workspace", "create", "--label", "cataly", "--cwd", "/w", "--no-focus"],
       ["workspace", "create", "--label", "solo", "--cwd", "/w", "--env", "A=1", "--no-focus"],
       [
         "tab",
@@ -79,7 +79,7 @@ describe("herdr argv", () => {
         "--workspace",
         "w3",
         "--env",
-        "DORI_LANE=fix-login",
+        "CATALY_LANE=fix-login",
         "--env",
         "NOTE=a b",
       ],
@@ -96,9 +96,9 @@ describe("herdr argv", () => {
         "/w",
         "--no-focus",
         "--env",
-        "DORI_ROLE=duty",
+        "CATALY_ROLE=duty",
       ],
-      ["pane", "run", "w1:p2", "dori duty"],
+      ["pane", "run", "w1:p2", "cataly duty"],
     ]);
     await expect(h.create(spec({ container: "split-below" }))).rejects.toThrow("needs `near`");
   });
@@ -107,7 +107,7 @@ describe("herdr argv", () => {
     const r = recorder(() => ok({ root_pane: pane }));
     expect(await openSession(new HerdrRuntime(r.exec, ""), spec(), "omo")).toEqual(ref("w1:p2", "w1", "w1:t2"));
     expect(r.calls).toEqual([
-      ["workspace", "create", "--label", "dori", "--cwd", "/w", "--no-focus"],
+      ["workspace", "create", "--label", "cataly", "--cwd", "/w", "--no-focus"],
       ["pane", "run", "w1:p2", "omo"],
     ]);
   });
@@ -116,7 +116,7 @@ describe("herdr argv", () => {
     const r = recorder((argv) => (argv[1] === "run" ? fail("run failed") : ok({ root_pane: pane })));
     await expect(openSession(new HerdrRuntime(r.exec, ""), spec(), "omo")).rejects.toThrow("run failed");
     expect(r.calls).toEqual([
-      ["workspace", "create", "--label", "dori", "--cwd", "/w", "--no-focus"],
+      ["workspace", "create", "--label", "cataly", "--cwd", "/w", "--no-focus"],
       ["pane", "run", "w1:p2", "omo"],
       ["pane", "close", "w1:p2"],
     ]);
@@ -182,7 +182,7 @@ describe("herdr replies", () => {
   test("a create that returns no pane id throws instead of handing back an empty pane", async () => {
     const h = new HerdrRuntime(recorder(() => ok({ root_pane: { tab_id: "w1:t2" } })).exec, "");
     await expect(h.create(spec({ container: "tab", group: "w1" }))).rejects.toThrow("herdr did not return a pane id");
-    await expect(h.createGroup("dori", "/w")).rejects.toThrow("herdr did not return a workspace id");
+    await expect(h.createGroup("cataly", "/w")).rejects.toThrow("herdr did not return a workspace id");
   });
 
   test("a failed call throws HerdrError (a ToolError) with herdr's own reason, from stderr or else stdout", async () => {

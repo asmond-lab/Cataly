@@ -5,9 +5,9 @@ import { Refusal } from "./refusal.ts";
 
 /**
  * The lock directory `<root>/state/<name>.lock`, shared with shell waiters that only `mkdir` it and write
- * `<lane> <YYYY-MM-DD HH:MM:SS> pid=<pid>` (local time) into its `owner` file. `dori harness lock` adds ` cmd=<pid>`,
+ * `<lane> <YYYY-MM-DD HH:MM:SS> pid=<pid>` (local time) into its `owner` file. `cataly harness lock` adds ` cmd=<pid>`,
  * the command it runs, before that command starts. A shell waiter clears a lock by its own script's rules, not under
- * the claim below, so what this file guarantees about clearing holds between `dori harness lock` waiters.
+ * the claim below, so what this file guarantees about clearing holds between `cataly harness lock` waiters.
  */
 export type OwnerEnv = ClaimEnv & { root: string };
 export type Holder = { owner: string; lane: string; pid?: number; since: number };
@@ -34,7 +34,7 @@ const readOr = (path: string): string | undefined => {
 };
 
 /**
- * Whether `path` exists and is not a directory. `DORI_HOME/state` is shared with other tools (it is OMP's default
+ * Whether `path` exists and is not a directory. `CATALY_HOME/state` is shared with other tools (it is OMP's default
  * runtime state dir) whose lock files also end in `.lock`; those are not locks of this kind, and are never touched.
  */
 function notDirectory(path: string): boolean {
@@ -143,7 +143,7 @@ export function tryTake(
 }
 
 /**
- * Names the holder's command on its owner line, so for other `dori harness lock` waiters the lock stays held while it
+ * Names the holder's command on its owner line, so for other `cataly harness lock` waiters the lock stays held while it
  * runs; the new owner line. A shell waiter keeps it held only if its script reads `cmd=` too.
  */
 export function nameCommand(root: string, name: string, owner: string, pid: number): string {

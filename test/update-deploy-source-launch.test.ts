@@ -21,7 +21,7 @@ test
   .each(["canonical", "launcher", "relative", "other", "missing"])(
   "source-native launch binds only its canonical absolute entry (%s)",
   async (spelling) => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), "dori-source-launch-")));
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "cataly-source-launch-")));
     directories.push(root);
     const config = { ...deploymentConfig(root), omp: join(root, "omp"), bun: process.execPath };
     const source = join(root, "source/packages/coding-agent");
@@ -50,8 +50,8 @@ test
       config.bun,
       entryArg,
       `--resume=${sessionFile}`,
-      "--dori-role",
-      "dori",
+      "--cataly-role",
+      "cataly",
       "--model",
       config.model,
       "--config",
@@ -84,7 +84,7 @@ test
         step: "start",
         oldRuntime: {
           ...processIdentity(process.pid)!,
-          role: "dori",
+          role: "cataly",
           pane: config.pane,
           sessionId: config.sessionId,
           sessionFile,

@@ -100,8 +100,8 @@ Cataly は、ユーザーが提供するアカウントと権限で動作しま�
 実施しなかった作業を区別する必要があります。
 
 認証情報、非公開の会話、アカウントデータを、公開パッチや報告に含めないでください。
-任意のテレメトリーは `DORI_TELEMETRY=0` または `DO_NOT_TRACK=1` で
-無効にできます。
+テレメトリーは既定で無効です。`CATALY_TELEMETRY=1` で有効にできますが、
+`DO_NOT_TRACK=1` が優先されます。
 
 ## はじめに
 
@@ -109,8 +109,13 @@ Cataly は、ユーザーが提供するアカウントと権限で動作しま�
 
 **注記**
 
-Cataly はプロジェクト名です。既存の `dori`、`omp-dori`、`omp` コマンド、
-インストール先のホーム、公開済みアセットの名前は変更していません。
+現在のコマンドは `cataly`、`cataly-harness`、`omp-cataly`（分離インストール用）です。
+新規インストール先は `~/.cataly` または `~/.omp-cataly` です。
+既定のランタイムには端末バックエンドが不要です。
+
+[検証済みの現行リリースをインストール](docs/releases.md#install-a-current-release)するか、
+[端末バックエンドなしで v0.1.3 から更新](docs/releases.md#upgrade-a-v013-installation)してください。
+更新時は既存のインストール先と設定を保持します。
 
 </td></tr></table>
 
@@ -127,21 +132,22 @@ Discord モニターを説明しています。特定のリリースを、任意
 
 ### ソースから作業する
 
-先に git、Bun 1.4.4+、herdr または hc をインストールしてください。
+先に git と Bun 1.4.4+ をインストールしてください。Linux と macOS の標準構成では herdr も hc も不要です。
 詳しくは[ソース版の前提条件](docs/releases.md#current-source-bundle)を参照してください。
+ソースの `main` では、3 つ目のセッションランタイムとして Tern も使えます。[Tern](docs/runtime.md#tern) を参照してください。
 
 稼働中のインストールや固定された利用者向けリリースではなく、別のチェックアウトを使ってください。
 
 ```bash
 git clone https://github.com/vntrevx/Cataly.git "$HOME/src/Cataly" || exit 1
 cd "$HOME/src/Cataly" || exit 1
-DORI_INSTALL_MODE=side DORI_NO_PULL=1 DORI_SRC="$PWD" bash scripts/install-source.sh
+CATALY_INSTALL_MODE=side CATALY_NO_PULL=1 CATALY_SRC="$PWD" bash scripts/install-source.sh
 ```
 
-ソースインストーラーは、プロジェクト指定の修正版 OMP 18.20.0 と ULW オーバーレイを
+ソースインストーラーは、プロジェクト指定の修正版 OMP 19.0.1 と ULW オーバーレイを
 準備します。`PATH` 上にある標準の `omp` は代わりになりません。side モードは
-既定で `~/.omp-dori` を使い、専用のラッパーと設定を持ち、メインの
-`~/.dori` インストールには触れません。インストールによってエージェント、
+既定で `~/.omp-cataly` を使い、専用のラッパーと設定を持ち、メインの
+`~/.cataly` インストールには触れません。インストールによってエージェント、
 メッセンジャー受信プロセス、サービスが起動することはありません。
 
 環境の分離、設定、明示的な起動については、
@@ -161,8 +167,8 @@ DORI_INSTALL_MODE=side DORI_NO_PULL=1 DORI_SRC="$PWD" bash scripts/install-sourc
 ## ドキュメント
 
 - [インストール、サポート、更新、ロールバック](docs/releases.md)
-- [スキルと運用ルール](skills/dori-mode/SKILL.md)
-- [メッセンジャーの設定](skills/dori-mode/references/setup.md)
+- [スキルと運用ルール](skills/cataly-mode/SKILL.md)
+- [メッセンジャーの設定](skills/cataly-mode/references/setup.md)
 - [ランタイムアダプターとセッションの契約](docs/runtime.md)
 - [コンテナの設定](docs/container.md)
 - [スケジューリングとバックログ](docs/hourly-loop.md)
@@ -183,7 +189,7 @@ DORI_INSTALL_MODE=side DORI_NO_PULL=1 DORI_SRC="$PWD" bash scripts/install-sourc
 
 ライセンスは各コンポーネントの由来に従います。dori-superagent 由来の素材には
 [Sustainable Use License 1.0](LICENSE) が引き続き適用され、既存の OMP
-統合部分は [MIT ライセンスと著作権表示](LICENSE.omp-dori)を保持します。
+統合部分は [MIT ライセンスと著作権表示](LICENSE.integration)を保持します。
 ほかのコンポーネントも、それぞれの条件を維持します。MIT の表示は、
 リポジトリ全体を再ライセンスするものではありません。[NOTICE](NOTICE) に、
 取り込んだリビジョンと修正版の帰属表示を記録しています。

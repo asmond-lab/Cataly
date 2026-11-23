@@ -50,10 +50,10 @@ export function otlpLogs(
       {
         resource: {
           attributes: [
-            attr("service.name", "dori-superagent"),
+            attr("service.name", "cataly-superagent"),
             attr("service.version", VERSION),
-            attr("dori.install.hash", installHash),
-            attr("dori.ci", isOn(env["CI"])),
+            attr("cataly.install.hash", installHash),
+            attr("cataly.ci", isOn(env["CI"])),
             attr("os.type", OS_TYPE[platform()] ?? "linux"),
             ...osVersion(),
             attr("host.arch", HOST_ARCH[arch()] ?? "other"),
@@ -61,13 +61,13 @@ export function otlpLogs(
         },
         scopeLogs: [
           {
-            scope: { name: "dori-superagent", version: VERSION },
+            scope: { name: "cataly-superagent", version: VERSION },
             logRecords: events.map(({ name, ...fields }) => ({
               timeUnixNano,
               eventName: name,
               attributes: [
                 attr("log.record.uid", randomUUID()),
-                ...Object.entries(fields).map(([k, v]) => attr(`dori.${k}`, v as string | number)),
+                ...Object.entries(fields).map(([k, v]) => attr(`cataly.${k}`, v as string | number)),
               ],
             })),
           },

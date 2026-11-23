@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { basename, isAbsolute } from "node:path";
-import { type PaneState, readPaneState } from "../../skills/dori-mode/scripts/src/lane-state.ts";
+import { type PaneState, readPaneState } from "../../skills/cataly-mode/scripts/src/lane-state.ts";
 import { SHELLS } from "../runtime/foreground.ts";
 import type { Front } from "../runtime/herdr/probe.ts";
 import { DeploymentHeld, processIdentity, sameProcess } from "./deployment-process.ts";

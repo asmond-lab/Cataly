@@ -5,29 +5,9 @@ import { platform } from "../platform/index.ts";
 import { assertSetupFile, readSetupFile, setupPreview, type SetupSnapshot } from "../setup-files.ts";
 import { extractArchive } from "./archive.ts";
 import type { VerifiedBundle } from "./bundle.ts";
-import { type ConsumerPaths, readJson } from "./files.ts";
+import { nativeMetadata } from "./capabilities.ts";
+import { type ConsumerPaths, isPrimaryConsumer } from "./files.ts";
 import { assertLock, dependencyPlan } from "./provision.ts";
-
-export function setupRuntime(snapshot: SetupSnapshot, requested?: string): string {
-  assertSetupFile(snapshot);
-  if (snapshot.stamp !== null) {
-    const config = readJson(snapshot.path);
-    if (config === null || typeof config !== "object" || Array.isArray(config))
-      throw new Error("Preserved config must be an object");
-    if (!("runtime" in config))
-      throw new Error(
-        'Preserved config must explicitly select runtime: set "runtime" to "herdr" or "hc" before retrying',
-      );
-    if (typeof config.runtime !== "string") throw new Error("Preserved config runtime must be a string");
-    if (config.runtime !== "herdr" && config.runtime !== "hc")
-      throw new Error("Preserved config runtime must be herdr or hc");
-    if (requested !== undefined && requested !== config.runtime)
-      throw new Error("Selected runtime conflicts with preserved config runtime");
-    requested ??= config.runtime;
-  }
-  assertSetupFile(snapshot);
-  return requested ?? platform.defaultRuntime();
-}
 
 type ConsumerConfigPlan = { readonly text: string | Buffer; readonly keys: readonly string[] };
 
@@ -36,23 +16,38 @@ export function consumerConfigPlan(
   snapshot: SetupSnapshot,
   source: string,
   dependency: string,
-  boundNative: boolean,
+  manifest: VerifiedBundle["manifest"],
 ): ConsumerConfigPlan {
   if (snapshot.path !== paths.config) throw new Error("Configuration snapshot belongs to another installation");
   const saved = readSetupFile(snapshot);
   if (saved !== undefined) return { text: saved, keys: [] };
-  const example = JSON.parse(readFileSync(join(source, "skills/dori-mode/references/config.example.json"), "utf8"));
+  const skill = manifest.source.files.some((file) => file.path === "skills/cataly-mode/references/config.example.json")
+    ? "cataly-mode"
+    : "dori-mode";
+  const example = JSON.parse(readFileSync(join(source, "skills", skill, "references/config.example.json"), "utf8"));
   example.ompUlwPath = dependency;
-  example.runtime = platform.defaultRuntime();
-  const keys = ["ompUlwPath", "runtime"];
-  if (paths.dori !== join(paths.home, ".dori")) {
-    example.stateDir = join(paths.dori, "state");
+  const keys = ["ompUlwPath"];
+  if (manifest.source.files.some((file) => file.path === nativeMetadata)) {
+    delete example.runtime;
+    delete example.sessionRuntime;
+  } else {
+    example.runtime = platform.legacyReleaseRuntime();
+    keys.push("runtime");
+  }
+  if (!isPrimaryConsumer(paths) || (paths.layout === "legacy" && skill === "cataly-mode")) {
+    example.stateDir = join(paths.cataly, "state");
     keys.push("stateDir");
   }
-  if (boundNative || paths.dori !== join(paths.home, ".dori")) {
+  if (manifest.requirements.omp !== "18.18.8" || !isPrimaryConsumer(paths)) {
     example.agentCommand = [
-      join(paths.dori, "bin/omp"),
-      ...(example.agentCommand?.slice(1) ?? ["--dori-role", "lane", "--model", "{model}", "{prompt}"]),
+      join(paths.cataly, "bin/omp"),
+      ...(example.agentCommand?.slice(1) ?? [
+        skill === "cataly-mode" ? "--cataly-role" : "--dori-role",
+        "lane",
+        "--model",
+        "{model}",
+        "{prompt}",
+      ]),
     ];
     keys.push("agentCommand");
   }
@@ -68,7 +63,7 @@ export function previewConsumerSetup(paths: ConsumerPaths, bundle: VerifiedBundl
     extractArchive(bundle.files, bundle.manifest, source);
     assertLock(source, bundle.manifest);
     const dependency = join(dependencyPlan(paths, bundle.manifest, source).directory, "index.ts");
-    plan = consumerConfigPlan(paths, snapshot, source, dependency, bundle.manifest.requirements.omp === "18.20.0");
+    plan = consumerConfigPlan(paths, snapshot, source, dependency, bundle.manifest);
   } finally {
     rmSync(stage, { recursive: true, force: true });
   }

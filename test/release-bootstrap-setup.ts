@@ -36,9 +36,15 @@ export function fixture(profile: typeof linux | typeof darwin) {
   executable("hc", "#!/bin/sh\nexit 0\n");
   const cli = `import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-const args = parseArgs({ args: process.argv.slice(3), options: { from: { type: "string" }, version: { type: "string" }, home: { type: "string" }, runtime: { type: "string" } } });
+const args = parseArgs({ args: process.argv.slice(3), options: { from: { type: "string" }, version: { type: "string" }, home: { type: "string" }, runtime: { type: "string" }, "legacy-session": { type: "string" }, "legacy-migrated-session": { type: "string" } } });
+if (process.argv[2] === "retire-legacy-roles") {
+  writeFileSync(process.env.BOOTSTRAP_RESULT, JSON.stringify({
+    command: process.argv[2], ...args.values, historicalState: process.env.DORI_STATE_DIR,
+  }));
+  process.exit(0);
+}
 writeFileSync(process.env.BOOTSTRAP_RESULT, JSON.stringify({ home: args.values.home, runtime: args.values.runtime,
-  env: { home: process.env.DORI_HOME, config: process.env.DORI_CONFIG, state: process.env.DORI_STATE_DIR ?? null,
+  env: { home: process.env.CATALY_HOME ?? process.env.DORI_HOME, config: process.env.CATALY_CONFIG ?? process.env.DORI_CONFIG, state: process.env.DORI_STATE_DIR ?? null,
     runtime: process.env.DORI_RUNTIME ?? null, cmd: process.env.DORI_CMD ?? null, agent: process.env.DORI_AGENT_CMD ?? null,
     argv: process.env.DORI_AGENT_ARGV ?? null, ulw: process.env.DORI_OMP_ULW_PATH ?? null, startup: process.env.DORI_MANAGED_STARTUP ?? null } }));
 `;
@@ -50,7 +56,7 @@ const home = join(process.env.HOME, ".dori");
 mkdirSync(home, { recursive: true });
 writeFileSync(join(home, "legacy-installed"), "installed");
 writeFileSync(process.env.BOOTSTRAP_RESULT, JSON.stringify({ home, runtime: "herdr",
-  env: { home: process.env.DORI_HOME, config: process.env.DORI_CONFIG, state: process.env.DORI_STATE_DIR ?? null,
+  env: { home: process.env.CATALY_HOME ?? process.env.DORI_HOME, config: process.env.CATALY_CONFIG ?? process.env.DORI_CONFIG, state: process.env.DORI_STATE_DIR ?? null,
     runtime: process.env.DORI_RUNTIME ?? null, cmd: process.env.DORI_CMD ?? null, agent: process.env.DORI_AGENT_CMD ?? null,
     argv: process.env.DORI_AGENT_ARGV ?? null, ulw: process.env.DORI_OMP_ULW_PATH ?? null, startup: process.env.DORI_MANAGED_STARTUP ?? null } }));
 `;
@@ -63,22 +69,26 @@ writeFileSync(process.env.BOOTSTRAP_RESULT, JSON.stringify({ home, runtime: "her
     tree: "b".repeat(40),
     prerelease: false,
   };
-  const assets = (capabilities?: unknown) => {
+  const assets = (capabilities?: unknown, headless?: unknown, omp = headless === undefined ? "18.18.8" : "18.20.0") => {
     const payload = capabilities === undefined ? undefined : JSON.stringify(capabilities);
+    const native = headless === undefined ? undefined : JSON.stringify(headless);
     const consumer = payload === undefined ? legacyCli : cli;
     const files = [
       ...(payload === undefined
         ? []
         : [{ path: "release-capabilities.json", sha256: digest(payload), executable: false }]),
+      ...(native === undefined ? [] : [{ path: "release-headless.json", sha256: digest(native), executable: false }]),
       { path: "src/release/cli.ts", sha256: digest(consumer), executable: false },
     ];
     const bytes = archive([
       ...(payload === undefined ? [] : [{ name: "omp-dori-1.2.3/release-capabilities.json", bytes: payload }]),
+      ...(native === undefined ? [] : [{ name: "omp-dori-1.2.3/release-headless.json", bytes: native }]),
       { name: "omp-dori-1.2.3/src/release/cli.ts", bytes: consumer },
     ]);
     const name = "omp-dori-v1.2.3.tar.gz";
     const metadata = JSON.stringify({
       ...base,
+      requirements: { omp },
       archive: { name, root: "omp-dori-1.2.3", sha256: digest(bytes), bytes: bytes.length },
       source: {
         version: 1,
@@ -96,7 +106,7 @@ writeFileSync(process.env.BOOTSTRAP_RESULT, JSON.stringify({ home, runtime: "her
   const result = join(root, "result.json");
   const run = (args: string[] = [], extra: Record<string, string> = {}) =>
     Bun.spawnSync(["bash", join(import.meta.dir, "../install.sh"), "--from", dist, ...args], {
-      env: { PATH: `${bin}:${process.env["PATH"]}`, HOME: home, BOOTSTRAP_RESULT: result, ...extra },
+      env: { PATH: `${bin}:${process.env["PATH"]}`, HOME: home, USERPROFILE: home, BOOTSTRAP_RESULT: result, ...extra },
       stdout: "pipe",
       stderr: "pipe",
     });

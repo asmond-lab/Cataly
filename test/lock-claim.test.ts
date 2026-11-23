@@ -13,7 +13,7 @@ async function crashed(path: string, claim: boolean) {
   const dir = dirname(path);
   const before = new Set(readdirSync(dir));
   const child = Bun.spawn([process.execPath, "test", fixture], {
-    env: { ...process.env, DORI_TEST_LOCK_RECLAIMER: JSON.stringify({ path, claim }) },
+    env: { ...process.env, CATALY_TEST_LOCK_RECLAIMER: JSON.stringify({ path, claim }) },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -37,7 +37,7 @@ async function crashed(path: string, claim: boolean) {
 }
 
 test("eleven actual exited owners and reclaimers recover with bounded claims and exact releases", async () => {
-  const root = mkdtempSync(join(tmpdir(), "dori-claim-chain-"));
+  const root = mkdtempSync(join(tmpdir(), "cataly-claim-chain-"));
   const path = join(root, ".guard");
   const env = lockEnv(root);
   let release: (() => void) | undefined;
@@ -88,7 +88,7 @@ test("eleven actual exited owners and reclaimers recover with bounded claims and
 }, 30_000);
 
 test("physical directory aliases share the actual stale snapshot's live claim", async () => {
-  const root = mkdtempSync(join(tmpdir(), "dori-claim-alias-"));
+  const root = mkdtempSync(join(tmpdir(), "cataly-claim-alias-"));
   const physical = join(root, "physical");
   mkdirSync(physical);
   const alias = join(root, "alias");

@@ -53,7 +53,7 @@ function unsupported(os: string): PlatformAdapter {
     procfs: false,
     flockLibrary: () => "libc.so.6",
     syncDirectory,
-    defaultRuntime: () => "herdr",
+    legacyReleaseRuntime: () => "herdr",
     supportsReleaseProfile: () => false,
     nativeCacheLabel: () => `native-${os}-${process.arch}`,
     programName: (word) => word.split("/").at(-1) ?? "",

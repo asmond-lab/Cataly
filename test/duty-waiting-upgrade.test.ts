@@ -11,7 +11,7 @@ const MIN = 60_000;
 const PROMPTS = join(import.meta.dir, "..", "prompts");
 
 afterEach(() => {
-  delete process.env["DORI_PROMPTS_DIR"];
+  delete process.env["CATALY_PROMPTS_DIR"];
 });
 
 describe("a waiting lane after an upgrade", () => {
@@ -21,12 +21,12 @@ describe("a waiting lane after an upgrade", () => {
     const pane = s.w.panes.get(lane.paneId)!;
     pane.status = "idle";
     await report(s.d, "blocked", "WAITING: CI", { status: "waiting", waitingFor: "CI run 812" });
-    // The user's own prompts as an older dori shipped them: every template but nudge-waiting.md.
+    // The user's own prompts as an older cataly shipped them: every template but nudge-waiting.md.
     const own = join(s.d.store.root, "own-prompts");
     mkdirSync(own, { recursive: true });
     for (const f of readdirSync(PROMPTS).filter((f) => f !== "nudge-waiting.md"))
       writeFileSync(join(own, f), readFileSync(join(PROMPTS, f), "utf8"));
-    process.env["DORI_PROMPTS_DIR"] = own;
+    process.env["CATALY_PROMPTS_DIR"] = own;
     s.w.clock = lane.createdAt + 10 * MIN;
     expect(await dutyTick(s.d)).toContainEqual({ lane: "blocked", action: "nudge-1" });
     expect(pane.received.at(-1)).toContain(`[duty -> blocked] Waiting on CI run 812 since ${hhmm(lane.createdAt)}`);

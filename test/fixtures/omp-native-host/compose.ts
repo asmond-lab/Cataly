@@ -59,7 +59,7 @@ export const nativeComposition = async (
   entries: readonly string[],
   base: string[],
   options: {
-    role?: "dori" | "lane";
+    role?: "cataly" | "lane";
     model?: FixtureModel;
     agent?: ExtensionAgentIdentity;
     observeBefore?: string;
@@ -79,9 +79,9 @@ export const nativeComposition = async (
   const cwd = options.cwd ?? import.meta.dir;
   let promptBase = base;
   const session = SessionManager.inMemory(cwd);
-  if (options.role) runtime.flagValues.set("dori-role", options.role);
+  if (options.role) runtime.flagValues.set("cataly-role", options.role);
   const extensions: Extension[] = [];
-  const beforeDori: string[][] = [];
+  const beforeCataly: string[][] = [];
   const afterAll: string[][] = [];
   let tools: ToolInfo[] = [];
   const observe = (name: string, snapshots: string[][]) =>
@@ -106,7 +106,7 @@ export const nativeComposition = async (
       name,
     );
   for (const entry of entries) {
-    if (entry === options.observeBefore) extensions.push(await observe("before-dori", beforeDori));
+    if (entry === options.observeBefore) extensions.push(await observe("before-cataly", beforeCataly));
     const factory = await nativeExtensionFactory(entry);
     extensions.push(await loadExtensionFromFactory(factory, cwd, events, runtime, entry));
   }
@@ -232,7 +232,7 @@ export const nativeComposition = async (
       secondResult: second,
       first: first?.systemPrompt,
       second: second?.systemPrompt,
-      beforeDori,
+      beforeCataly,
       afterAll,
       userMessages,
       compactionMessages,

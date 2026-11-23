@@ -1,6 +1,6 @@
 import { isAbsolute, join } from "node:path";
-import { readPrivateAskFile } from "../skills/dori-mode/scripts/src/messenger/discord-ask-mailbox.ts";
-import { isDiscordSnowflake } from "../skills/dori-mode/scripts/src/messenger/discord-inbound-state.ts";
+import { readPrivateAskFile } from "../skills/cataly-mode/scripts/src/messenger/discord-ask-mailbox.ts";
+import { isDiscordSnowflake } from "../skills/cataly-mode/scripts/src/messenger/discord-inbound-state.ts";
 import type { AskData } from "./discord-ask-form.ts";
 import type { AskButtonSocket } from "./discord-ask-interactions.ts";
 import { askOnDiscord } from "./discord-ask-remote.ts";
@@ -48,7 +48,10 @@ export function discordAskToken(route: DiscordAskRoute): string {
   const contents = readPrivateAskFile(route.tokenFile, 16_384);
   const token =
     route.tokenFileFormat === "dotenv"
-      ? /^(?:export[ \t]+)?DORI_DISCORD_TOKEN=(?:"([\w.-]+)"|'([\w.-]+)'|([\w.-]+))[ \t]*\r?$/m
+      ? (/^(?:export[ \t]+)?CATALY_DISCORD_TOKEN=.*$/m.test(contents ?? "")
+          ? /^(?:export[ \t]+)?CATALY_DISCORD_TOKEN=(?:"([\w.-]+)"|'([\w.-]+)'|([\w.-]+))[ \t]*\r?$/m
+          : /^(?:export[ \t]+)?DORI_DISCORD_TOKEN=(?:"([\w.-]+)"|'([\w.-]+)'|([\w.-]+))[ \t]*\r?$/m
+        )
           .exec(contents ?? "")
           ?.slice(1)
           .find(Boolean)
@@ -62,7 +65,10 @@ export class DiscordAsk {
   #armed?: { wrap: FormDialog; requests: Map<string, PendingAsk>; restore(): void };
   #signal = new AbortController();
 
-  constructor(private readonly openSocket?: AskButtonSocket) {}
+  constructor(
+    private readonly openSocket?: AskButtonSocket,
+    private readonly apiOverride = process.env["CATALY_DISCORD_API_BASE"] ?? "",
+  ) {}
 
   clear(): void {
     this.#armed?.restore();
@@ -157,6 +163,7 @@ export class DiscordAsk {
             signal,
             warn,
             openSocket: this.openSocket,
+            apiOverride: this.apiOverride,
           }),
         )
         .catch(() => {

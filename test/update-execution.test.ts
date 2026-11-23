@@ -190,7 +190,7 @@ posixSuite("bounded candidate command output", () => {
     const f = executionFixture();
     const short = "SECRET_alpha";
     const secret = "SECRET_alpha_unique_omega_VALUE";
-    const names = ["DORI_EXECUTION_SHORT_SECRET", "DORI_EXECUTION_LONG_SECRET"] as const;
+    const names = ["CATALY_EXECUTION_SHORT_SECRET", "CATALY_EXECUTION_LONG_SECRET"] as const;
     const release = join(f.directory, "release-writer");
     writeFileSync(
       join(f.directory, "split-output.ts"),
@@ -198,7 +198,7 @@ posixSuite("bounded candidate command output", () => {
 import { existsSync, writeSync } from "node:fs";
 import { runCommand } from ${JSON.stringify(new URL("../src/update/process.ts", import.meta.url).href)};
 const release = ${JSON.stringify(release)};
-const secret = process.env["DORI_EXECUTION_LONG_SECRET"];
+const secret = process.env["CATALY_EXECUTION_LONG_SECRET"];
 if (process.argv[2] === "emit") {
   setTimeout(() => process.exit(2), 15_000);
   writeSync(1, "stdout-prefix:" + "a".repeat(256) + secret.slice(0, 14));

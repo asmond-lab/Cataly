@@ -14,7 +14,7 @@ afterEach(() => {
 // This transport fixture loads the controller's actual guard and emits protocol evidence without a model/provider.
 // It proves the full receipt path, not a paid model run or native OMP CLI compatibility.
 async function scopeLaunch(prefix: readonly string[]) {
-  const dir = mkdtempSync(join(tmpdir(), "dori-native-prefix-"));
+  const dir = mkdtempSync(join(tmpdir(), "cataly-native-prefix-"));
   directories.push(dir);
   for (const name of ["candidate", "remote", "bin"]) mkdirSync(join(dir, name));
   const omp = join(dir, "bin", "omp");
@@ -54,7 +54,7 @@ console.log(JSON.stringify({ type: "agent_end", isTerminal: true, messages: [mes
     path,
     JSON.stringify({
       version: 1,
-      target: "dori",
+      target: "cataly",
       runtime: "herdr",
       root: join(dir, "updates"),
       remote: join(dir, "remote"),

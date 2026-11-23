@@ -21,7 +21,7 @@ async function staleLock(path: string): Promise<string> {
 }
 
 test("a takeover paused after reading a stale lock never frees or removes the lock another process took over", async () => {
-  const path = join(mkdtempSync(join(tmpdir(), "dori-lock-")), "inbox.jsonl.lock");
+  const path = join(mkdtempSync(join(tmpdir(), "cataly-lock-")), "inbox.jsonl.lock");
   const stale = await staleLock(path);
   // P reads the stale lock, then pauses: Q takes it over meanwhile. Whatever P does next, a third taker R, trying at
   // any point P touches the lock again, must find it held by Q.
@@ -58,7 +58,7 @@ test("a takeover paused after reading a stale lock never frees or removes the lo
 });
 
 test("a takeover whose claimer died is finished by the next taker, once, and leaves no claim behind", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "dori-lock-"));
+  const dir = mkdtempSync(join(tmpdir(), "cataly-lock-"));
   const path = join(dir, "inbox.jsonl.lock");
   const stale = await staleLock(path);
   // The claim of a process that died part way through taking over the stale lock: itself stale.

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { lstatSync, mkdirSync, readFileSync, realpathSync, renameSync } from "node:fs";
 import { join } from "node:path";
+import { matchesDeploymentConfigHash } from "./deployment-config.ts";
 import { saveDeploymentJson } from "./deployment-files.ts";
 import { captureHandoff } from "./deployment-handoff.ts";
+import { forwardStopStarted } from "./deployment-native-ui.ts";
 import { command, DeploymentHeld } from "./deployment-process.ts";
 import type { DeploymentConfig, DeploymentRecord } from "./deployment-types.ts";
 import { digest, sourceManifest } from "./source.ts";
@@ -14,7 +16,7 @@ export function readRestartIntent(config: DeploymentConfig): DeploymentRecord | 
   if (
     !/^restart-[a-f0-9-]+$/.test(intent.id) ||
     intent.directory !== join(config.releaseRoot, "transactions", intent.id) ||
-    intent.configHash !== digest(JSON.stringify(config))
+    !matchesDeploymentConfigHash(config, intent.configHash)
   )
     throw new DeploymentHeld("pending restart intent differs");
   const record = JSON.parse(readFileSync(join(intent.directory, "deployment.json"), "utf8")) as DeploymentRecord;
@@ -56,8 +58,8 @@ export function deferRestartIntent(config: DeploymentConfig, record: DeploymentR
     pending?.id !== record.id ||
     pending.status !== "held" ||
     pending.step !== "stop" ||
-    pending.stopRequestedAt ||
-    record.stopRequestedAt ||
+    forwardStopStarted(config, pending) ||
+    forwardStopStarted(config, record) ||
     record.launchRequestedAt
   )
     throw new DeploymentHeld("busy restart intent has runtime effects");

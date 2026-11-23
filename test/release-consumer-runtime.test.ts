@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { chmodSync, mkdirSync, readFileSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { loadConfig } from "../skills/dori-mode/scripts/src/config.ts";
+import { loadConfig } from "../skills/cataly-mode/scripts/src/config.ts";
 import { extractArchive, readArchive } from "../src/release/archive.ts";
 import { saveJson } from "../src/release/files.ts";
 import { installBundle, rollbackRelease } from "../src/release/install.ts";

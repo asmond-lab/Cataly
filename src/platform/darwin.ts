@@ -195,9 +195,10 @@ export const darwin: PlatformAdapter = {
   flockLibrary: () => "libSystem.B.dylib",
   syncDirectory,
 
-  defaultRuntime: () => "hc",
+  legacyReleaseRuntime: () => "hc",
 
-  supportsReleaseProfile: (platform, arch, runtime) => platform === "darwin" && arch === "arm64" && runtime === "hc",
+  supportsReleaseProfile: (platform, arch, runtime) =>
+    platform === "darwin" && arch === "arm64" && (runtime === "headless" || runtime === "hc"),
 
   nativeCacheLabel: () => `native-darwin-${process.arch}`,
   programName: (word) => word.split("/").at(-1) ?? "",

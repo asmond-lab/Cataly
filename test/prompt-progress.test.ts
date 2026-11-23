@@ -2,20 +2,20 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { prompt } from "../src/harness.ts";
 
-const skill = readFileSync(new URL("../skills/dori-mode/SKILL.md", import.meta.url), "utf8");
+const skill = readFileSync(new URL("../skills/cataly-mode/SKILL.md", import.meta.url), "utf8");
 let promptOverride: string | undefined;
 beforeEach(() => {
-  promptOverride = process.env["DORI_PROMPTS_DIR"];
-  delete process.env["DORI_PROMPTS_DIR"];
+  promptOverride = process.env["CATALY_PROMPTS_DIR"];
+  delete process.env["CATALY_PROMPTS_DIR"];
 });
 afterEach(() => {
-  if (promptOverride === undefined) delete process.env["DORI_PROMPTS_DIR"];
-  else process.env["DORI_PROMPTS_DIR"] = promptOverride;
+  if (promptOverride === undefined) delete process.env["CATALY_PROMPTS_DIR"];
+  else process.env["CATALY_PROMPTS_DIR"] = promptOverride;
 });
 
 for (const [name, render] of Object.entries({
-  "Dori skill": () => skill,
-  "duty prompt": () => prompt("duty.md", { dori: "dori" }),
+  "Cataly skill": () => skill,
+  "duty prompt": () => prompt("duty.md", { cataly: "cataly" }),
 })) {
   test(`${name} reports observed transitions instead of unchanged CI waits`, () => {
     const text = render();
@@ -43,8 +43,8 @@ for (const [name, render] of Object.entries({
 }
 
 test("duty retains its ordinary code loop and reports through the lead", () => {
-  const text = prompt("duty.md", { dori: "dori" });
-  expect(text).toContain("dori duty --interval 60");
+  const text = prompt("duty.md", { cataly: "cataly" });
+  expect(text).toContain("cataly duty --interval 60");
   expect(text).toContain("40 minutes without progress");
   expect(text).toContain("Never merge and never talk to the human");
   expect(text).toContain("Escalate to the lead");

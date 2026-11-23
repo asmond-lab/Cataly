@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import { takeInboxLock } from "../../src/inbox-lock.ts";
 
 // Only the owning crash-chain test enables this isolated subprocess test.
-const request = process.env["DORI_TEST_INBOX_RECLAIMER"];
+const request = process.env["CATALY_TEST_INBOX_RECLAIMER"];
 if (request !== undefined) {
   test("inbox reclaimer exits immediately after writing its actual claim", () => {
     const { path, now } = JSON.parse(request) as { path: string; now: number };

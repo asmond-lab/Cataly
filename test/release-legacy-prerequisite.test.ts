@@ -56,7 +56,8 @@ function fixture(version = "18.20.0") {
   arch: { value: ${JSON.stringify(arch)} },
 });
 const { prerequisites } = await import(${JSON.stringify(resolve(import.meta.dir, "../src/release/provision.ts"))});
-prerequisites("herdr", true, true);`,
+const { consumerPaths } = await import(${JSON.stringify(resolve(import.meta.dir, "../src/release/files.ts"))});
+prerequisites("herdr", true, true, consumerPaths(process.env.HOME, process.env.HOME + "/.dori"));`,
       ],
       { env: { HOME: home, PATH: [...directories, tools].join(":") }, stdout: "pipe", stderr: "pipe" },
     );

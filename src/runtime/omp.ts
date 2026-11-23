@@ -1,13 +1,15 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { parseCatalyRole } from "../../skills/cataly-mode/scripts/src/session-compat.ts";
+import { readNativeObservation } from "../native-observation.ts";
 import type { Exec } from "./exec.ts";
 import type { ForegroundProcess, Probe } from "./types.ts";
 
 type Env = Readonly<Record<string, string | undefined>>;
 type PaneState = {
   readonly paneId: string;
-  readonly role: "dori" | "lane";
+  readonly role: "cataly" | "lane";
   readonly sessionId: string;
   readonly sessionFile?: string;
   readonly pid: number;
@@ -15,6 +17,8 @@ type PaneState = {
   readonly updatedAt: string;
   readonly approvalPending: boolean;
   readonly agentStatus?: "idle" | "working";
+  /** Read only through readNativeObservation: a malformed observation is dropped without failing the record. */
+  readonly native?: unknown;
 };
 type Proc = { readonly pid: number; readonly ppid: number; readonly command: string };
 
@@ -23,18 +27,18 @@ const expandHome = (path: string): string =>
 
 /** The extension's config/state precedence; callers with loaded config pass stateDir explicitly. */
 export function ompStateDir(env: Env): string {
-  if (env["DORI_STATE_DIR"] !== undefined) return expandHome(env["DORI_STATE_DIR"]);
-  const doriHome = env["DORI_HOME"] ?? join(homedir(), ".dori");
-  const path = env["DORI_CONFIG"] ?? join(doriHome, "config.json");
+  if (env["CATALY_STATE_DIR"] !== undefined) return expandHome(env["CATALY_STATE_DIR"]);
+  const catalyHome = env["CATALY_HOME"] ?? join(homedir(), ".cataly");
+  const path = env["CATALY_CONFIG"] ?? join(catalyHome, "config.json");
   let raw: string;
   try {
     raw = readFileSync(path, "utf8");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    return join(doriHome, "state");
+    return join(catalyHome, "state");
   }
   const config = JSON.parse(raw) as { stateDir?: string };
-  return expandHome(config.stateDir ?? join(doriHome, "state"));
+  return expandHome(config.stateDir ?? join(catalyHome, "state"));
 }
 
 // The one classification of OMP's launch forms: the `omp` command, its published package CLI under Bun or Node, and the
@@ -68,7 +72,8 @@ export const isOmpProcessCommand = (command: string): boolean =>
 export const namesOmpProcess = (command: string): boolean =>
   isOmpProcessCommand(command) || /(?:^|\s)(?:\S*\/)?omp(?:\s|$)|pi-coding-agent\/dist\/cli\.js/.test(command);
 
-const ompProcess = (p: ForegroundProcess): boolean =>
+/** A foreground process that is OMP itself: by its name, its executable or its source entry. */
+export const isOmpProcess = (p: ForegroundProcess): boolean =>
   p.name.split("/").at(-1) === "omp" ||
   p.argv.slice(0, 2).some((arg) => OMP_EXECUTABLE.test(arg)) ||
   sourceOmpArgv(p.argv);
@@ -77,10 +82,11 @@ function readState(stateDir: string, id: string): PaneState | undefined {
   try {
     const state = JSON.parse(
       readFileSync(join(stateDir, "sessions", `${encodeURIComponent(id)}.json`), "utf8"),
-    ) as PaneState;
+    ) as Omit<PaneState, "role"> & { readonly role?: unknown };
+    const role = parseCatalyRole(state.role);
     if (
       state.paneId !== id ||
-      (state.role !== "dori" && state.role !== "lane") ||
+      role === undefined ||
       typeof state.sessionId !== "string" ||
       state.sessionId === "" ||
       !Number.isSafeInteger(state.pid) ||
@@ -95,7 +101,7 @@ function readState(stateDir: string, id: string): PaneState | undefined {
     ) {
       return undefined;
     }
-    return state;
+    return { ...state, role };
   } catch {
     return undefined;
   }
@@ -118,7 +124,7 @@ function under(table: readonly Proc[], pid: number, root: number): boolean {
 export async function withOmpState(exec: Exec, stateDir: string, id: string, probe: Probe): Promise<Probe> {
   if (probe.status === "gone") return probe;
   const state = readState(stateDir, id);
-  const omp = probe.agent === "omp" || probe.foreground?.some(ompProcess) === true;
+  const omp = probe.agent === "omp" || probe.foreground?.some(isOmpProcess) === true;
   const unknown = (): Probe => ({ ...probe, status: "unknown" });
   if (state === undefined) return omp && !probe.shellInFront ? unknown() : probe;
   if (probe.rootPid === undefined || !Number.isSafeInteger(probe.rootPid) || probe.rootPid <= 0) return unknown();
@@ -156,6 +162,8 @@ export async function withOmpState(exec: Exec, stateDir: string, id: string, pro
       (current.agentStatus === "idle" || current.agentStatus === "working")
         ? current.agentStatus
         : probe.status;
+    // The observation comes from the re-read record that passed every check above, so it names that record's session.
+    const native = readNativeObservation(current.native);
     return {
       ...probe,
       status: current.approvalPending ? "blocked" : status,
@@ -163,6 +171,9 @@ export async function withOmpState(exec: Exec, stateDir: string, id: string, pro
       sessionId: current.sessionId,
       ...(current.sessionFile === undefined ? {} : { sessionFile: current.sessionFile }),
       approvalPending: current.approvalPending,
+      ...(native === undefined
+        ? {}
+        : { native: { ...native, sessionId: current.sessionId, sessionStartedAt: current.startedAt } }),
     };
   } catch {
     return unknown();

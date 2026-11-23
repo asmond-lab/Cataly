@@ -19,15 +19,15 @@ export function automaticConfig(paths: ConsumerPaths): Record<string, unknown> {
 /** External native/ULW choices are deliberate compatibility contracts, not automatic-update targets. */
 export function automaticOverrides(paths: ConsumerPaths, config: Record<string, unknown>): boolean {
   if (
-    ["OMP_ULW_SRC", "OMP_ULW_REF", "OMP_ULW_REPO", "DORI_OMP", "DORI_AGENT_ARGV", "DORI_OMP_ULW_PATH"].some(
+    ["OMP_ULW_SRC", "OMP_ULW_REF", "OMP_ULW_REPO", "CATALY_OMP", "CATALY_AGENT_ARGV", "CATALY_OMP_ULW_PATH"].some(
       (name) => process.env[name] !== undefined,
     )
   )
     return true;
-  const configuredFile = process.env["DORI_CONFIG"];
+  const configuredFile = process.env["CATALY_CONFIG"];
   if (configuredFile !== undefined && resolve(configuredFile) !== paths.config) return true;
-  const commandOverride = process.env["DORI_AGENT_CMD"];
-  if (commandOverride !== undefined && commandOverride !== "omp" && commandOverride !== join(paths.dori, "bin/omp"))
+  const commandOverride = process.env["CATALY_AGENT_CMD"];
+  if (commandOverride !== undefined && commandOverride !== "omp" && commandOverride !== join(paths.cataly, "bin/omp"))
     return true;
   const ulw = config["ompUlwPath"];
   const path = typeof ulw === "string" && ulw.startsWith("~/") ? join(paths.home, ulw.slice(2)) : ulw;
@@ -42,7 +42,7 @@ export function automaticOverrides(paths: ConsumerPaths, config: Record<string, 
     command !== undefined &&
     (!Array.isArray(command) ||
       (command[0] !== "omp" &&
-        command[0] !== join(paths.dori, "bin/omp") &&
+        command[0] !== join(paths.cataly, "bin/omp") &&
         !(
           typeof command[0] === "string" &&
           /^[a-f0-9]{40}-[a-f0-9]{16}\/scripts\/consumer\/omp$/.test(relative(paths.releases, command[0]))
@@ -60,8 +60,8 @@ export async function verifyAutomaticInstallation(paths: ConsumerPaths, state: I
   }
   const source = verifyRelease(paths, state.current);
   if (state.previous) verifyRelease(paths, state.previous);
-  if (state.current.requirements.omp === "18.20.0") assertNativeSource(source, paths.home);
-  const suffix = state.current.requirements.omp === "18.20.0" ? `-${readSourceBundle(source).identity}` : "";
+  if (state.current.requirements.omp !== "18.18.8") assertNativeSource(source, paths.home);
+  const suffix = state.current.requirements.omp !== "18.18.8" ? `-${readSourceBundle(source).identity}` : "";
   const dependency = join(paths.dependencies, `omp-ulw-${state.current.ompUlw.commit}${suffix}`);
   realDirectory(dependency);
   if (!regularFile(join(dependency, "index.ts")))
@@ -74,8 +74,8 @@ export async function verifyAutomaticInstallation(paths: ConsumerPaths, state: I
 export function preflightAutomaticInstallation(paths: ConsumerPaths): void {
   preflightInstallation(paths);
   const config = automaticConfig(paths);
-  const states = new Set([join(paths.dori, "state")]);
-  for (const configured of [config["stateDir"], process.env["DORI_STATE_DIR"]]) {
+  const states = new Set([join(paths.cataly, "state")]);
+  for (const configured of [config["stateDir"], process.env["CATALY_STATE_DIR"]]) {
     if (configured === undefined) continue;
     if (typeof configured !== "string" || !configured) throw new Error("Invalid consumer state directory");
     states.add(resolve(configured.startsWith("~/") ? join(paths.home, configured.slice(2)) : configured));

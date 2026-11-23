@@ -37,7 +37,7 @@ it("owner content missing from frozen local input holds before any durable publi
   expect(result.job?.promotion?.problem).toContain("frozen public local source differs");
   expect(git(f.target, "rev-parse", "main")).toBe(owner);
   expect(git(f.target, "show", "main:owner-history.txt")).toBe("owner content must survive publication");
-  expect(git(f.target, "for-each-ref", "--format=%(refname)", "refs/heads/dori-update/")).toBe("");
+  expect(git(f.target, "for-each-ref", "--format=%(refname)", "refs/heads/cataly-update/")).toBe("");
   expect(result.job?.phase).toBe("ready");
   expect(result.job?.commands).toEqual(commands);
   expect(result.job?.review).toEqual(review);
@@ -74,7 +74,7 @@ describe("initial-source pin binding", () => {
       expect(result.job?.promotion?.status).toBe("held");
       expect(result.job?.promotion?.publication).toBeUndefined();
       expect(git(f.target, "rev-parse", "main")).toBe(f.expectedMain);
-      expect(git(f.target, "for-each-ref", "--format=%(refname)", "refs/heads/dori-update/")).toBe("");
+      expect(git(f.target, "for-each-ref", "--format=%(refname)", "refs/heads/cataly-update/")).toBe("");
       expect(readState(f.updater.context).baseline).toBeUndefined();
       expect(readState(f.updater.context).initialSourceJob).toBeUndefined();
     }
@@ -155,7 +155,7 @@ it.each(["pins", "kind"] as const)("initial-source resume rejects a changed dura
   await expect(publishRelease(f.updater.context, state, f.job, changed, () => {})).rejects.toThrow("publication basis");
   expect(readState(f.updater.context).initialSourceJob).toBe(f.job.id);
   expect(git(f.target, "rev-parse", "main")).toBe(f.expectedMain);
-  expect(git(f.target, "for-each-ref", "--format=%(refname)", "refs/heads/dori-update/")).toBe("");
+  expect(git(f.target, "for-each-ref", "--format=%(refname)", "refs/heads/cataly-update/")).toBe("");
 });
 
 it("a consumed initial-source exception stays bound to its original registered job", async () => {

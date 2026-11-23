@@ -1,6 +1,6 @@
 import { expect } from "bun:test";
 import { existsSync } from "node:fs";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { reportPreAction } from "../src/update/pre-action-notice.ts";
 import { publishRelease } from "../src/update/publish.ts";
 import { reportCandidate } from "../src/update/report.ts";
@@ -79,7 +79,7 @@ it.each(["accepted", "sending", "missing-exit", "different-intent"] as const)(
       retained.preActionNotices!["main-publication"] = { ...delivery, intentHash: "0".repeat(64) };
     }
     persistJob(retained);
-    const result = await new DoriUpdater(f.config, () => {}).once();
+    const result = await new CatalyUpdater(f.config, () => {}).once();
     expect(result.outcome).toBe(mode === "accepted" ? "promoted" : "held");
     expect(git(f.target, "rev-parse", "main")).toBe(
       mode === "accepted" ? retained.promotion!.publication!.commit! : f.expectedMain,
@@ -109,7 +109,7 @@ it.each(["failed", "ambiguous"] as const)(
     resumed.promotion!.status = "publishing";
     resumed.promotion!.publication!.status = "awaiting-ci";
     persistJob(resumed);
-    const repeated = await new DoriUpdater(f.config, () => {}).once();
+    const repeated = await new CatalyUpdater(f.config, () => {}).once();
     expect(repeated.outcome).toBe("held");
     expect(repeated.job!.preActionNotices!["main-publication"]!.state).toBe(mode);
     expect(git(f.target, "rev-parse", "main")).toBe(f.expectedMain);

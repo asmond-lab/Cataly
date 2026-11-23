@@ -2,25 +2,62 @@
 set -eu
 self=$0
 while [ -L "$self" ]; do
-  link=$(readlink "$self")
-  case $link in /*) self=$link ;; *) self=$(dirname "$self")/$link ;; esac
+  link=$(/usr/bin/readlink "$self")
+  case $self in */*) self_dir=${self%/*} ;; *) self_dir=. ;; esac
+  case $link in /*) self=$link ;; *) self=$self_dir/$link ;; esac
 done
-source=$(CDPATH= cd -- "$(dirname -- "$self")/../.." && pwd -P)
+case $self in */*) self_dir=${self%/*} ;; *) self_dir=. ;; esac
+source=$(CDPATH= cd -- "$self_dir/../.." && pwd -P)
 launch_cwd=$PWD
-mkdir -p "$HOME/.cache/omp-dori"
-guard=$(mktemp -d "$HOME/.cache/omp-dori/guard.XXXXXX")
-trap 'rmdir "$guard"' EXIT HUP INT TERM
+
+# Match consumerReleaseHome's physical layout, not cwd, alias name or inherited config.
+releases=${source%/*}
+id=${source##*/}
+commit=${id%-*}
+fingerprint=${id#*-}
+case $releases in
+  */releases/releases)
+    case $commit$fingerprint in
+      *[!0123456789abcdef]*) ;;
+      *)
+        if [ "${#commit}" -eq 40 ] && [ "${#fingerprint}" -eq 16 ]; then
+          consumer_home=${releases%/releases/releases}
+          consumer_config=$consumer_home/config.json
+          if [ "${CATALY_HOME-$consumer_home}" != "$consumer_home" ] || [ "${CATALY_CONFIG-$consumer_config}" != "$consumer_config" ]; then
+            unset CATALY_STATE_DIR CATALY_CMD CATALY_AGENT_CMD CATALY_AGENT_ARGV CATALY_OMP_ULW_PATH
+            unset CATALY_LEAD_PANE CATALY_HC_SPACE CATALY_PROMPTS_DIR
+          fi
+          if [ "${DORI_HOME-$consumer_home}" != "$consumer_home" ] || [ "${DORI_CONFIG-$consumer_config}" != "$consumer_config" ]; then
+            unset DORI_STATE_DIR DORI_CMD DORI_AGENT_CMD DORI_AGENT_ARGV DORI_OMP_ULW_PATH
+            unset DORI_LEAD_PANE DORI_HC_SPACE DORI_PROMPTS_DIR
+          fi
+          # A no-update fence survives conflicting context and either generation's environment import.
+          if [ "${CATALY_MANAGED_STARTUP:-}" = 1 ] || [ "${DORI_MANAGED_STARTUP:-}" = 1 ]; then
+            export CATALY_MANAGED_STARTUP=1 DORI_MANAGED_STARTUP=1
+          fi
+          # The next launcher may belong to the historical release after a source switch.
+          export CATALY_HOME="$consumer_home" CATALY_CONFIG="$consumer_config"
+          export DORI_HOME="$consumer_home" DORI_CONFIG="$consumer_config"
+        fi
+        ;;
+    esac
+    ;;
+esac
+
+/bin/mkdir -p "$HOME/.cache/omp-cataly"
+guard=$(/usr/bin/mktemp -d "$HOME/.cache/omp-cataly/guard.XXXXXX")
+trap '/bin/rmdir "$guard"' EXIT HUP INT TERM
 cd "$guard"
 selected=$(bun "$source/src/release/automatic.ts" "$source" "$HOME" "$$" "$@")
 if [ "$selected" != "$source" ]; then
   cd "$launch_cwd"
-  rmdir "$guard"
+  /bin/rmdir "$guard"
   trap - EXIT HUP INT TERM
   exec "$selected/scripts/consumer/omp" "$@"
 fi
 # This shell execs the launcher, so it holds the native cache lease for the whole session.
-omp=$(DORI_NATIVE_LEASE_PID=$$ bun "$source/scripts/source-dependencies.ts" consumer "$source" "$HOME")
+omp=$(CATALY_NATIVE_LEASE_PID=$$ bun "$source/scripts/source-dependencies.ts" consumer "$source" "$HOME")
 cd "$launch_cwd"
-rmdir "$guard"
+/bin/rmdir "$guard"
 trap - EXIT HUP INT TERM
 exec "$omp" "$@"

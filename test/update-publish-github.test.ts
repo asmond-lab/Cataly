@@ -12,7 +12,7 @@ function githubFixture(snapshots: readonly Record<string, unknown>[], wrongCheck
     status: "awaiting-ci",
     remote: "https://github.com/owner/repo.git",
     ref: "refs/heads/main",
-    branch: "refs/heads/dori-update/fixture",
+    branch: "refs/heads/cataly-update/fixture",
     expectedMain: "a".repeat(40),
     basis: { kind: "matched-main" },
     sourceHash: "c".repeat(64),
@@ -56,7 +56,7 @@ function githubFixture(snapshots: readonly Record<string, unknown>[], wrongCheck
   };
   publisher.pages = async (path) => {
     if (path.startsWith("repos/owner/repo/pulls?")) {
-      return [[{ number: 7, head: { ref: "dori-update/fixture" } }]];
+      return [[{ number: 7, head: { ref: "cataly-update/fixture" } }]];
     }
     if (path === `repos/owner/repo/commits/${record.commit}/check-runs?per_page=100`) {
       events.push("checks");

@@ -4,15 +4,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseDeploymentConfig } from "../src/update/deployment.ts";
 
+export type ForegroundFixtureOptions = {
+  activity?: boolean;
+  bunOnly?: boolean;
+  unknown?: boolean;
+  parentShell?: boolean;
+  rollback?: boolean;
+  paneShell?: boolean;
+  stoppable?: boolean;
+  subshell?: boolean;
+  transient?: boolean;
+};
+
 export function deploymentConfig(root: string) {
   return parseDeploymentConfig(
     {
       releaseRoot: "managed",
-      liveSource: "home/.dori/src",
+      liveSource: "home/.cataly/src",
       home: "home",
-      doriHome: "home/.dori",
-      doriConfig: "home/.dori/config.json",
-      stateDir: "home/.dori/state",
+      catalyHome: "home/.cataly",
+      catalyConfig: "home/.cataly/config.json",
+      stateDir: "home/.cataly/state",
       bun: "home/private-bun/bun",
       omp: "home/private-omp/omp",
       herdr: "home/private-cli/herdr",
@@ -20,8 +32,8 @@ export function deploymentConfig(root: string) {
       pane: "w1:p1",
       sessionId: "preserved-session",
       model: "openai-codex/gpt-6.1-sol",
-      restartLock: "home/.dori/restart.lock",
-      launcherPath: "home/.dori/bin/restart",
+      restartLock: "home/.cataly/restart.lock",
+      launcherPath: "home/.cataly/bin/restart",
       healthTimeoutMs: 100,
     },
     root,
@@ -33,24 +45,24 @@ afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 export function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "dori-deploy-files-"));
+  const root = mkdtempSync(join(tmpdir(), "cataly-deploy-files-"));
   directories.push(root);
   const config = parseDeploymentConfig(
     {
       releaseRoot: "releases",
-      liveSource: "home/.dori/src",
+      liveSource: "home/.cataly/src",
       home: "home",
-      doriHome: "home/.dori",
-      doriConfig: "home/.dori/config.json",
-      stateDir: "home/.dori/state",
+      catalyHome: "home/.cataly",
+      catalyConfig: "home/.cataly/config.json",
+      stateDir: "home/.cataly/state",
       bun: process.execPath,
       omp: process.execPath,
       herdr: process.execPath,
       pane: "w1:p1",
       sessionId: "preserved-session",
       model: "openai-codex/gpt-6.1-sol",
-      restartLock: "home/.dori/restart.lock",
-      launcherPath: "home/.dori/bin/managed-restart",
+      restartLock: "home/.cataly/restart.lock",
+      launcherPath: "home/.cataly/bin/managed-restart",
       healthTimeoutMs: 100,
       stopTimeoutMs: 100,
     },

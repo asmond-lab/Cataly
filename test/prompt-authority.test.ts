@@ -4,7 +4,7 @@ import { prompt } from "../src/harness.ts";
 
 describe("task scope and external-effect authority in delivered prompts", () => {
   test("the skill keeps investigation and review requests read-only", () => {
-    const skill = readFileSync(new URL("../skills/dori-mode/SKILL.md", import.meta.url), "utf8");
+    const skill = readFileSync(new URL("../skills/cataly-mode/SKILL.md", import.meta.url), "utf8");
     expect(skill).toContain(
       "Analysis-only and review-only requests authorize reading and a report, not implementation or publication.",
     );
@@ -19,17 +19,17 @@ describe("task scope and external-effect authority in delivered prompts", () => 
   });
 
   test("the lead requires authorization as well as exact-head review and green checks", () => {
-    const lead = prompt("lead.md", { dori: "dori" });
+    const lead = prompt("lead.md", { cataly: "cataly" });
     expect(lead).toContain("Analysis-only and review-only requests stay read-only.");
     expect(lead).toContain("If merging is explicitly authorized");
-    expect(lead).toContain("`dori merge <owner/repo#N>` (CLEAR review at the exact head + green checks)");
+    expect(lead).toContain("`cataly merge <owner/repo#N>` (CLEAR review at the exact head + green checks)");
     expect(lead).toContain("If merge authorization is absent, report the ready PR without merging it.");
     expect(lead).toContain("deployment, posting, spending or destructive actions");
     expect(lead).toContain("missing merge authorization alone does not hold lane closure");
   });
 
   test("lane and reviewer prompts do not turn readiness into authority", () => {
-    const lane = prompt("lane-footer.md", { key: "example", dori: "dori" });
+    const lane = prompt("lane-footer.md", { key: "example", cataly: "cataly" });
     expect(lane).toContain("Analysis-only and review-only requests stay read-only.");
     expect(lane).toContain("READY is evidence of work, not authorization for external effects.");
     expect(lane).toContain("Do not merge yourself");

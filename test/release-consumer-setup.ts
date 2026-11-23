@@ -27,12 +27,12 @@ const roots: string[] = [];
 const environmentKeys = [
   "HOME",
   "PATH",
-  "DORI_HOME",
-  "DORI_CONFIG",
-  "DORI_STATE_DIR",
-  "DORI_AGENT_CMD",
-  "DORI_AGENT_ARGV",
-  "DORI_OMP_ULW_PATH",
+  "CATALY_HOME",
+  "CATALY_CONFIG",
+  "CATALY_STATE_DIR",
+  "CATALY_AGENT_CMD",
+  "CATALY_AGENT_ARGV",
+  "CATALY_OMP_ULW_PATH",
 ];
 const environment = new Map<string, string | undefined>();
 afterEach(() => {
@@ -136,12 +136,12 @@ export function fixture(side = false, portable = side): ConsumerFixture {
     process.env["PATH"] = `${native}:${process.env["PATH"] ?? ""}`;
   }
   process.env["HOME"] = paths.home;
-  process.env["DORI_HOME"] = paths.dori;
-  process.env["DORI_CONFIG"] = paths.config;
-  process.env["DORI_STATE_DIR"] = join(paths.dori, "state");
-  delete process.env["DORI_AGENT_CMD"];
-  delete process.env["DORI_AGENT_ARGV"];
-  delete process.env["DORI_OMP_ULW_PATH"];
+  process.env["CATALY_HOME"] = paths.dori;
+  process.env["CATALY_CONFIG"] = paths.config;
+  process.env["CATALY_STATE_DIR"] = join(paths.dori, "state");
+  delete process.env["CATALY_AGENT_CMD"];
+  delete process.env["CATALY_AGENT_ARGV"];
+  delete process.env["CATALY_OMP_ULW_PATH"];
   initialize(paths);
   const dependency = join(root, "public-dependency-fixture");
   mkdirSync(dependency, { mode: 0o700 });

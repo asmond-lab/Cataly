@@ -4,9 +4,9 @@ import { dutyTick } from "./duty.ts";
 import type { Deps } from "./harness.ts";
 import { Refusal } from "./refusal.ts";
 import { HOUR, loopTick, msUntilNext, summary } from "./loop.ts";
-import { acquire, release } from "./loop-lock.ts";
+import { controllerLease, type LoopLifecycle } from "./loop-controller.ts";
 
-export async function runDuty(d: Deps, a: Args, x: string | undefined): Promise<number> {
+export async function runDuty(d: Deps, a: Args, x: string | undefined, lifecycle?: LoopLifecycle): Promise<number> {
   if (x === "stop") {
     d.store.setStop(d.now(), one(a, "text") ?? "stopped by hand", "duty");
     console.log("DUTY STOPPED");
@@ -27,24 +27,24 @@ export async function runDuty(d: Deps, a: Args, x: string | undefined): Promise<
   // Bun.sleep(NaN) and any Bun.sleep under 1 ms return at once, so a bad value would run duty passes back to back.
   if (!(Number.isFinite(interval) && interval >= 1))
     throw new Refusal("--interval must be a number of seconds, 0.001 or more");
-  // One duty loop per home: two would deliver the same inbox twice and nudge every lane twice.
-  const lock = d.store.lockPath("duty");
-  const held = acquire(d, lock);
-  if ("holder" in held) throw new Refusal(`another duty loop runs in this home (${held.holder})`);
+  const once = one(a, "once") === "true";
+  const lease = controllerLease(d, { role: "duty-loop", once, token: one(a, "controller-handoff"), lifecycle });
   try {
-    for (;;) {
-      for (const e of await dutyTick(d))
+    while (await lease.beforePass()) {
+      const events = await dutyTick(d);
+      if (lifecycle) console.log(`DUTY pass events=${events.length}`);
+      for (const e of events)
         console.log(`DUTY ${[e.lane ?? e.pane, e.action].filter(Boolean).join(" ")}${e.detail ? `: ${e.detail}` : ""}`);
-      if (one(a, "once")) break;
-      await Bun.sleep(interval);
+      if (once) break;
+      await lease.waitForPass(interval);
     }
   } finally {
-    release(d, held.nonce, lock);
+    lease.close();
   }
   return 0;
 }
 
-export async function runLoop(d: Deps, a: Args, x: string | undefined): Promise<number> {
+export async function runLoop(d: Deps, a: Args, x: string | undefined, lifecycle?: LoopLifecycle): Promise<number> {
   if (x === "stop") {
     d.store.setStop(d.now(), one(a, "text") ?? "stopped by hand");
     console.log("LOOP STOPPED");
@@ -71,11 +71,11 @@ export async function runLoop(d: Deps, a: Args, x: string | undefined): Promise<
   const interval = Number(one(a, "interval") ?? String(HOUR / 1000)) * 1000;
   const opts = {
     interval,
-    maxLanes: Number(one(a, "max-lanes") ?? process.env["DORI_MAX_LANES"] ?? "3"),
-    maxStarts: Number(one(a, "max-starts") ?? process.env["DORI_MAX_STARTS"] ?? "2"),
+    maxLanes: Number(one(a, "max-lanes") ?? process.env["CATALY_MAX_LANES"] ?? "3"),
+    maxStarts: Number(one(a, "max-starts") ?? process.env["CATALY_MAX_STARTS"] ?? "2"),
     force: one(a, "force") === "true",
-    ...((one(a, "max-load") ?? process.env["DORI_MAX_LOAD"])
-      ? { maxLoad: Number(one(a, "max-load") ?? process.env["DORI_MAX_LOAD"]) }
+    ...((one(a, "max-load") ?? process.env["CATALY_MAX_LOAD"])
+      ? { maxLoad: Number(one(a, "max-load") ?? process.env["CATALY_MAX_LOAD"]) }
       : {}),
   };
   const count = (n: number): boolean => Number.isInteger(n) && n >= 0;
@@ -89,21 +89,27 @@ export async function runLoop(d: Deps, a: Args, x: string | undefined): Promise<
       "--interval and --max-load must be finite positive numbers; --max-lanes and --max-starts whole numbers >= 0",
     );
   }
-  for (;;) {
-    try {
-      const run = await loopTick(d, opts);
-      console.log(
-        run.skipped
-          ? `LOOP skipped: ${run.skipped}`
-          : `LOOP started=${run.started.length} findings=${run.findings.length} asked=${run.asked.length}`,
-      );
-    } catch (e) {
-      console.error(`LOOP ERROR ${e instanceof Error ? e.message : String(e)}`);
-      if (one(a, "once")) return 1;
+  const once = one(a, "once") === "true";
+  const lease = controllerLease(d, { role: "hourly-loop", once, token: one(a, "controller-handoff"), lifecycle });
+  try {
+    while (await lease.beforePass()) {
+      try {
+        const run = await loopTick(d, opts);
+        console.log(
+          run.skipped
+            ? `LOOP skipped: ${run.skipped}`
+            : `LOOP started=${run.started.length} findings=${run.findings.length} asked=${run.asked.length}`,
+        );
+      } catch (e) {
+        console.error(`LOOP ERROR ${e instanceof Error ? e.message : String(e)}`);
+        if (once) return 1;
+      }
+      if (once) break;
+      opts.force = false;
+      await lease.waitForPass(msUntilNext(d, interval));
     }
-    if (one(a, "once")) break;
-    opts.force = false;
-    await Bun.sleep(msUntilNext(d, interval));
+  } finally {
+    lease.close();
   }
   return 0;
 }
@@ -140,7 +146,7 @@ export async function runBacklog(d: Deps, a: Args, x: string | undefined): Promi
     const { added, capped } = await backlogImport(
       d,
       need(a.pos[2], "owner/repo"),
-      one(a, "label") ?? "dori",
+      one(a, "label") ?? "cataly",
       one(a, "cwd"),
     );
     console.log(`IMPORTED ${added.length}${added.length ? `: ${added.join(", ")}` : ""}`);

@@ -139,7 +139,7 @@ describe("full references through the herdr consumer", () => {
     async (mode, schema) => {
       const legacy = schema === "legacy";
       const s = await referenceLane(mode);
-      const previous = process.env["DORI_PROMPTS_DIR"];
+      const previous = process.env["CATALY_PROMPTS_DIR"];
       try {
         const target = join(s.d.store.root, `${"\uB300\uAE30  deploy ".repeat(10)}receipt.json`);
         expect(Bun.stringWidth(target)).toBeGreaterThan(120);
@@ -165,7 +165,7 @@ describe("full references through the herdr consumer", () => {
           const dir = join(s.d.store.root, "old-prompts");
           mkdirSync(dir);
           writeFileSync(join(dir, "nudge-waiting.md"), "[custom {{key}}] Waiting on {{target}} since {{waitingSince}}");
-          process.env["DORI_PROMPTS_DIR"] = dir;
+          process.env["CATALY_PROMPTS_DIR"] = dir;
         }
         s.w.clock = s.lane.createdAt + 10 * MIN;
         expect(await dutyTick(s.d)).toContainEqual({ lane: "references", action: "nudge-1" });
@@ -190,8 +190,8 @@ describe("full references through the herdr consumer", () => {
         ]);
         expect(s.calls().filter((a) => a[1] === "send-text")).toHaveLength(mode === "typed fallback" ? 4 : 0);
       } finally {
-        if (previous === undefined) delete process.env["DORI_PROMPTS_DIR"];
-        else process.env["DORI_PROMPTS_DIR"] = previous;
+        if (previous === undefined) delete process.env["CATALY_PROMPTS_DIR"];
+        else process.env["CATALY_PROMPTS_DIR"] = previous;
         rmSync(s.d.store.root, { recursive: true });
       }
     },

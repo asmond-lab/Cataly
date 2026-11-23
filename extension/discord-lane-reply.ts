@@ -1,4 +1,4 @@
-import { splitForDiscord } from "../skills/dori-mode/scripts/src/messenger/split.ts";
+import { splitForDiscord } from "../skills/cataly-mode/scripts/src/messenger/split.ts";
 
 export type NativeDelivery = { readonly prompt: string; readonly after: string | null };
 

@@ -15,7 +15,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 function fixture() {
-  const root = fs.realpathSync(fs.mkdtempSync(join(tmpdir(), "dori-setup-files-")));
+  const root = fs.realpathSync(fs.mkdtempSync(join(tmpdir(), "cataly-setup-files-")));
   roots.push(root);
   return { root, path: join(root, "config.json") };
 }

@@ -2,7 +2,7 @@ import { expect, spyOn } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { UpdateError } from "../src/update/config.ts";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { pendingPromotion } from "../src/update/promotion.ts";
 import { PublicationProcess } from "../src/update/publish-process.ts";
 import { reportCandidate } from "../src/update/report.ts";
@@ -144,7 +144,7 @@ it.each(["blocked", "missing", "pending", "unavailable", "legacy"] as const)(
         };
       }
       clock.mockReturnValue(Date.parse(window.startedAt) + timeout / 2);
-      const resumed = (await new DoriUpdater(f.config, (event) => f.events.push(event)).once()).job!;
+      const resumed = (await new CatalyUpdater(f.config, (event) => f.events.push(event)).once()).job!;
       expect(resumed.promotion?.publication?.ciWait).toEqual(window);
       expect(resumed.promotion?.publication?.status).toBe("awaiting-ci");
       expect(resumed.promotion?.status).toBe("publishing");
@@ -156,7 +156,7 @@ it.each(["blocked", "missing", "pending", "unavailable", "legacy"] as const)(
       const apiReads = boundary.api.mock.calls.length;
       const gitOperations = boundary.transport.mock.calls.length;
       clock.mockReturnValue(Date.parse(window.deadlineAt));
-      const expired = await new DoriUpdater(f.config, (event) => f.events.push(event)).once();
+      const expired = await new CatalyUpdater(f.config, (event) => f.events.push(event)).once();
       const held = expired.job!;
       expect(expired.outcome).toBe("held");
       expect(held.promotion).toMatchObject({
@@ -188,14 +188,14 @@ it.each(["blocked", "missing", "pending", "unavailable", "legacy"] as const)(
       clock.mockImplementation(originalNow);
       const retained = readFileSync(join(f.job.directory, "job.json"), "utf8");
       for (let cycle = 0; cycle < 2; cycle++) {
-        expect((await new DoriUpdater(f.config, () => {}).once()).outcome).toBe("duplicate");
+        expect((await new CatalyUpdater(f.config, () => {}).once()).outcome).toBe("duplicate");
         expect(readFileSync(join(f.job.directory, "job.json"), "utf8")).toBe(retained);
       }
       f.write(f.remote, "src/behavior.ts", "export const behavior = 3;\n");
       git(f.remote, "add", ".");
       git(f.remote, "commit", "-m", "New upstream after expired publication CI wait");
       const upstream = git(f.remote, "rev-parse", "HEAD");
-      const next = await new DoriUpdater(f.config, () => {}).once();
+      const next = await new CatalyUpdater(f.config, () => {}).once();
       expect(next.job?.upstream).toBe(upstream);
       expect(next.job?.id).not.toBe(f.job.id);
       expect(next.job?.phase).toBe("failed");

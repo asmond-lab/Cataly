@@ -18,7 +18,7 @@ posix.each(["normalization", "recovery"] as const)(
   async (scenario) => {
     const f = fixture(true);
     const bound = boundRelease(f, "managed-command-env");
-    for (const path of ["src", "skills/dori-mode/scripts/src", "package.json"])
+    for (const path of ["src", "skills/cataly-mode/scripts/src", "package.json"])
       cpSync(resolve(import.meta.dir, "..", path), join(bound.source, path), { recursive: true });
     const source = sourceManifest(bound.source);
     const bytes = archive(
@@ -45,7 +45,7 @@ posix.each(["normalization", "recovery"] as const)(
       "--config",
       join(f.paths.root, "consumer-discovery", basename(release), "omp.yml"),
     ];
-    const suffix = ["--dori-role", "lane", "--model", "{model}", "--", "{prompt}"];
+    const suffix = ["--cataly-role", "lane", "--model", "{model}", "--", "{prompt}"];
     writeFileSync(f.paths.config, JSON.stringify({ agentCommand: ["omp", ...suffix] }));
     const selected = [...expected, "--owner-option", ""];
     const payload = {
@@ -76,7 +76,7 @@ const { captureSetupFile } = await import(join(release, "src/setup-files.ts"));
 const readback = () => setupReadback(captureSetupFile(config), "consumer-updater-reader", { path: config, home });
 const mode = process.argv[4];
 if (mode === "recovery") {
-  delete process.env.DORI_AGENT_CMD;
+  delete process.env.CATALY_AGENT_CMD;
   writeFileSync(config, JSON.stringify({ runtime: "herdr", agentCommand: ["omp", ...suffix] }));
   const dependency = dirname((await loadConfig(config, home)).ompUlwPath);
   renameSync(dependency, dependency + ".held-by-fixture");
@@ -104,13 +104,13 @@ if (mode === "recovery") {
   const normalized = await readback();
   assert.equal(normalized.effective, "selected");
   assert.deepEqual(normalized.overridden, []);
-  for (const role of ["dori", "lane"])
-    assert.equal(agentCommand(defaultDeps(), role), expectedCommand + " --dori-role " + role);
-  delete process.env.DORI_AGENT_CMD;
+  for (const role of ["cataly", "lane"])
+    assert.equal(agentCommand(defaultDeps(), role), expectedCommand + " --cataly-role " + role);
+  delete process.env.CATALY_AGENT_CMD;
   writeFileSync(config, JSON.stringify({ agentCommand: [managed, ...suffix] }));
   assert.deepEqual((await loadConfig(config, home)).agentCommand, [...expected, ...suffix]);
-  process.env.DORI_AGENT_ARGV = JSON.stringify(selected);
-  process.env.DORI_AGENT_CMD = "touch ignored-legacy-command";
+  process.env.CATALY_AGENT_ARGV = JSON.stringify(selected);
+  process.env.CATALY_AGENT_CMD = "touch ignored-legacy-command";
   for (const first of ["omp", managed]) {
     writeFileSync(config, JSON.stringify({ agentCommand: [first, ...suffix] }));
     assert.deepEqual((await loadConfig(config, home)).agentCommand, [...selected, ...suffix]);
@@ -121,17 +121,17 @@ if (mode === "recovery") {
   assert.equal(defaultDeps().agentCmd, selectedCommand);
   writeFileSync(config, JSON.stringify({ agentCommand: [custom, ...suffix] }));
   assert.deepEqual((await loadConfig(config, home)).agentCommand, [custom, ...suffix]);
-  delete process.env.DORI_AGENT_ARGV;
-  process.env.DORI_AGENT_CMD = managed;
+  delete process.env.CATALY_AGENT_ARGV;
+  process.env.CATALY_AGENT_CMD = managed;
   assert.deepEqual((await loadConfig(config, home)).agentCommand, [custom, ...suffix]);
   writeFileSync(config, JSON.stringify({ agentCommand: ["omp", ...suffix] }));
   for (const legacy of [custom, "env CUSTOM='owner value' custom-agent --flag"]) {
-    process.env.DORI_AGENT_CMD = legacy;
+    process.env.CATALY_AGENT_CMD = legacy;
     assert.equal(defaultDeps().agentCmd, legacy);
     assert.deepEqual((await loadConfig(config, home)).agentCommand, [legacy, ...suffix]);
   }
   for (const raw of ["not json", "null", "{}", "[]", '["", "arg"]', '["omp", 1]', '"omp"']) {
-    process.env.DORI_AGENT_ARGV = raw;
+    process.env.CATALY_AGENT_ARGV = raw;
     assert.throws(() => defaultDeps().agentCmd);
     await assert.rejects(loadConfig(config, home));
   }
@@ -144,7 +144,7 @@ console.log(JSON.stringify({ mode, checked: true }));
           process.execPath,
           "-e",
           probe,
-          join(release, "skills/dori-mode/scripts/src/config.ts"),
+          join(release, "skills/cataly-mode/scripts/src/config.ts"),
           join(release, "src/harness.ts"),
           JSON.stringify(payload),
           mode,
@@ -155,10 +155,10 @@ console.log(JSON.stringify({ mode, checked: true }));
           env: {
             HOME: mode === "foreign-home" ? join(f.root, "foreign-home") : f.paths.home,
             PATH: process.env["PATH"],
-            DORI_HOME: f.paths.dori,
-            DORI_CONFIG: f.paths.config,
-            DORI_AGENT_CMD: managed,
-            DORI_TELEMETRY: "0",
+            CATALY_HOME: f.paths.dori,
+            CATALY_CONFIG: f.paths.config,
+            CATALY_AGENT_CMD: managed,
+            CATALY_TELEMETRY: "0",
           },
         },
       );

@@ -39,10 +39,10 @@ export async function enforceReviewTools(api: Pick<GuardApi, "getActiveTools" | 
 
 /** Loaded explicitly by this controller only; no role/ULW/global extension discovery or SDK dependency. */
 export default function installReviewerGuard(api: GuardApi): void {
-  const path = process.env["DORI_UPDATE_REVIEW_SCOPE"];
-  const nonce = process.env["DORI_UPDATE_REVIEW_NONCE"];
-  const job = process.env["DORI_UPDATE_REVIEW_JOB"];
-  const sourceHash = process.env["DORI_UPDATE_REVIEW_SOURCE"];
+  const path = process.env["CATALY_UPDATE_REVIEW_SCOPE"];
+  const nonce = process.env["CATALY_UPDATE_REVIEW_NONCE"];
+  const job = process.env["CATALY_UPDATE_REVIEW_JOB"];
+  const sourceHash = process.env["CATALY_UPDATE_REVIEW_SOURCE"];
   if (!path || !nonce || !job || !sourceHash) process.exit(70);
   const stages = new Set<string>();
   const blocked: string[] = [];
@@ -65,7 +65,7 @@ export default function installReviewerGuard(api: GuardApi): void {
   };
   const halt = (): never => {
     // Hook exceptions may be caught by the host. End our own child before any unproven request proceeds.
-    process.stderr.write("DORI_UPDATE_REVIEW_SCOPE_FAILED\n");
+    process.stderr.write("CATALY_UPDATE_REVIEW_SCOPE_FAILED\n");
     process.exit(70);
   };
   const guard =

@@ -7,7 +7,7 @@ import { assertNativeSource, nativeDirectory } from "../src/release/native.ts";
 import { assertSourceBundle, readSourceBundle } from "../src/release/source-bundle.ts";
 import { provisionSourceOverlay } from "../src/release/source-checkout.ts";
 import { validateReleaseManifest } from "../src/release/manifest.ts";
-import { carryDoriPin, digest, sourceManifest } from "../src/update/source.ts";
+import { carryCatalyPin, digest, sourceManifest } from "../src/update/source.ts";
 import { releaseFixture } from "./release-producer-setup.ts";
 import { fixtureGit, nativeCacheFixture, overlayFixture } from "./source-bundle-setup.ts";
 import { posix, setup } from "./install-setup.ts";
@@ -17,7 +17,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 function fixture(native = false) {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "dori-source-bundle-")));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "cataly-source-bundle-")));
   roots.push(root);
   return { root, ...overlayFixture(join(root, "bundle"), join(root, "upstream"), native) };
 }
@@ -98,10 +98,10 @@ posix.each(["primary", "side"])(
     const s = setup();
     const native = overlayFixture(s.src, join(s.root, "native-upstream"), true);
     const receipt = nativeCacheFixture(s.src, s.home, native.checkout);
-    const result = s.install({ DORI_INSTALL_MODE: mode, DORI_OMP: "", DORI_NO_PULL: "1" });
+    const result = s.install({ CATALY_INSTALL_MODE: mode, CATALY_OMP: "", CATALY_NO_PULL: "1" });
     if (result.code !== 0) console.error(result.out, result.err);
     expect(result.code).toBe(0);
-    const base = join(s.home, mode === "side" ? ".omp-dori" : ".dori");
+    const base = join(s.home, mode === "side" ? ".omp-cataly" : ".cataly");
     const config = JSON.parse(readFileSync(join(base, "config.json"), "utf8"));
     expect(config.agentCommand[0]).toBe(join(base, "bin/omp"));
     expect(readFileSync(join(base, "bin/omp"), "utf8")).toContain(receipt.omp);
@@ -192,13 +192,13 @@ posix("Git failures name the command, exit code and stderr", () => {
   );
 });
 
-posix("a Dori-only port carries native and ULW payloads as frozen source dependencies", () => {
+posix("a Cataly-only port carries native and ULW payloads as frozen source dependencies", () => {
   const f = fixture(true);
   overlayFixture(f.source, join(f.root, "ulw-upstream"));
   nativeCacheFixture(f.source, join(f.root, "home"), f.checkout);
   const candidate = join(f.root, "candidate");
   mkdirSync(candidate);
-  carryDoriPin(f.source, candidate, sourceManifest(f.source));
+  carryCatalyPin(f.source, candidate, sourceManifest(f.source));
   for (const path of [
     "native-omp.lock",
     "native-omp.patch",

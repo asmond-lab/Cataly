@@ -16,7 +16,18 @@ const MIN = 60_000;
  * the next write to an inbox, whichever store method makes it.
  */
 function dieOnce(d: Deps, method: "saveLane" | "queue"): void {
-  const names = method === "queue" ? (["enqueue", "enqueueOnce"] as const) : ([method] as const);
+  if (method === "saveLane") {
+    const withCurrent = d.store.withCurrentLane.bind(d.store);
+    d.store.withCurrentLane = (key, fn) =>
+      withCurrent(key, (current) =>
+        fn(current, () => {
+          d.store.withCurrentLane = withCurrent;
+          throw new Error("killed at lane write");
+        }),
+      );
+    return;
+  }
+  const names = ["enqueue", "enqueueOnce"] as const;
   let armed = true;
   for (const name of names) {
     const real = (d.store as unknown as Record<string, ((...a: never[]) => unknown) | undefined>)[name]?.bind(d.store);
@@ -160,11 +171,11 @@ describe("duty notices survive queue and settlement retries", () => {
     const { d, at, pane } = await quietLane();
     const dir = join(d.store.root, "own-prompts");
     mkdirSync(join(dir, "nudge.md"), { recursive: true });
-    process.env["DORI_PROMPTS_DIR"] = dir;
+    process.env["CATALY_PROMPTS_DIR"] = dir;
     try {
       expect((await at(10)).map((e) => e.action)).toContain("lane-failed");
     } finally {
-      delete process.env["DORI_PROMPTS_DIR"];
+      delete process.env["CATALY_PROMPTS_DIR"];
     }
     expect(d.store.lane("talker")!.nudges).toBe(0);
     expect(pane.received.filter((m) => m.includes("[duty -> talker]"))).toEqual([]);

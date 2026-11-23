@@ -9,12 +9,12 @@ export function verifyQuiesceCheckpoint(
   record: DeploymentRecord,
   runtime: RuntimeIdentity,
 ): void {
-  if (!config.quiesceCheckpointFile) throw new DeploymentBusy("native Dori is busy; waiting for its idle boundary");
+  if (!config.quiesceCheckpointFile) throw new DeploymentBusy("native Cataly is busy; waiting for its idle boundary");
   const consumed = `${config.quiesceCheckpointFile}.consumed-${record.id}`;
   const path =
     record.quiesceHash && lstatSync(consumed, { throwIfNoEntry: false }) ? consumed : config.quiesceCheckpointFile;
   const stat = lstatSync(path, { throwIfNoEntry: false });
-  if (!stat) throw new DeploymentBusy("native Dori is busy; waiting for its explicit quiesce checkpoint");
+  if (!stat) throw new DeploymentBusy("native Cataly is busy; waiting for its explicit quiesce checkpoint");
   if (
     !stat.isFile() ||
     stat.isSymbolicLink() ||

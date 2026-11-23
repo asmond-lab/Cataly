@@ -1,9 +1,9 @@
-# OMP Dori source-candidate recipe; build from the candidate root. See docs/container.md.
-# Ubuntu, not Alpine: bun and herdr need glibc.
+# Cataly source-candidate recipe; build from the candidate root. See docs/container.md.
+# Ubuntu, not Alpine: the pinned Bun assets need glibc.
 FROM ubuntu:24.04
 
 # Binary assets are sha256-verified. Top-level npm packages have exact versions.
-# Dori comes from this build context; native OMP and omp-ulw consume its bound upstream source/overlay locks.
+# Cataly comes from this build context; native OMP and omp-ulw consume its bound upstream source/overlay locks.
 # This recipe has not been built as part of the source port.
 # Builds for linux/amd64 and linux/arm64; TARGETARCH is set by the builder.
 ARG TARGETARCH
@@ -21,8 +21,8 @@ ARG AGENT_MESSENGER_VERSION=2.40.0
 ARG GH_VERSION=2.100.0
 ARG GH_SHA256_AMD64=698c8d88cc19cc92bfe96bad58d10b2a5b274c52433d6dc57799c81f6139d5fc
 ARG GH_SHA256_ARM64=33ccd2ad7ce639c927e1cb209e36555b0e1fbb89f7a38239c0568040ec758612
-# HC=1 installs hc (herdr-core) in place of herdr: the harness finds the one runtime on PATH.
-ARG HC=0
+# Optional terminal tooling for adapter QA: none, hc (herdr-core), or herdr.
+ARG TERMINAL_BACKEND=none
 ARG HC_VERSION=0.1.18
 ARG HC_SHA256_AMD64=5b2f97cb4b2a9d7a6b2cc5942628203ed9fbb7cc0c2b4b09ad8a6f5648e246b7
 ARG HC_SHA256_ARM64=cf33393cf950bb763734dc3e16610ab9daf8492391a4ef0de56026cd7f752853
@@ -33,7 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git unzip jq ripgrep procps openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-# gh, node, bun, and herdr or hc: pinned per-arch assets, each sha256-verified
+# gh, node, bun and optional terminal tooling: pinned per-arch assets, each sha256-verified.
 RUN set -eu; \
     case "${TARGETARCH}" in \
       amd64) NODE_ASSET=x64;    HERDR_ASSET=x86_64;  BUN_ASSET=x64;    GH_ASSET=amd64; \
@@ -59,18 +59,21 @@ RUN set -eu; \
     && echo "${BUN_SHA256}  /tmp/bun.zip" | sha256sum -c - \
     && unzip -j -o /tmp/bun.zip "*/bun" -d /usr/local/bin && rm /tmp/bun.zip \
     && chmod +x /usr/local/bin/bun && ln -sf /usr/local/bin/bun /usr/local/bin/bunx && \
-    if [ "${HC}" = 1 ]; then \
-      curl -fsSL -o /tmp/hc.tar.gz \
-        "https://releases.herdr.dev/core/${HC_VERSION}/herdr-core-linux-${HERDR_ASSET}.tar.gz" \
-      && echo "${HC_SHA256}  /tmp/hc.tar.gz" | sha256sum -c - \
-      && tar -xz -C /usr/local/bin -f /tmp/hc.tar.gz herdr-core && rm /tmp/hc.tar.gz \
-      && chmod +x /usr/local/bin/herdr-core && ln -sf herdr-core /usr/local/bin/hc; \
-    else \
-      curl -fsSL -o /usr/local/bin/herdr \
-        "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-${HERDR_ASSET}" \
-      && echo "${HERDR_SHA256}  /usr/local/bin/herdr" | sha256sum -c - \
-      && chmod +x /usr/local/bin/herdr; \
-    fi
+    case "${TERMINAL_BACKEND}" in \
+      none) ;; \
+      hc) \
+        curl -fsSL -o /tmp/hc.tar.gz \
+          "https://releases.herdr.dev/core/${HC_VERSION}/herdr-core-linux-${HERDR_ASSET}.tar.gz" \
+        && echo "${HC_SHA256}  /tmp/hc.tar.gz" | sha256sum -c - \
+        && tar -xz -C /usr/local/bin -f /tmp/hc.tar.gz herdr-core && rm /tmp/hc.tar.gz \
+        && chmod +x /usr/local/bin/herdr-core && ln -sf herdr-core /usr/local/bin/hc ;; \
+      herdr) \
+        curl -fsSL -o /usr/local/bin/herdr \
+          "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-${HERDR_ASSET}" \
+        && echo "${HERDR_SHA256}  /usr/local/bin/herdr" | sha256sum -c - \
+        && chmod +x /usr/local/bin/herdr ;; \
+      *) echo "unsupported TERMINAL_BACKEND: ${TERMINAL_BACKEND}" >&2; exit 1 ;; \
+    esac
 
 # bun global packages install their launchers into $BUN_INSTALL/bin
 ENV BUN_INSTALL=/usr/local
@@ -79,41 +82,37 @@ ENV BUN_INSTALL=/usr/local
 RUN bun install -g agent-messenger@${AGENT_MESSENGER_VERSION}
 
 # .dockerignore admits source inputs only; no host state, credentials or node_modules.
-COPY . /opt/omp-dori
+COPY . /opt/omp-cataly
 RUN set -eu; \
-    bun install --frozen-lockfile --cwd /opt/omp-dori \
-    && bun install --frozen-lockfile --cwd /opt/omp-dori/skills/dori-mode/scripts \
-    && bun install --frozen-lockfile --cwd /opt/omp-dori/extension \
-    && printf '#!/bin/sh\nexec bun /opt/omp-dori/skills/dori-mode/scripts/src/cli.ts "$@"\n' > /usr/local/bin/dori \
-    && printf '#!/bin/sh\nexec bun /opt/omp-dori/src/cli.ts "$@"\n' > /usr/local/bin/dori-harness \
-    && chmod +x /usr/local/bin/dori /usr/local/bin/dori-harness
-RUN ln -s /opt/omp-dori/scripts/consumer/omp /usr/local/bin/omp
+    bun install --frozen-lockfile --cwd /opt/omp-cataly \
+    && bun install --frozen-lockfile --cwd /opt/omp-cataly/skills/cataly-mode/scripts \
+    && bun install --frozen-lockfile --cwd /opt/omp-cataly/extension \
+    && printf '#!/bin/sh\nexec bun /opt/omp-cataly/skills/cataly-mode/scripts/src/cli.ts "$@"\n' > /usr/local/bin/cataly \
+    && printf '#!/bin/sh\nexec bun /opt/omp-cataly/src/cli.ts "$@"\n' > /usr/local/bin/cataly-harness \
+    && chmod +x /usr/local/bin/cataly /usr/local/bin/cataly-harness
+RUN ln -s /opt/omp-cataly/scripts/consumer/omp /usr/local/bin/omp
 
 # run as a normal user; all state lives in the volumes named in compose.yaml
-# the state dirs are pre-created with dori ownership so fresh named volumes inherit it
-# with HC=1, hc's config gets notes = false: hc types nothing into a parent agent on its own
-RUN useradd -m -s /bin/bash dori \
-    && mkdir -p /home/dori/projects /home/dori/.dori /home/dori/.omp/agent/extensions \
-      /home/dori/.agents/skills /home/dori/.config/gh /home/dori/.config/agent-messenger \
-    && ln -s /opt/omp-dori/skills/dori-mode /home/dori/.agents/skills/dori-mode \
-    && ln -s /opt/omp-dori/extension /home/dori/.omp/agent/extensions/omp-dori \
-    && if [ "${HC}" = 1 ]; then \
-         mkdir -p /home/dori/.config/herdr-core \
-         && echo 'notes = false' > /home/dori/.config/herdr-core/config.toml; \
+# the state dirs are pre-created with cataly ownership so fresh named volumes inherit it
+# If hc was requested, notes = false prevents it from typing into a parent agent on its own.
+RUN useradd -m -s /bin/bash cataly \
+    && mkdir -p /home/cataly/projects /home/cataly/.cataly /home/cataly/.omp/agent/extensions \
+      /home/cataly/.agents/skills /home/cataly/.config/gh /home/cataly/.config/agent-messenger \
+    && ln -s /opt/omp-cataly/skills/cataly-mode /home/cataly/.agents/skills/cataly-mode \
+    && ln -s /opt/omp-cataly/extension /home/cataly/.omp/agent/extensions/omp-cataly \
+    && if [ "${TERMINAL_BACKEND}" = hc ]; then \
+         mkdir -p /home/cataly/.config/herdr-core \
+         && echo 'notes = false' > /home/cataly/.config/herdr-core/config.toml; \
        fi \
-    && chown -R dori:dori /home/dori /opt/omp-dori
+    && chown -R cataly:cataly /home/cataly /opt/omp-cataly
 
-USER dori
-WORKDIR /home/dori
-ENV HOME=/home/dori DORI_TELEMETRY=0
+USER cataly
+WORKDIR /home/cataly
+ENV HOME=/home/cataly CATALY_TELEMETRY=0
 RUN set -eu; \
-    bun /opt/omp-dori/scripts/source-dependencies.ts native /opt/omp-dori /home/dori >/dev/null; \
-    ulw="$(bun /opt/omp-dori/scripts/source-dependencies.ts ulw /opt/omp-dori /home/dori)"; \
-    ln -s "$ulw" /home/dori/.dori/omp-ulw
+    bun /opt/omp-cataly/scripts/source-dependencies.ts native /opt/omp-cataly /home/cataly >/dev/null; \
+    ulw="$(bun /opt/omp-cataly/scripts/source-dependencies.ts ulw /opt/omp-cataly /home/cataly)"; \
+    ln -s "$ulw" /home/cataly/.cataly/omp-ulw
 
-# the runtime's server hosts the sessions; the entrypoint starts it (herdr: nohup, so it
-# survives the exec into the container command; hc: `hc server start` runs in the background)
-COPY examples/container/entrypoint.sh /usr/local/bin/entrypoint.sh
-ENTRYPOINT ["/bin/sh", "/usr/local/bin/entrypoint.sh"]
-# stay up without a terminal attached; the TTY comes from `docker exec -it`
+# The image starts no runtime server or session. Interactive commands can use docker compose exec.
 CMD ["sleep", "infinity"]

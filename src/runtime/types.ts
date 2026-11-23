@@ -1,5 +1,11 @@
-export type RuntimeKind = "herdr" | "hc";
-/** One session as its runtime addresses it. `group`: the herdr workspace id or the hc dori.group label. `container`: the herdr tab id (absent on hc). */
+import type { ProbedNativeObservation } from "../native-observation.ts";
+
+export type TerminalRuntimeKind = "herdr" | "hc" | "tern";
+export type RuntimeKind = TerminalRuntimeKind | "headless";
+/**
+ * One session as its runtime addresses it. `group`: the herdr workspace id, the hc cataly.group label or the Tern session
+ * id. `container`: the herdr or Tern tab id (absent on hc).
+ */
 export type SessionRef = {
   readonly runtime: RuntimeKind;
   readonly id: string;
@@ -34,6 +40,7 @@ export type Probe = {
   readonly sessionId?: string;
   readonly sessionFile?: string;
   readonly approvalPending?: boolean;
+  readonly native?: ProbedNativeObservation;
   readonly shellInFront: boolean;
   readonly foreground?: readonly ForegroundProcess[];
 };
@@ -49,7 +56,9 @@ export type SessionRole = "lead" | "duty" | "duty-loop" | "hourly-loop" | "lane"
 /**
  * Where the session is created. herdr: "workspace-root" = `workspace create` (the root pane is the session; the new workspace id
  * becomes the ref's group); "tab" = `tab create` in `group` (no --workspace when group is absent); "split-below" = `pane split`
- * below `near`. hc ignores the container kind: one labelled terminal running the user's shell with `env` set.
+ * below `near`. hc ignores the container kind: one labelled terminal running the user's shell with `env` set. tern:
+ * "workspace-root" = `new session`, "tab" = `new tab` in the `group` session (else the caller's own), "split-below" =
+ * `split <near> down`.
  */
 export type CreateSpec = {
   readonly name: string;
@@ -62,7 +71,7 @@ export type CreateSpec = {
 };
 export type DeliverWhen = "idle" | "working" | "any";
 /** `when`: hc uses --if idle / --if working / no gate for "any"; unknown and shell never receive agent delivery.
- * `force`: hc may type into a blocked agent, but an OMP tool approval always holds delivery on either runtime. */
+ * `force`: hc may type into a blocked agent, but OMP tool approvals always hold delivery. */
 export type DeliverOptions = {
   readonly when?: DeliverWhen;
   readonly force?: boolean;
@@ -84,40 +93,58 @@ export type CloseScope = "session" | "container";
 export type ReadOptions = { readonly unwrapped?: boolean };
 /** `foregroundOnly`: hc skips the observational screen check; herdr already samples foreground after its screen check. */
 export type ProbeOptions = { readonly foregroundOnly?: boolean };
-export interface SessionRuntime {
+interface SessionOperations {
   readonly kind: RuntimeKind;
-  /** The caller's own session from the runtime's env (HERDR_PANE_ID + HERDR_WORKSPACE_ID / HC_TERMINAL_ID), or undefined. */
+  /** The caller's own session from the runtime's env (HERDR_PANE_ID + HERDR_WORKSPACE_ID / HC_TERMINAL_ID / TERN_PANE), or undefined. */
   self(): SessionRef | undefined;
-  /** herdr: `workspace create --label <label> --cwd <cwd> --no-focus` -> the workspace id (its root pane is left as is, as today). hc: returns `label` unchanged, no call. */
-  createGroup(label: string, cwd: string): Promise<string>;
-  /** A session with the user's shell in it and nothing started. */
+  /** Allocates a session address before its agent starts: an idle shell for a terminal or a native lane reservation. */
   create(spec: CreateSpec): Promise<SessionRef>;
-  /** herdr: `pane run <id> <command>`. hc: `send <id> <command>` into the shell (no --if: a shell reports no status). */
-  start(ref: SessionRef, command: string): Promise<void>;
   list(filter?: { readonly group?: string }): Promise<readonly SessionInfo[]>;
   probe(ref: SessionRef, opts?: ProbeOptions): Promise<Probe>;
-  /** herdr: `pane read --source recent` (`recent-unwrapped` when unwrapped). hc: `read`; unwrapped joins rows as wide as the terminal's `cols`. */
+  /** Reads recent terminal output or native conversation observations. */
   read(ref: SessionRef, lines: number, opts?: ReadOptions): Promise<string>;
-  /** Never types into a session whose probe says shellInFront, whatever `status` says. Default `when` = "idle". */
+  /** Agent delivery never types into a shell. Default `when` = "idle". */
   deliver(ref: SessionRef, text: string, opts?: DeliverOptions): Promise<DeliverOutcome>;
+  /** Closes the session by default; terminal runtimes may also close its container. tern: `close <id>` for both scopes. */
+  close(ref: SessionRef, scope?: CloseScope, expectedSessionId?: string): Promise<void>;
+}
+
+export interface TerminalRuntime extends SessionOperations {
+  readonly kind: TerminalRuntimeKind;
+  /** herdr creates an unfocused workspace and returns its id; hc returns the group label unchanged. */
+  createGroup(label: string, cwd: string): Promise<string>;
+  /** herdr: `pane run <id> <command>`. hc: `send <id> <command>` into the shell (no --if: a shell reports no status). */
+  start(ref: SessionRef, command: string): Promise<void>;
   submitTyped(ref: SessionRef, into: AgentIdentity): Promise<SubmitResult>;
   typeIntoShell(ref: SessionRef, text: string): Promise<boolean>;
   keys(ref: SessionRef, keys: readonly Key[]): Promise<void>;
-  /** herdr: "session" = `pane close <id>`; "container" = `tab close <ref.container>` (pane close when the ref has no container). hc: kill then rm for both. Default "session". */
-  close(ref: SessionRef, scope?: CloseScope): Promise<void>;
 }
+
+export interface NativeSessionRuntime extends SessionOperations {
+  readonly kind: "headless";
+}
+
+export type SessionRuntime = TerminalRuntime | NativeSessionRuntime;
 
 /** Id shape of a bare ref: only a herdr pane `w<ws>:p<pane>` may appear without its prefix. */
 const BARE_HERDR = /^w[0-9A-Za-z]+:p[0-9A-Za-z]+$/;
 /**
  * Id shape after each prefix: a herdr pane, or a local hc terminal address. hc numbers terminals in base 36 (`t7`,
- * `t1b`, `t2h`). Another machine's `<machine>/<address>` is not a ref: the id names the session's inbox file.
+ * `t1b`, `t2h`); Tern numbers blocks in decimal. Another machine's `<machine>/<address>` is not a ref: the id names the
+ * session's inbox file.
  */
 const HC_ADDRESS = /^t[0-9a-z]+$/;
-const ID_SHAPES: Readonly<Record<RuntimeKind, RegExp>> = { herdr: BARE_HERDR, hc: HC_ADDRESS };
+export const HEADLESS_ADDRESS = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
+const TERN_BLOCK = /^[0-9]+$/;
+const ID_SHAPES: Readonly<Record<RuntimeKind, RegExp>> = {
+  herdr: BARE_HERDR,
+  hc: HC_ADDRESS,
+  tern: TERN_BLOCK,
+  headless: HEADLESS_ADDRESS,
+};
 const KINDS = Object.keys(ID_SHAPES) as RuntimeKind[];
 
-/** "herdr:w1:p3", "hc:t7", bare "w1:p3" (herdr). A bare "t7" is NOT a ref (it is a legal lane key); undefined otherwise. */
+/** "herdr:w1:p3", "hc:t7", "tern:42", bare "w1:p3" (herdr). A bare "t7" or "42" is NOT a ref (both are legal lane keys); undefined otherwise. */
 export const parseRef: (text: string) => SessionRef | undefined = (text) => {
   for (const runtime of KINDS) {
     if (!text.startsWith(`${runtime}:`)) continue;
@@ -131,7 +158,7 @@ export const formatRef: (ref: SessionRef) => string = (ref) => `${ref.runtime}:$
  * create + start in one call (the root harness path). A start that fails closes the session create just made (scope
  * "session"), so no idle shell is left behind, and rethrows the start error; a close that fails too is one stderr line.
  */
-export const openSession: (rt: SessionRuntime, spec: CreateSpec, command: string) => Promise<SessionRef> = async (
+export const openSession: (rt: TerminalRuntime, spec: CreateSpec, command: string) => Promise<SessionRef> = async (
   rt,
   spec,
   command,
@@ -142,7 +169,7 @@ export const openSession: (rt: SessionRuntime, spec: CreateSpec, command: string
   } catch (e) {
     await rt.close(ref, "session").catch((closeError: unknown) => {
       const why = closeError instanceof Error ? closeError.message : String(closeError);
-      process.stderr.write(`dori: could not close ${formatRef(ref)} after its start failed (${why})\n`);
+      process.stderr.write(`cataly: could not close ${formatRef(ref)} after its start failed (${why})\n`);
     });
     throw e;
   }

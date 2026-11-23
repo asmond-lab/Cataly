@@ -17,7 +17,7 @@ type CacheOptions = {
 const UNREADABLE = /^unreadable (?:working directory|open files) of process (\d+@\d+) /;
 
 /**
- * `dori update cache`: the report by default, which removes nothing and lists the processes `--trust-process` could
+ * `cataly update cache`: the report by default, which removes nothing and lists the processes `--trust-process` could
  * name (`trustable`), the privileged ones `--trust-root-cwd` lets pass as a whole (`privileged`) and what waits
  * (`pending`: quarantined copies, interrupted work). `--prune` quarantines or restores; only an explicit
  * `--delete-quarantined` also removes eligible copies. Both scan default, selected, loaded and configured homes and
@@ -36,12 +36,14 @@ export function runCacheCommand(paths: ConsumerPaths, options: CacheOptions, ins
   const roots = [
     ...new Set(
       [
+        join(paths.home, ".cataly"),
+        join(paths.home, ".omp-cataly"),
         join(paths.home, ".dori"),
         join(paths.home, ".omp-dori"),
-        paths.dori,
+        paths.cataly,
         installedHome,
-        process.env["DORI_HOME"],
-        process.env["OMP_DORI_HOME"],
+        process.env["CATALY_HOME"],
+        process.env["OMP_CATALY_HOME"],
         ...(options.reference ?? []),
       ]
         .filter((path): path is string => Boolean(path))

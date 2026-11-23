@@ -1,4 +1,4 @@
-// The prefixes Dori reads before a configured command. Parsing a launcher or package runner does not establish
+// The prefixes Cataly reads before a configured command. Parsing a launcher or package runner does not establish
 // PID preservation; automated native updates separately refuse prefixes that may fork.
 export const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 // GNU env's long options: those that take a separate operand when written without `=`, and those that take none.

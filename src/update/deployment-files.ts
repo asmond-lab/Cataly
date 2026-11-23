@@ -114,7 +114,7 @@ export function capturePointer(path: string, target: string, id: string): Pointe
         ...(stat.isSymbolicLink() ? { target: readlinkSync(path) } : {}),
       }
     : undefined;
-  const prefix = join(dirname(path), `.${basename(path)}.dori-${id}`);
+  const prefix = join(dirname(path), `.${basename(path)}.cataly-${id}`);
   if (
     lstatSync(`${prefix}.previous`, { throwIfNoEntry: false }) ||
     lstatSync(`${prefix}.failed`, { throwIfNoEntry: false })

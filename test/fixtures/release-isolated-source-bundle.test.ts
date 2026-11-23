@@ -9,9 +9,10 @@ import { readSourceBundle } from "../../src/release/source-bundle.ts";
 import { recoverInstalled, releasePath } from "../../src/release/state.ts";
 import { fixture } from "../release-consumer-setup.ts";
 import { boundRelease } from "../release-native-recovery-setup.ts";
+import { isPolicyLaneCommand } from "../../skills/cataly-mode/scripts/src/lane-policy-launch.ts";
 
 // Only the parent test enables this fixture with a real tools-only startup environment.
-const tools = process.env["DORI_TEST_ISOLATED_SOURCE_BUNDLE"];
+const tools = process.env["CATALY_TEST_ISOLATED_SOURCE_BUNDLE"];
 if (tools !== undefined) {
   // These real Git/receipt fixtures exercise source admission, not a loadable native addon or provider session.
   test("isolated source releases need no stock OMP and bind both native and ULW defaults to the loaded release", async () => {
@@ -32,28 +33,36 @@ if (tools !== undefined) {
     const receipt = join(f.paths.manifests, `${basename(sourceOne)}.json`);
     const metadata = readFileSync(receipt);
     saveJson(receipt, { ...one.current, requirements: { ...one.current.requirements, omp: "18.18.8" } });
-    const inconsistent = Bun.spawnSync(["/bin/bash", join(f.paths.dori, "bin/omp"), "--version"], {
+    const inconsistent = Bun.spawnSync(["/bin/bash", join(f.paths.cataly, "bin/omp"), "--version"], {
       env: { HOME: f.paths.home, PATH: tools },
     });
     expect(inconsistent.exitCode).not.toBe(0);
     expect(inconsistent.stderr.toString()).toContain("Unsupported or inconsistent consumer native protocol");
     expect(inconsistent.stdout.toString()).toBe("");
     writeFileSync(receipt, metadata);
-    expect(JSON.parse(config.toString()).agentCommand[0]).toBe(join(f.paths.dori, "bin/omp"));
-    expect(lstatSync(join(f.paths.dori, "bin/omp")).isSymbolicLink()).toBe(false);
+    expect(JSON.parse(config.toString()).agentCommand[0]).toBe(join(f.paths.cataly, "bin/omp"));
+    expect(lstatSync(join(f.paths.cataly, "bin/omp")).isSymbolicLink()).toBe(false);
     const command = (sourceRoot: string) =>
-      resolveConsumerOmpCommand([join(f.paths.dori, "bin/omp"), "{prompt}"], { home: f.paths.home, sourceRoot });
+      resolveConsumerOmpCommand([join(f.paths.cataly, "bin/omp"), "{prompt}"], { home: f.paths.home, sourceRoot });
     expect(command(sourceOne)).toEqual([
       join(sourceOne, "scripts/consumer/omp"),
       "--no-extensions",
       "-e",
       join(sourceOne, "extension"),
       "--config",
-      join(f.paths.dori, "omp.yml"),
+      join(f.paths.cataly, "omp.yml"),
       "--config",
       join(f.paths.root, "consumer-discovery", basename(sourceOne), "omp.yml"),
       "{prompt}",
     ]);
+    expect(
+      isPolicyLaneCommand(
+        resolveConsumerOmpCommand(
+          [join(f.paths.cataly, "bin/omp"), "--cataly-role", "lane", "{prompt}"],
+          { home: f.paths.home, sourceRoot: sourceOne },
+        ),
+      ),
+    ).toBe(true);
     const dependency = (sourceRoot: string) => {
       const { lock, identity } = readSourceBundle(sourceRoot);
       return join(f.paths.dependencies, `omp-ulw-${lock.commit}-${identity}`, "index.ts");

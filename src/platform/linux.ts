@@ -136,9 +136,10 @@ export function linuxAdapter(root = PROC, libc: () => PidfdLibc = libcPidfd): Pl
     flockLibrary: () => "libc.so.6",
     syncDirectory,
 
-    defaultRuntime: () => "herdr",
+    legacyReleaseRuntime: () => "herdr",
 
-    supportsReleaseProfile: (platform, arch, runtime) => platform === "linux" && arch === "x64" && runtime === "herdr",
+    supportsReleaseProfile: (platform, arch, runtime) =>
+      platform === "linux" && arch === "x64" && (runtime === "headless" || runtime === "herdr"),
 
     nativeCacheLabel: () => `native-linux-${process.arch}`,
     programName: (word) => word.split("/").at(-1) ?? "",

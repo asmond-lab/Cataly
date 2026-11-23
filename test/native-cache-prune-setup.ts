@@ -51,11 +51,11 @@ export type PruneFixture = {
  * source is removed unless kept, so only what a test adds uses it.
  * `prune` has no grace period unless a test sets one, so a second prune asked to remove (`deleteQuarantined`) removes
  * what the first quarantined. It sees
- * only the fixture's processes: the host's unreadable or privileged processes and its Dori writers (other
+ * only the fixture's processes: the host's unreadable or privileged processes and its Cataly writers (other
  * lanes' launches) stay out unless a test passes its own reader or process table.
  */
 export function pruneFixture(files = ownProcessFiles): PruneFixture {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "dori-native-prune-")));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "cataly-native-prune-")));
   roots.push(root);
   const home = join(root, "home");
   const refs = join(root, "refs");

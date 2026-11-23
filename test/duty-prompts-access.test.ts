@@ -9,11 +9,16 @@ posix.each(["nudge.md", "nudge-waiting.md"])(
   "an inaccessible %s override fails before consuming a nudge; a missing file still uses the built-in",
   async (name) => {
     // /tmp stays traversable when a root runner drops privileges in the isolated child.
-    const root = mkdtempSync("/tmp/dori-prompts-access-");
+    const root = mkdtempSync("/tmp/cataly-prompts-access-");
     try {
       chmodSync(root, 0o755);
       for (const dir of ["src", "prompts"]) {
         cpSync(join(import.meta.dir, "..", dir), join(root, dir), { recursive: true });
+      }
+      const compat = join("skills", "cataly-mode", "scripts", "src");
+      mkdirSync(join(root, compat), { recursive: true });
+      for (const file of ["checkpoint-lock.ts", "session-compat.ts"]) {
+        cpSync(join(import.meta.dir, "..", compat, file), join(root, compat, file));
       }
       cpSync(join(import.meta.dir, "..", "package.json"), join(root, "package.json"));
       mkdirSync(join(root, "test"));
@@ -51,7 +56,7 @@ writeFileSync(own, "custom nudge {{key}}");
 const existed = existsSync(own);
 const inbox = d.store.inboxPath(lane.sessionRef);
 const before = d.store.lane("talker");
-process.env["DORI_PROMPTS_DIR"] = dir;
+process.env["CATALY_PROMPTS_DIR"] = dir;
 try {
   chmodSync(dir, 0o600);
   const hidden = !existsSync(own);
@@ -88,7 +93,7 @@ try {
         ],
         {
           cwd: root,
-          env: { ...process.env, TMPDIR: work, DORI_PROMPTS_DIR: join(root, "prompts") },
+          env: { ...process.env, TMPDIR: work, CATALY_PROMPTS_DIR: join(root, "prompts") },
           stdout: "pipe",
           stderr: "pipe",
         },

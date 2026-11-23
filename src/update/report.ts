@@ -65,7 +65,7 @@ export function candidateReport(ctx: UpdateContext, job: UpdateJob) {
         : null;
   return {
     version: 1,
-    target: "dori",
+    target: "cataly",
     candidateOnly: !published,
     ready: job.phase === "ready" && sourceProblem === null,
     sourceCurrent: job.phase === "ready" ? sourceProblem === null : null,
@@ -142,8 +142,8 @@ export async function reportCandidate(ctx: UpdateContext, job: UpdateJob): Promi
         : "candidate";
   if (job.promotion ? job.promotion.notifications?.[outcome] !== undefined : job.notification !== undefined) return;
   ctx.emit({
-    type: "DORI_UPDATE",
-    target: "dori",
+    type: "CATALY_UPDATE",
+    target: "cataly",
     event: outcome,
     job: job.id,
     phase: job.phase,
@@ -156,8 +156,8 @@ export async function reportCandidate(ctx: UpdateContext, job: UpdateJob): Promi
   persistJob(job);
   persistReport(ctx, job);
   const text = JSON.stringify({
-    type: "DORI_UPDATE",
-    target: "dori",
+    type: "CATALY_UPDATE",
+    target: "cataly",
     candidateOnly: report.candidateOnly,
     outcome,
     published: report.published,
@@ -193,8 +193,8 @@ export async function reportCandidate(ctx: UpdateContext, job: UpdateJob): Promi
   } catch {
     job.notification = deliveryOf(job.commands.length > before ? job.commands.at(-1) : undefined);
     ctx.emit({
-      type: "DORI_UPDATE",
-      target: "dori",
+      type: "CATALY_UPDATE",
+      target: "cataly",
       event: "report-delivery-held",
       job: job.id,
       phase: job.phase,

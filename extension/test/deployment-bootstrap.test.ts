@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { lstatSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readPaneState } from "../../skills/dori-mode/scripts/src/lane-state.ts";
+import { readPaneState } from "../../skills/cataly-mode/scripts/src/lane-state.ts";
 import { processIdentity } from "../../src/update/deployment-process.ts";
 import type { RuntimeHealth } from "../../src/update/deployment-types.ts";
 import { type FakePi, load, until, useConfig } from "./fake-pi.ts";
@@ -12,7 +12,7 @@ const posix = test.skipIf(process.platform !== "linux" && process.platform !== "
 
 const previousPane = process.env.HERDR_PANE_ID;
 const previousTerminal = process.env.HC_TERMINAL_ID;
-const previousManagedStartup = process.env.DORI_MANAGED_STARTUP;
+const previousManagedStartup = process.env.CATALY_MANAGED_STARTUP;
 const sessions: FakePi[] = [];
 afterEach(async () => {
   for (const session of sessions.splice(0)) await session.emit("session_shutdown");
@@ -20,8 +20,8 @@ afterEach(async () => {
   else process.env.HERDR_PANE_ID = previousPane;
   if (previousTerminal === undefined) delete process.env.HC_TERMINAL_ID;
   else process.env.HC_TERMINAL_ID = previousTerminal;
-  if (previousManagedStartup === undefined) delete process.env.DORI_MANAGED_STARTUP;
-  else process.env.DORI_MANAGED_STARTUP = previousManagedStartup;
+  if (previousManagedStartup === undefined) delete process.env.CATALY_MANAGED_STARTUP;
+  else process.env.CATALY_MANAGED_STARTUP = previousManagedStartup;
 });
 function fixture(sessionId = "legacy-session") {
   const stateDir = useConfig(join(import.meta.dir, "fake-ulw.ts"));
@@ -67,12 +67,12 @@ posix(
         },
       ],
     };
-    const first = await load({ session, flags: { "dori-role": "dori", "dori-monitor-bootstrap": f.bootstrap } });
+    const first = await load({ session, flags: { "cataly-role": "cataly", "dori-monitor-bootstrap": f.bootstrap } });
     sessions.push(first);
     await first.emit("session_start");
     await until(() => JSON.parse(readFileSync(f.healthPath, "utf8")).monitors.length === 1);
     const health = JSON.parse(readFileSync(f.healthPath, "utf8")) as RuntimeHealth;
-    expect(health).toMatchObject({ role: "dori", paneId: "w1:p7", pid: process.pid, sessionId: session.id });
+    expect(health).toMatchObject({ role: "cataly", paneId: "w1:p7", pid: process.pid, sessionId: session.id });
     expect(health.presetLoaded).toBe(true);
     expect(health.monitors[0]).toMatchObject(f.monitor);
     expect(processIdentity(health.monitors[0]!.pid)?.startTicks).toBe(health.monitors[0]!.startTicks);
@@ -102,12 +102,12 @@ posix("ordinary bootstrap replaces legacy monitors and restores real children wi
     entries: [
       {
         type: "custom",
-        customType: "omp-dori:monitor",
+        customType: "omp-cataly:monitor",
         data: { op: "start", ...f.monitor, name: "incompatible-legacy", argv: ["missing-command-fixture"] },
       },
     ],
   };
-  const first = await load({ session, flags: { "dori-role": "dori", "dori-monitor-bootstrap": f.bootstrap } });
+  const first = await load({ session, flags: { "cataly-role": "cataly", "cataly-monitor-bootstrap": f.bootstrap } });
   sessions.push(first);
   await first.emit("session_start");
   const listed = (await run(first, { op: "list" })).content[0]?.text ?? "";
@@ -118,7 +118,7 @@ posix("ordinary bootstrap replaces legacy monitors and restores real children wi
   const metadata = join(f.stateDir, "monitors", `${session.id}.json`);
   expect(JSON.parse(readFileSync(metadata, "utf8"))).toMatchObject({ monitors: [f.monitor], intake: f.intake });
   const health = JSON.parse(readFileSync(f.healthPath, "utf8")) as RuntimeHealth;
-  expect(health).toMatchObject({ role: "dori", paneId: "w1:p7", pid: process.pid, sessionId: session.id });
+  expect(health).toMatchObject({ role: "cataly", paneId: "w1:p7", pid: process.pid, sessionId: session.id });
   expect(health.presetLoaded).toBe(true);
   expect(health.monitors.map(({ name, pid }) => [name, pid])).toEqual([[f.monitor.name, oldPid]]);
   await first.emit("session_shutdown");
@@ -140,95 +140,107 @@ posix("ordinary bootstrap replaces legacy monitors and restores real children wi
 posix("a consumed bootstrap never resurrects an explicitly stopped monitor", async () => {
   const f = fixture();
   const session = { id: "legacy-session", entries: [] };
-  const dori = await load({ session, flags: { "dori-role": "dori", "dori-monitor-bootstrap": f.bootstrap } });
-  sessions.push(dori);
-  await dori.emit("session_start");
-  await run(dori, { op: "stop", name: "inbound" });
-  await dori.emit("session_start");
-  expect((await run(dori, { op: "list" })).content[0]?.text).toBe("no monitors running");
+  const cataly = await load({ session, flags: { "cataly-role": "cataly", "cataly-monitor-bootstrap": f.bootstrap } });
+  sessions.push(cataly);
+  await cataly.emit("session_start");
+  await run(cataly, { op: "stop", name: "inbound" });
+  await cataly.emit("session_start");
+  expect((await run(cataly, { op: "list" })).content[0]?.text).toBe("no monitors running or recorded");
   expect(JSON.parse(readFileSync(join(f.stateDir, "monitors", "legacy-session.json"), "utf8")).monitors).toEqual([]);
 });
 
 // POSIX-only: the rejected bootstrap is read through the product's mode and owner-uid check.
 posix("a bootstrap bound to another native session launches nothing", async () => {
   const f = fixture("different-session");
-  const dori = await load({
+  const cataly = await load({
     session: { id: "legacy-session", entries: [] },
     flags: {
-      "dori-role": "dori",
-      "dori-monitor-bootstrap": f.bootstrap,
+      "cataly-role": "cataly",
+      "cataly-monitor-bootstrap": f.bootstrap,
     },
   });
-  sessions.push(dori);
-  await expect(dori.emit("session_start")).rejects.toThrow("session or version");
+  sessions.push(cataly);
+  await expect(cataly.emit("session_start")).rejects.toThrow("session or version");
   expect(lstatSync(f.healthPath, { throwIfNoEntry: false })).toBeUndefined();
 });
 
 // POSIX-only: the rejected bootstrap is read through the product's mode and owner-uid check.
 posix("a rejected bootstrap leaves no half-initialized role session publishing pane state", async () => {
   const f = fixture("different-session");
-  const dori = await load({
+  const cataly = await load({
     session: { id: "legacy-session", entries: [] },
-    flags: { "dori-role": "dori", "dori-monitor-bootstrap": f.bootstrap },
+    flags: { "cataly-role": "cataly", "cataly-monitor-bootstrap": f.bootstrap },
   });
-  sessions.push(dori);
-  await expect(dori.emit("session_start")).rejects.toThrow("session or version");
-  await dori.emit("agent_start");
-  await dori.emit("tool_approval_requested", { type: "tool_approval_requested", toolCallId: "pending" });
-  await dori.emit("goal_updated", { goal: { objective: "work", status: "active" } });
+  sessions.push(cataly);
+  await expect(cataly.emit("session_start")).rejects.toThrow("session or version");
+  await cataly.emit("agent_start");
+  await cataly.emit("tool_approval_requested", {
+    type: "tool_approval_requested",
+    sessionId: cataly.session.id,
+    toolName: "bash",
+    approvalMode: "always-ask",
+    toolCallId: "pending",
+  });
+  await cataly.emit("goal_updated", { goal: { objective: "work", status: "active" } });
   expect(readPaneState(f.stateDir, "w1:p7")).toBeNull();
   // A tree or branch move in the rejected session finds no recorded role to restore.
-  await dori.emit("session_tree");
-  await dori.emit("session_branch");
-  await dori.emit("agent_start");
+  await cataly.emit("session_tree");
+  await cataly.emit("session_branch");
+  await cataly.emit("agent_start");
   expect(readPaneState(f.stateDir, "w1:p7")).toBeNull();
-  expect(dori.session.entries.filter((e) => e.type === "custom" && e.customType === "omp-dori:role")).toEqual([]);
-  expect(dori.handlers.get("session_shutdown")?.length ?? 0).toBeGreaterThan(0);
-  await dori.emit("session_shutdown");
+  expect(cataly.session.entries).toEqual([]);
+  expect(cataly.handlers.get("session_shutdown")?.length ?? 0).toBeGreaterThan(0);
+  await cataly.emit("session_shutdown");
   expect(readPaneState(f.stateDir, "w1:p7")).toBeNull();
   expect(lstatSync(f.healthPath, { throwIfNoEntry: false })).toBeUndefined();
 });
 
 // POSIX-only: the rejected bootstrap is read through the product's mode and owner-uid check.
 posix(
-  "a resumed Dori session whose bootstrap is rejected does not get its recorded role back on a tree move",
+  "a resumed Cataly session whose bootstrap is rejected does not get its recorded role back on a tree move",
   async () => {
     const f = fixture("different-session");
-    const dori = await load({
-      session: { id: "legacy-session", entries: [{ type: "custom", customType: "omp-dori:role", data: "dori" }] },
-      flags: { "dori-monitor-bootstrap": f.bootstrap },
+    const cataly = await load({
+      session: { id: "legacy-session", entries: [{ type: "custom", customType: "omp-cataly:role", data: "cataly" }] },
+      flags: { "cataly-monitor-bootstrap": f.bootstrap },
     });
-    sessions.push(dori);
-    await expect(dori.emit("session_start")).rejects.toThrow("session or version");
-    await dori.emit("session_tree");
-    await dori.emit("session_branch");
-    await dori.emit("agent_start");
-    await dori.emit("tool_approval_requested", { type: "tool_approval_requested", toolCallId: "pending" });
+    sessions.push(cataly);
+    await expect(cataly.emit("session_start")).rejects.toThrow("session or version");
+    await cataly.emit("session_tree");
+    await cataly.emit("session_branch");
+    await cataly.emit("agent_start");
+    await cataly.emit("tool_approval_requested", {
+      type: "tool_approval_requested",
+      toolCallId: "pending",
+      sessionId: cataly.session.id,
+      toolName: "bash",
+      approvalMode: "always-ask",
+    });
     expect(readPaneState(f.stateDir, "w1:p7")).toBeNull();
   },
 );
 
 test("branch movement replaces a changed specification under the same monitor name", async () => {
   const f = fixture();
-  const dori = await load({ session: { id: "legacy-session", entries: [] }, flags: { "dori-role": "dori" } });
-  sessions.push(dori);
-  await dori.emit("session_start");
+  const cataly = await load({ session: { id: "legacy-session", entries: [] }, flags: { "cataly-role": "cataly" } });
+  sessions.push(cataly);
+  await cataly.emit("session_start");
   const sleeping = (milliseconds: number) => [process.execPath, "-e", `await Bun.sleep(${milliseconds})`];
   const replacement = sleeping(61_000);
-  await run(dori, { op: "start", name: "inbound", argv: sleeping(60_000), filter: "." });
-  const before = (await run(dori, { op: "list" })).content[0]?.text ?? "";
+  await run(cataly, { op: "start", name: "inbound", argv: sleeping(60_000), filter: "." });
+  const before = (await run(cataly, { op: "list" })).content[0]?.text ?? "";
   const oldPid = Number(/pid (\d+)/.exec(before)?.[1]);
   expect(alive(oldPid)).toBe(true);
-  dori.api.appendEntry("omp-dori:monitor", {
+  cataly.api.appendEntry("omp-cataly:monitor", {
     op: "start",
     name: "inbound",
     argv: replacement,
     filter: "^changed",
     cwd: tmpdir(),
   });
-  await dori.emit("session_tree");
+  await cataly.emit("session_tree");
   await until(() => !alive(oldPid));
-  const after = (await run(dori, { op: "list" })).content[0]?.text ?? "";
+  const after = (await run(cataly, { op: "list" })).content[0]?.text ?? "";
   const newPid = Number(/pid (\d+)/.exec(after)?.[1]);
   expect(alive(newPid)).toBe(true);
   expect(newPid).not.toBe(oldPid);
@@ -241,14 +253,14 @@ test("branch movement replaces a changed specification under the same monitor na
 
 test("a managed initial restore reports failure without starting model work, then ordinary restore keeps its repair behavior", async () => {
   const f = fixture();
-  process.env.DORI_MANAGED_STARTUP = "1";
-  const dori = await load({
+  process.env.CATALY_MANAGED_STARTUP = "1";
+  const cataly = await load({
     session: {
       id: "legacy-session",
       entries: [
         {
           type: "custom",
-          customType: "omp-dori:monitor",
+          customType: "omp-cataly:monitor",
           data: {
             op: "start",
             name: "failed-intake",
@@ -259,14 +271,14 @@ test("a managed initial restore reports failure without starting model work, the
         },
       ],
     },
-    flags: { "dori-role": "dori" },
+    flags: { "cataly-role": "cataly" },
   });
-  sessions.push(dori);
-  await dori.emit("session_start");
-  expect(dori.messages.at(-1)?.options).toMatchObject({ triggerTurn: false });
+  sessions.push(cataly);
+  await cataly.emit("session_start");
+  expect(cataly.messages.at(-1)?.options).toMatchObject({ triggerTurn: false });
   expect((JSON.parse(readFileSync(f.healthPath, "utf8")) as RuntimeHealth).monitors).toEqual([]);
-  await dori.emit("session_tree");
-  expect(dori.messages.at(-1)?.options).toMatchObject({ triggerTurn: true });
+  await cataly.emit("session_tree");
+  expect(cataly.messages.at(-1)?.options).toMatchObject({ triggerTurn: true });
 });
 
 test("role health records a failed preset load even when role and PID metadata exist", async () => {
@@ -278,11 +290,11 @@ test("role health records a failed preset load even when role and PID metadata e
       ompUlwPath: join(f.stateDir, "absent-preset.ts"),
     }),
   );
-  const dori = await load({ session: { id: "legacy-session", entries: [] }, flags: { "dori-role": "dori" } });
-  sessions.push(dori);
-  await dori.emit("session_start");
+  const cataly = await load({ session: { id: "legacy-session", entries: [] }, flags: { "cataly-role": "cataly" } });
+  sessions.push(cataly);
+  await cataly.emit("session_start");
   expect(JSON.parse(readFileSync(f.healthPath, "utf8"))).toMatchObject({
-    role: "dori",
+    role: "cataly",
     pid: process.pid,
     presetLoaded: false,
   });

@@ -12,10 +12,7 @@ import { digest } from "../src/update/source.ts";
 import { portableFixture as fixture, posix } from "./release-consumer-setup.ts";
 
 const { existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, writeFileSync } = fs;
-
-const supported =
-  (process.platform === "linux" && process.arch === "x64") ||
-  (process.platform === "darwin" && process.arch === "arm64");
+const supported = ["linux/x64", "darwin/arm64"].includes(`${process.platform}/${process.arch}`);
 
 posix.each([false, true])(
   "consumer preview predicts exact new configuration without preparing or activating it (side=%s)",
@@ -40,7 +37,7 @@ posix.each([false, true])(
 posix("consumer install preview uses the real CLI without creating its selected home", () => {
   const f = fixture();
   const release = f.release("cli-preview");
-  const selected = join(f.paths.home, "preview-only");
+  const selected = join(f.paths.home, ".omp-dori");
   const temporary = join(f.root, "preview-tmp");
   mkdirSync(temporary, { mode: 0o700 });
   const result = Bun.spawnSync(
@@ -60,8 +57,8 @@ posix("consumer install preview uses the real CLI without creating its selected 
         HOME: f.paths.home,
         TMPDIR: temporary,
         BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
-        DORI_HOME: selected,
-        DORI_CONFIG: join(selected, "config.json"),
+        CATALY_HOME: selected,
+        CATALY_CONFIG: join(selected, "config.json"),
       },
     },
   );
@@ -243,8 +240,9 @@ posix("a consumer plan cannot publish another home's snapshot", () => {
   const f = fixture();
   const foreign = join(f.paths.home, "foreign.json");
   writeFileSync(foreign, "{}\n", { mode: 0o600 });
-  expect(() => consumerConfigPlan(f.paths, captureSetupFile(foreign), f.root, f.ownedDependency, false)).toThrow(
-    "another installation",
-  );
+  const release = f.release("foreign snapshot");
+  expect(() =>
+    consumerConfigPlan(f.paths, captureSetupFile(foreign), f.root, f.ownedDependency, release.bundle.manifest),
+  ).toThrow("another installation");
   expect(readFileSync(foreign, "utf8")).toBe("{}\n");
 });

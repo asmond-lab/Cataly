@@ -8,7 +8,7 @@ import {
   recordMark,
   recordOwes,
   recordSent,
-} from "../../skills/dori-mode/scripts/src/owes";
+} from "../../skills/cataly-mode/scripts/src/owes";
 import { type FakePi, load, until, useConfig } from "./fake-pi";
 
 const FAKE_ULW = join(import.meta.dir, "fake-ulw.ts");
@@ -23,13 +23,13 @@ beforeEach(() => {
   delete process.env.HC_TERMINAL_ID;
 });
 afterEach(() => {
-  delete process.env.DORI_CONFIG;
+  delete process.env.CATALY_CONFIG;
 });
 
 type StopResult = { continue?: boolean; additionalContext?: string };
 
-const doriSession = async (): Promise<FakePi> => {
-  const pi = await load({ session: { id: "s1", entries: [] }, flags: { "dori-role": "dori" } });
+const catalySession = async (): Promise<FakePi> => {
+  const pi = await load({ session: { id: "s1", entries: [] }, flags: { "cataly-role": "cataly" } });
   await pi.emit("session_start");
   return pi;
 };
@@ -39,18 +39,18 @@ const stop = async (pi: FakePi): Promise<StopResult | undefined> =>
 
 describe("session_stop owes gate", () => {
   test("an owner message with no Discord answer blocks the settle and names the command", async () => {
-    const pi = await doriSession();
+    const pi = await catalySession();
     expect(await stop(pi)).toBeUndefined();
 
     await recordOwes(stateDir, inbound("100"), Date.now());
     const blocked = await stop(pi);
     expect(blocked?.continue).toBe(true);
-    expect(blocked?.additionalContext).toContain("dori send discord --to <channel>");
+    expect(blocked?.additionalContext).toContain("cataly send discord --to <channel>");
     expect(blocked?.additionalContext).toContain("owner message 100");
   });
 
   test("a send receipt alone leaves the settle blocked until the read receipt is recorded too", async () => {
-    const pi = await doriSession();
+    const pi = await catalySession();
     const at = Date.now();
     await recordOwes(stateDir, inbound("100"), at);
     expect((await stop(pi))?.continue).toBe(true);
@@ -58,14 +58,14 @@ describe("session_stop owes gate", () => {
     await recordSent(stateDir, CHANNEL, "100", ["701"], at + 1);
     const stillBlocked = await stop(pi);
     expect(stillBlocked?.continue).toBe(true);
-    expect(stillBlocked?.additionalContext).toContain(`dori react discord --to ${CHANNEL} --message 100`);
+    expect(stillBlocked?.additionalContext).toContain(`cataly react discord --to ${CHANNEL} --message 100`);
 
     await recordMark(stateDir, CHANNEL, "100", at + 2);
     expect(await stop(pi)).toBeUndefined();
   });
 
   test("answering one request does not settle another request in the same channel", async () => {
-    const pi = await doriSession();
+    const pi = await catalySession();
     const at = Date.now();
     for (const message of ["100", "200"]) {
       await recordOwes(stateDir, inbound(message), at);
@@ -82,16 +82,16 @@ describe("session_stop owes gate", () => {
   });
 
   test("a lane session is never gated: the messenger is the only one that owes the owner", async () => {
-    const pi = await load({ session: { id: "s1", entries: [] }, flags: { "dori-role": "lane" } });
+    const pi = await load({ session: { id: "s1", entries: [] }, flags: { "cataly-role": "lane" } });
     await pi.emit("session_start");
     await recordOwes(stateDir, inbound("100"), Date.now());
     expect(await stop(pi)).toBeUndefined();
   });
 
-  test("a subagent of the Dori session is not gated", async () => {
+  test("a subagent of the Cataly session is not gated", async () => {
     const pi = await load({
       session: { id: "s1", entries: [] },
-      flags: { "dori-role": "dori" },
+      flags: { "cataly-role": "cataly" },
       agent: { kind: "sub", id: "Sub", parentId: "main" },
     });
     await pi.emit("session_start");
@@ -100,14 +100,14 @@ describe("session_stop owes gate", () => {
   });
 
   test("the gate gives up after MAX_CONTINUATIONS instead of looping a wedged session forever", async () => {
-    const pi = await doriSession();
+    const pi = await catalySession();
     await recordOwes(stateDir, inbound("100"), Date.now());
     for (let i = 0; i < MAX_CONTINUATIONS; i++) expect((await stop(pi))?.continue).toBe(true);
     expect(await stop(pi)).toBeUndefined();
   });
 
   test("a monitor line is recorded as an owe through the real delivery path, not only the CLI writer", async () => {
-    const pi = await doriSession();
+    const pi = await catalySession();
     const tool = pi.tools.get("monitor")!;
     try {
       await tool.execute(
@@ -133,7 +133,7 @@ describe("session_stop owes gate", () => {
   });
 
   test("a torn ledger cannot stop the session from settling", async () => {
-    const pi = await doriSession();
+    const pi = await catalySession();
     mkdirSync(join(stateDir, "owes"), { recursive: true });
     writeFileSync(join(stateDir, "owes", "inbound.jsonl"), '{"id":"broken\n');
     expect(await stop(pi)).toBeUndefined();

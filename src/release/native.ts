@@ -12,16 +12,18 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { platform } from "../platform/index.ts";
 import { shq } from "../delivery.ts";
 import { command } from "../update/deployment-process.ts";
 import { digest } from "../update/source.ts";
 import { fileDigest, owned, readJson, realDirectory, regularFile, saveJson } from "./files.ts";
-import { leaseNativeIdentity, nativeStagePrefix } from "./native-cache-lease.ts";
+import { leaseNativeIdentity, nativeCacheRoot, nativeStagePrefix } from "./native-cache-lease.ts";
 import { assertNativeExport } from "./native-export.ts";
 import { assertSourceBundle, bundleEnv, readSourceBundle } from "./source-bundle.ts";
 import { checkoutSourceBundle } from "./source-checkout.ts";
+
+export { leaseNativePath } from "./native-path.ts";
 
 export type NativeReceipt = {
   readonly version: 1;
@@ -38,33 +40,24 @@ export type NativeReceipt = {
   readonly addonHash: string;
 };
 const LAUNCHER = "packages/coding-agent/scripts/omp";
-export function nativeDirectory(source: string, home: string): string {
-  return join(home, ".cache/omp-dori", `${platform.nativeCacheLabel()}-${readSourceBundle(source, true).identity}`);
+const nativeCacheDirectory = (home: string, identity: string, legacy = false): string =>
+  join(nativeCacheRoot(home, legacy), `${platform.nativeCacheLabel()}-${identity}`);
+const legacyNativeSource = (source: string): boolean =>
+  !regularFile(join(source, "release-headless.json")) &&
+  regularFile(join(source, "install.sh")) &&
+  regularFile(join(source, "skills/dori-mode/SKILL.md"));
+
+function selectNativeDirectory(source: string, home: string, identity: string): string {
+  const current = nativeCacheDirectory(home, identity);
+  const legacy = nativeCacheDirectory(home, identity, true);
+  // Old source scripts know only the legacy root. A tagged old updater also provisions there for new sources.
+  if (legacyNativeSource(source)) return legacy;
+  if (!lstatSync(current, { throwIfNoEntry: false }) && lstatSync(legacy, { throwIfNoEntry: false })) return legacy;
+  return current;
 }
 
-/**
- * Lease the identity an explicitly chosen executable lies in (by its own path or once resolved), so a writer that
- * publishes it (a wrapper, a deployment record) holds it like one that prepared it. Then the executable must still be
- * there: a prune may have removed it before the lease. Paths outside the cache lease nothing.
- */
-export function leaseNativePath(home: string, path: string, holder = process.pid): void {
-  const cache = join(home, ".cache/omp-dori");
-  const entry = new RegExp(`^${platform.nativeCacheLabel()}-([a-f0-9]{64})$`);
-  const inside = (candidate: string, root: string) =>
-    candidate.startsWith(`${root}/`) ? entry.exec(candidate.slice(root.length + 1).split("/", 1)[0]!)?.[1] : undefined;
-  const real = (candidate: string) => {
-    try {
-      return realpathSync(candidate);
-    } catch {
-      return candidate;
-    }
-  };
-  const identities = new Set(
-    [inside(path, cache), inside(real(path), cache), inside(real(path), real(cache))].filter((id) => id !== undefined),
-  );
-  for (const identity of identities) leaseNativeIdentity(home, identity, holder);
-  if (identities.size && !lstatSync(real(path), { throwIfNoEntry: false })?.isFile())
-    throw new Error(`Selected native executable ${path} is gone from the native cache; prepare it again`);
+export function nativeDirectory(source: string, home: string): string {
+  return selectNativeDirectory(source, home, readSourceBundle(source, true).identity);
 }
 
 /** The cache launcher always validates source then execs the protected upstream launcher through the recorded Bun. */
@@ -75,16 +68,20 @@ export function nativeLauncher(source: string, home: string, directory: string, 
 /**
  * Recompute source identity and every tracked postimage independently of the native release stamp. `holder` leases the
  * identity first (see `leaseNativeIdentity`): the process that goes on to use it, or the shell that will exec it.
+ * A caller that will execute a particular cache copy must pin its directory so it cannot verify a different copy.
  */
 export function assertNativeSource(
   source: string,
   home: string,
   bun = process.execPath,
-  holder = process.pid,
+  options: { readonly holder?: number; readonly directory?: string } = {},
 ): NativeReceipt {
   const bundle = readSourceBundle(source, true);
-  leaseNativeIdentity(home, bundle.identity, holder);
-  const directory = nativeDirectory(source, home);
+  const directory = options.directory ?? selectNativeDirectory(source, home, bundle.identity);
+  const legacy = directory === nativeCacheDirectory(home, bundle.identity, true);
+  if (!legacy && directory !== nativeCacheDirectory(home, bundle.identity))
+    throw new Error(`Native source identity does not bind ${directory}`);
+  leaseNativeIdentity(home, bundle.identity, options.holder, undefined, legacy);
   const receipt = readJson(join(directory, "receipt.json")) as NativeReceipt;
   const checkout = join(directory, "source");
   if (
@@ -98,7 +95,8 @@ export function assertNativeSource(
     (lstatSync(receipt.omp).mode & 0o111) === 0 ||
     JSON.stringify(readJson(join(directory, "native-config.json"))) !== JSON.stringify({ update: { auto: false } }) ||
     typeof receipt.source !== "string" ||
-    nativeDirectory(receipt.source, home) !== directory ||
+    readSourceBundle(receipt.source, true).identity !== bundle.identity ||
+    (!legacy && legacyNativeSource(receipt.source)) ||
     receipt.ompHash !== digest(nativeLauncher(receipt.source, home, directory, receipt.bun)) ||
     receipt.entry !== join(checkout, "packages/coding-agent/src/cli.ts") ||
     receipt.bun !== realpathSync(bun) ||
@@ -122,13 +120,6 @@ export function assertNativeSource(
   return receipt;
 }
 
-async function probe(loader: string, cwd: string, home: string, bun: string, natives: string): Promise<string> {
-  const code = `const m = await import(process.argv[1]); const b = m.loadNative();
-if (typeof b.__piNativesBuildVersion !== "function" || b.__piNativesBuildVersion() !== "18.20.0") throw new Error("official native addon version differs");
-const s = m.nativeAddonStatus(); if (!s || s.version !== "18.20.0" || s.stale) throw new Error("native addon identity unavailable"); console.log(s.path);`;
-  return command([bun, "-e", code, loader], cwd, { ...bundleEnv(home, bun), PI_NATIVES_DIR: natives }, 60_000);
-}
-
 /** Frozen official addon reuse changes no Rust code and makes no compiled-binary equivalence claim. */
 export async function provisionNativeSource(
   source: string,
@@ -141,11 +132,12 @@ export async function provisionNativeSource(
   const bundle = readSourceBundle(source, true);
   if (bundle.lock.launcher !== LAUNCHER)
     throw new Error("Native bundle must use the protected upstream omp source launcher");
-  // Leased before the existence check, so a prune either keeps this identity or has finished before it is looked at.
-  leaseNativeIdentity(home, bundle.identity, holder);
-  const directory = nativeDirectory(source, home);
-  if (lstatSync(directory, { throwIfNoEntry: false })) return assertNativeSource(source, home, bun, holder);
-  const cache = join(home, ".cache/omp-dori");
+  // Look again after leasing: a prune may have acted on the chosen root before the lease.
+  const directory = selectNativeDirectory(source, home, bundle.identity);
+  leaseNativeIdentity(home, bundle.identity, holder, undefined, dirname(directory) === nativeCacheRoot(home, true));
+  if (lstatSync(directory, { throwIfNoEntry: false }))
+    return assertNativeSource(source, home, bun, { directory, holder });
+  const cache = dirname(directory);
   realDirectory(cache, true);
   owned(cache);
   // The stage names its identity and owner, so a prune can tell one whose owner was killed (Bun skips finally on a signal).
@@ -153,6 +145,13 @@ export async function provisionNativeSource(
   const checkout = join(stage, "source");
   const addon = join(stage, "addon");
   const natives = join(stage, "natives");
+  const probe = (loader: string): Promise<string> => {
+    const version = JSON.stringify(bundle.lock.nativeVersion);
+    const code = `const m = await import(process.argv[1]); const b = m.loadNative();
+if (typeof b.__piNativesBuildVersion !== "function" || b.__piNativesBuildVersion() !== ${version}) throw new Error("official native addon version differs");
+const s = m.nativeAddonStatus(); if (!s || s.version !== ${version} || s.stale) throw new Error("native addon identity unavailable"); console.log(s.path);`;
+    return command([bun, "-e", code, loader], stage, { ...bundleEnv(home, bun), PI_NATIVES_DIR: natives }, 60_000);
+  };
   try {
     await checkoutSourceBundle(checkout, bundle, stage);
     for (const path of [addon, natives, join(stage, "bin"), join(stage, "launch-cwd")])
@@ -167,7 +166,7 @@ export async function provisionNativeSource(
           "/bin/sh",
           "-c",
           'umask 077; exec "$@"',
-          "dori-native-install",
+          "cataly-native-install",
           bun,
           "install",
           "--frozen-lockfile",
@@ -187,7 +186,7 @@ export async function provisionNativeSource(
         "/bin/sh",
         "-c",
         'umask 077; exec "$@"',
-        "dori-native-export",
+        "cataly-native-export",
         bun,
         "packages/collab-web/scripts/build-export-viewer.ts",
         "--check",
@@ -196,13 +195,7 @@ export async function provisionNativeSource(
       bundleEnv(home, bun),
       300_000,
     );
-    const official = await probe(
-      join(addon, "node_modules/@oh-my-pi/pi-natives/native/loader-state.js"),
-      stage,
-      home,
-      bun,
-      natives,
-    );
+    const official = await probe(join(addon, "node_modules/@oh-my-pi/pi-natives/native/loader-state.js"));
     if (
       !regularFile(official) ||
       !realpathSync(official).startsWith(`${realpathSync(join(addon, "node_modules"))}/`) ||
@@ -211,10 +204,7 @@ export async function provisionNativeSource(
       throw new Error("Official native package resolved an addon outside its frozen install");
     const target = join(checkout, "packages/natives/native", basename(official));
     copyFileSync(official, target);
-    if (
-      resolve(await probe(join(checkout, "packages/natives/native/loader-state.js"), stage, home, bun, natives)) !==
-      target
-    )
+    if (resolve(await probe(join(checkout, "packages/natives/native/loader-state.js"))) !== target)
       throw new Error("Bound source did not load the exact version-matched official addon");
     symlinkSync(bun, join(stage, "bin/bun"));
     const launcher = nativeLauncher(source, home, directory, bun);
@@ -238,7 +228,7 @@ export async function provisionNativeSource(
     saveJson(join(stage, "native-config.json"), { update: { auto: false } });
     saveJson(join(stage, "receipt.json"), receipt);
     renameSync(stage, directory);
-    return assertNativeSource(source, home, bun, holder);
+    return assertNativeSource(source, home, bun, { directory, holder });
   } finally {
     if (lstatSync(stage, { throwIfNoEntry: false })) rmSync(stage, { recursive: true, force: true });
   }

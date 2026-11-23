@@ -10,7 +10,7 @@ import { start as herdrStart } from "../runtime/herdr/sessions.ts";
 import type { ForegroundProcess, Probe } from "../runtime/types.ts";
 import { procChildren, procCmdline, procExeTarget, procStat } from "./proc.ts";
 
-/** The terminal operations a managed replacement performs on the Dori's own pane or terminal. */
+/** The terminal operations a managed replacement performs on the Cataly's own pane or terminal. */
 export interface DeploymentCli {
   readonly exec: Exec;
   probe(pane: string, onFail: string, stateDir: string): Promise<Probe>;
@@ -80,7 +80,7 @@ export function hcDeploymentCli(exec: Exec): DeploymentCli {
       if (root === undefined) throw new Error("terminal is gone");
       return kernelForeground(root);
     } catch (error) {
-      process.stderr.write(`dori: hc foreground lookup failed for ${pane} (${reasonOf(error)}); ${onFail}\n`);
+      process.stderr.write(`cataly: hc foreground lookup failed for ${pane} (${reasonOf(error)}); ${onFail}\n`);
       return { shell: true };
     }
   };

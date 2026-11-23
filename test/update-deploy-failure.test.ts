@@ -59,7 +59,7 @@ linux.each(["release", "restart"] as const)(
         mode === "restart"
           ? "native code or desired monitor health has not converged"
           : "running source pointer differs",
-      rollbackError: "resumed Dori has owner work or an approval; rollback is held until idle",
+      rollbackError: "resumed Cataly has owner work or an approval; rollback is held until idle",
     };
     expect(result).toMatchObject(errors);
     expect(JSON.parse(readFileSync(f.journal, "utf8"))).toMatchObject(errors);

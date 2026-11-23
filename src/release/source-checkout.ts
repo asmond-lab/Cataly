@@ -40,7 +40,7 @@ export async function provisionSourceOverlay(
   repository?: string,
 ): Promise<string> {
   const bundle = readSourceBundle(source);
-  target ??= join(home, ".cache/omp-dori", `omp-ulw-${bundle.identity}`);
+  target ??= join(home, ".cache/omp-cataly", `omp-ulw-${bundle.identity}`);
   if (lstatSync(target, { throwIfNoEntry: false })) assertSourceBundle(target, bundle, home);
   else {
     const stage = `${target}.preparing`;

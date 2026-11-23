@@ -159,7 +159,7 @@ describe("a pending Enter with newer messages queued (#89 review)", () => {
 });
 
 describe("the CLI on an uncertain first delivery (#89 review)", () => {
-  test("dori send, ambiguous prompt error: prints HELD, exits 3, never shows the text, and holds exactly one entry", async () => {
+  test("cataly send, ambiguous prompt error: prints HELD, exits 3, never shows the text, and holds exactly one entry", async () => {
     const { w, d, count } = setup();
     w.addPane("w1:p2", "idle");
     w.promptFails.set("w1:p2", "timeout");
@@ -173,7 +173,7 @@ describe("the CLI on an uncertain first delivery (#89 review)", () => {
     expect(count("w1:p2", "agent", "prompt")).toBe(1);
   });
 
-  test("dori send, typed text whose Enter failed: prints QUEUED and exits 0 with one typed entry", async () => {
+  test("cataly send, typed text whose Enter failed: prints QUEUED and exits 0 with one typed entry", async () => {
     const { w, d } = setup();
     w.addPane("w1:p2", "idle");
     w.promptFails.set("w1:p2", NOT_READY);
@@ -185,7 +185,7 @@ describe("the CLI on an uncertain first delivery (#89 review)", () => {
     expect(d.store.queued(href("w1:p2")).map((m) => m.attempt?.state)).toEqual(["typed"]);
   });
 
-  test("dori report, ambiguous delivery to the lead: no crash, prints HELD for the lead, exits 3, report held once", async () => {
+  test("cataly report, ambiguous delivery to the lead: no crash, prints HELD for the lead, exits 3, report held once", async () => {
     const { w, d } = setup();
     addLane(d, "fix-x", "w1:p2");
     w.addPane("w1:p2", "working");
@@ -204,7 +204,7 @@ describe("the CLI on an uncertain first delivery (#89 review)", () => {
     expect(d.store.lane("fix-x")!.log.at(-1)).toMatchObject({ kind: "report", text: "SECRET progress" });
   });
 
-  test("dori ready, ambiguous delivery to the lead: no crash, prints HELD for the lead, exits 3, READY recorded", async () => {
+  test("cataly ready, ambiguous delivery to the lead: no crash, prints HELD for the lead, exits 3, READY recorded", async () => {
     const { w, d } = setup();
     addLane(d, "fix-x", "w1:p2");
     w.addPane("w1:p2", "idle");

@@ -2,10 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { groupId } from "../src/runtime/group.ts";
+import { Runtimes } from "../src/runtime/registry.ts";
+import { TernRuntime } from "../src/runtime/tern/index.ts";
 import { Store } from "../src/store.ts";
 import { Refusal } from "../src/refusal.ts";
 import { done, ready, startLane } from "../src/lanes.ts";
 import { href } from "./fake.ts";
+import { block, FakeTern } from "./fake-tern.ts";
 import { setup } from "./harness-setup.ts";
 
 describe("lanes", () => {
@@ -14,7 +17,7 @@ describe("lanes", () => {
     const lane = await startLane(d, "fix-login", brief, { group: "w1" });
     const pane = w.panes.get(lane.paneId)!;
     expect(pane.ran[0]).toStartWith("omo 'Read your brief at ");
-    expect(await Bun.file(lane.brief).text()).toContain("dori ready fix-login --text");
+    expect(await Bun.file(lane.brief).text()).toContain("cataly ready fix-login --text");
     expect(lead.received).toEqual([`[START fix-login] lane opened in ${lane.paneId}`]);
     await expect(startLane(d, "fix-login", brief, { group: "w1" })).rejects.toThrow(Refusal);
   });
@@ -40,7 +43,7 @@ describe("lanes", () => {
     await expect(ready(d, "fix-login", "fixed", [])).rejects.toThrow("evidence");
     await ready(d, "fix-login", "fixed", ["https://github.com/o/r/pull/1"]);
     expect(lead.received.at(-1)).toBe("[READY fix-login] fixed\nevidence: https://github.com/o/r/pull/1");
-    expect(w.usage.map((e) => e.name)).toEqual(["dori.lane_started", "dori.lane_ready"]);
+    expect(w.usage.map((e) => e.name)).toEqual(["cataly.lane_started", "cataly.lane_ready"]);
     expect(JSON.stringify(w.usage)).not.toContain("fix-login");
     await done(d, "fix-login");
     expect(w.panes.has(lane.paneId)).toBe(false);
@@ -86,12 +89,44 @@ describe("startLane group fallback", () => {
     });
     const run = w.hc.calls.find((args) => args[0] === "run")!;
     expect(run).toBeDefined();
-    const group = run.find((a) => a.startsWith("dori.group="))!;
-    expect(group).toMatch(/^dori\.group=[0-9a-f]{8}$/);
-    expect(run.filter((a) => a.startsWith("dori.group="))).toEqual([`dori.group=${groupId(d.store.root)}`]);
-    expect(run).toContain(`DORI_HOME=${d.store.root}`);
+    const group = run.find((a) => a.startsWith("cataly.group="))!;
+    expect(group).toMatch(/^cataly\.group=[0-9a-f]{8}$/);
+    expect(run.filter((a) => a.startsWith("cataly.group="))).toEqual([`cataly.group=${groupId(d.store.root)}`]);
+    expect(run).toContain(`CATALY_HOME=${d.store.root}`);
     expect(run).not.toContain("w9");
     expect(run).not.toContain("w9:p9");
     expect(run).not.toContain("--workspace");
+  });
+
+  test("a tern lane is a named tab in the caller's own Tern session, else in the session named cataly", async () => {
+    const { d: base, lead, brief } = setup();
+    const fake = new FakeTern({ "5001": block() });
+    const tern = new TernRuntime(fake.exec, { env: process.env, sleep: async () => {} });
+    const d = {
+      ...base,
+      runtimes: new Runtimes("tern", (k) => (k === "tern" ? tern : base.runtimes.for(href("w1:p1")))),
+    };
+    await withEnv({ ...clear, TERN_PANE: "5001" }, async () => {
+      await startLane(d, "inside", brief);
+    });
+    await withEnv({ ...clear, TERN_PANE: undefined }, async () => {
+      await startLane(d, "outside", brief);
+    });
+    const opened = fake.calls.filter((c) => c[0] === "new").map((c) => c.slice(0, 3));
+    expect(opened).toEqual([
+      ["new", "tab", "7001"],
+      ["new", "session", "cataly"],
+    ]);
+    expect(fake.calls.filter((c) => c[0] === "rename").map((c) => c[2])).toEqual(["inside", "outside"]);
+    expect(fake.ran.map((r) => r.command.split(" ")[0])).toEqual(["omo", "omo"]);
+    expect(d.store.lane("inside")).toMatchObject({
+      sessionRef: { runtime: "tern", id: "8000", group: "7001", container: "8001" },
+      paneId: "8000",
+      tabId: "8001",
+    });
+    expect(lead.received).toEqual([
+      "[START inside] lane opened in tern:8000",
+      "[START outside] lane opened in tern:8003",
+    ]);
   });
 });

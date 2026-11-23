@@ -81,10 +81,10 @@ await Bun.sleep(20_000);
     "detector.ts",
     `
 import { existsSync, writeFileSync } from "node:fs";
-import { DoriUpdater } from ${JSON.stringify(new URL("../src/update/controller.ts", import.meta.url).href)};
+import { CatalyUpdater } from ${JSON.stringify(new URL("../src/update/controller.ts", import.meta.url).href)};
 import { UpdateDetectionUnavailable, UpdateInterrupted } from ${JSON.stringify(new URL("../src/update/config.ts", import.meta.url).href)};
 const controller = new AbortController();
-const updater = new DoriUpdater(${JSON.stringify(f.config)}, () => {}, controller.signal);
+const updater = new CatalyUpdater(${JSON.stringify(f.config)}, () => {}, controller.signal);
 const pending = updater.once("stage").then(
   () => ({ interrupted: false, unavailable: false }),
   (error) => ({ interrupted: error instanceof UpdateInterrupted, unavailable: error instanceof UpdateDetectionUnavailable }),
@@ -98,7 +98,7 @@ if (${JSON.stringify(mode)} !== "exit") {
   controller.abort();
 }
 const outcome = await pending;
-writeFileSync(${JSON.stringify(result)}, JSON.stringify({ ...outcome, state: updater.status().state }));
+writeFileSync(${JSON.stringify(result)}, JSON.stringify({ ...outcome, state: (await updater.status()).state }));
 `,
   );
   const proc = Bun.spawn([process.execPath, join(f.directory, "detector.ts")], {

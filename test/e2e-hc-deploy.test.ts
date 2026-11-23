@@ -9,11 +9,11 @@ import { requireShell } from "../src/update/deployment-native.ts";
 import { sameProcess } from "../src/update/deployment-process.ts";
 import type { DeploymentRecord, RuntimeIdentity } from "../src/update/deployment-types.ts";
 import { digest } from "../src/update/source.ts";
-import { doriEnv, hc, hcBin, newHome, session, startCore, stopCore, until } from "./e2e-hc-setup.ts";
+import { catalyEnv, hc, hcBin, newHome, session, startCore, stopCore, until } from "./e2e-hc-setup.ts";
 
 // Real hc, one isolated core: the foreground group a managed replacement reads is rebuilt from the kernel.
 // The native observer's locale, as actorEnv sets it: ps prints its start time in a form Date.parse reads.
-const env = { ...doriEnv(newHome("deploy")), LANG: "C.UTF-8", LC_ALL: "C.UTF-8" };
+const env = { ...catalyEnv(newHome("deploy")), LANG: "C.UTF-8", LC_ALL: "C.UTF-8" };
 const cli = hcDeploymentCli(async (cmd, argv) => {
   const p = Bun.spawn([cmd, ...argv], { env, stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, code] = await Promise.all([
@@ -96,11 +96,11 @@ test.skipIf(!hcBin)(
     const config = parseDeploymentConfig(
       {
         releaseRoot: "managed",
-        liveSource: "home/.dori/src",
+        liveSource: "home/.cataly/src",
         home: "home",
-        doriHome: "home/.dori",
-        doriConfig: "home/.dori/config.json",
-        stateDir: "home/.dori/state",
+        catalyHome: "home/.cataly",
+        catalyConfig: "home/.cataly/config.json",
+        stateDir: "home/.cataly/state",
         bun: process.execPath,
         omp: "native-omp",
         runtime: "hc",
@@ -109,8 +109,8 @@ test.skipIf(!hcBin)(
         pane: address,
         sessionId: "preserved-session",
         model: "openai-codex/gpt-6.1-sol",
-        restartLock: "home/.dori/restart.lock",
-        launcherPath: "home/.dori/bin/restart",
+        restartLock: "home/.cataly/restart.lock",
+        launcherPath: "home/.cataly/bin/restart",
         healthTimeoutMs: 100,
         stopTimeoutMs: 5_000,
       },

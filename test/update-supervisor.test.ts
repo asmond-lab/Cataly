@@ -51,8 +51,8 @@ describe("update supervisor", () => {
     const base = fixture();
     const { run } = supervise({ ...base.config, intervalSeconds: 1 }, [5, 2]);
     const result = await run();
-    expect(result.stderr).toContain("DORI_SUPERVISOR_RETRY lock=live-controller");
-    expect(result.stderr).toContain("DORI_SUPERVISOR_HELD exit=2");
+    expect(result.stderr).toContain("CATALY_SUPERVISOR_RETRY lock=live-controller");
+    expect(result.stderr).toContain("CATALY_SUPERVISOR_HELD exit=2");
     expect(result.invocations).toBe(2);
     expect(result.code).toBe(2);
   }, 15_000);
@@ -62,17 +62,17 @@ describe("update supervisor", () => {
     const { intervalSeconds: _omitted, ...config } = base.config;
     const { run } = supervise(config, [2]);
     const result = await run();
-    expect(result.stderr).not.toContain("DORI_SUPERVISOR_CONFIG_ERROR");
-    expect(result.stdout).toContain("DORI_SUPERVISOR_READY");
+    expect(result.stderr).not.toContain("CATALY_SUPERVISOR_CONFIG_ERROR");
+    expect(result.stdout).toContain("CATALY_SUPERVISOR_READY");
     expect(result.invocations).toBe(1);
-    expect(result.stderr).toContain("DORI_SUPERVISOR_HELD exit=2");
+    expect(result.stderr).toContain("CATALY_SUPERVISOR_HELD exit=2");
   });
 
   test("an interval the shared loader rejects is still a configuration error", async () => {
     const base = fixture();
     const { run } = supervise({ ...base.config, intervalSeconds: 0 }, [0]);
     const result = await run();
-    expect(result.stderr).toContain("DORI_SUPERVISOR_CONFIG_ERROR");
+    expect(result.stderr).toContain("CATALY_SUPERVISOR_CONFIG_ERROR");
     expect(result.invocations).toBe(0);
     expect(result.code).toBe(2);
   });

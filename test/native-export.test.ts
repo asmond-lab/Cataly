@@ -30,7 +30,7 @@ afterEach(() => {
 // These are real Git/receipt admission consumers with explicitly synthetic viewer/addon bytes.
 // Exact upstream generation and usable exported HTML are separate real consumer installation checks.
 function fixture() {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "dori-native-export-")));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "cataly-native-export-")));
   roots.push(root);
   const upstream = overlayFixture(join(root, "bundle"), join(root, "upstream"), true);
   const home = join(root, "home");

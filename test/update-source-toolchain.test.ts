@@ -17,7 +17,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 function fixture() {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "dori-source-toolchain-")));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "cataly-source-toolchain-")));
   roots.push(root);
   const source = join(root, "release");
   const ulw = overlayFixture(source, join(root, "ulw-upstream"));
@@ -32,18 +32,18 @@ function fixture() {
   const config = parseDeploymentConfig(
     {
       releaseRoot: join(root, "managed"),
-      liveSource: join(home, ".dori/src"),
+      liveSource: join(home, ".cataly/src"),
       home,
-      doriHome: join(home, ".dori"),
-      doriConfig: join(home, ".dori/config.json"),
-      stateDir: join(home, ".dori/state"),
+      catalyHome: join(home, ".cataly"),
+      catalyConfig: join(home, ".cataly/config.json"),
+      stateDir: join(home, ".cataly/state"),
       bun: process.execPath,
       herdr: process.execPath,
       pane: "w1:p1",
       sessionId: "fixture-session",
       model: "fixture/model",
-      restartLock: join(home, ".dori/restart.lock"),
-      launcherPath: join(home, ".dori/bin/restart"),
+      restartLock: join(home, ".cataly/restart.lock"),
+      launcherPath: join(home, ".cataly/bin/restart"),
       healthTimeoutMs: 100,
     },
     root,
@@ -72,7 +72,7 @@ it("managed default preparation binds native and ULW source identities and propa
   expect(f.config.omp).toBeUndefined();
   expect(f.record.toolchain?.nativeSource?.identity).toBe(f.receipt.identity);
   expect(f.record.toolchain?.nativeOverride).toBeUndefined();
-  expect(JSON.parse(actorEnv(f.config, f.record.toolchain)["DORI_AGENT_ARGV"]!)).toEqual([
+  expect(JSON.parse(actorEnv(f.config, f.record.toolchain)["CATALY_AGENT_ARGV"]!)).toEqual([
     f.receipt.omp,
     "--config",
     f.record.toolchain!.nativeConfig,
@@ -80,8 +80,8 @@ it("managed default preparation binds native and ULW source identities and propa
     "-e",
     join(f.source, "extension"),
   ]);
-  expect(actorEnv(f.config, f.record.toolchain)["DORI_AGENT_CMD"]).toBeUndefined();
-  expect(actorEnv(f.config, f.record.toolchain)["DORI_OMP_ULW_PATH"]).toBe(
+  expect(actorEnv(f.config, f.record.toolchain)["CATALY_AGENT_CMD"]).toBeUndefined();
+  expect(actorEnv(f.config, f.record.toolchain)["CATALY_OMP_ULW_PATH"]).toBe(
     join(f.record.toolchain!.ompUlw!.directory, "index.ts"),
   );
   await prepareRuntimeToolchain(f.config, f.record);

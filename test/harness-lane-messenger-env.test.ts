@@ -6,17 +6,23 @@ import { setup } from "./harness-setup.ts";
 import { migrateWorld } from "./migrate-setup.ts";
 
 // Inspect only the messenger assignments sent to the terminal server, never caller credentials.
-const messengerArgs = (command: string[]) => command.filter((arg) => /^DORI_(DISCORD|TELEGRAM)_TOKEN=/.test(arg));
-const emptyOverrides = ["DORI_DISCORD_TOKEN=", "DORI_TELEGRAM_TOKEN="];
+const messengerArgs = (command: string[]) =>
+  command.filter((arg) => /^(CATALY|DORI)_(DISCORD|TELEGRAM)_TOKEN=/.test(arg));
+const emptyOverrides = [
+  "CATALY_DISCORD_TOKEN=",
+  "CATALY_TELEGRAM_TOKEN=",
+  "DORI_DISCORD_TOKEN=",
+  "DORI_TELEGRAM_TOKEN=",
+];
 
 async function withFixtureConfig(root: string, run: () => Promise<number>): Promise<number> {
-  const previous = process.env["DORI_CONFIG"];
-  process.env["DORI_CONFIG"] = join(root, "config.json");
+  const previous = process.env["CATALY_CONFIG"];
+  process.env["CATALY_CONFIG"] = join(root, "config.json");
   try {
     return await run();
   } finally {
-    if (previous === undefined) delete process.env["DORI_CONFIG"];
-    else process.env["DORI_CONFIG"] = previous;
+    if (previous === undefined) delete process.env["CATALY_CONFIG"];
+    else process.env["CATALY_CONFIG"] = previous;
   }
 }
 
@@ -27,8 +33,8 @@ test("harness start sends explicit empty Discord and Telegram overrides to the t
       main(["start", "new-lane", "--brief", brief, "--workspace", "fixture"], d),
     ),
   ).toBe(0);
-  const run = w.hc.calls.find((args) => args[0] === "run" && args.includes("dori.lane=new-lane"))!;
-  expect(run).toContain("DORI_LANE=new-lane");
+  const run = w.hc.calls.find((args) => args[0] === "run" && args.includes("cataly.lane=new-lane"))!;
+  expect(run).toContain("CATALY_LANE=new-lane");
   expect(messengerArgs(run)).toEqual(emptyOverrides);
 });
 
@@ -36,7 +42,7 @@ test("harness migrate clears messenger tokens for the lane, not lead or duty", a
   const { w, d } = migrateWorld();
   w.addPane("w1:p2", "idle");
   d.store.setRole("duty", href("w1:p2"));
-  const target = d.runtimes.default;
+  const target = d.runtimes.terminal("hc");
   const start = target.start.bind(target);
   target.start = async (ref, command) => {
     await start(ref, command);
@@ -49,12 +55,12 @@ test("harness migrate clears messenger tokens for the lane, not lead or duty", a
   const runs = w.hc.calls.filter((args) => args[0] === "run");
   expect(runs).toHaveLength(3);
   const [lane, lead, duty] = runs;
-  expect(lane!).toContain("dori.role=lane");
-  expect(lane!).toContain("DORI_LANE=k");
+  expect(lane!).toContain("cataly.role=lane");
+  expect(lane!).toContain("CATALY_LANE=k");
   expect(messengerArgs(lane!)).toEqual(emptyOverrides);
-  expect(lead!).toContain("dori.role=lead");
+  expect(lead!).toContain("cataly.role=lead");
   expect(messengerArgs(lead!)).toEqual([]);
-  expect(duty!).toContain("dori.role=duty");
+  expect(duty!).toContain("cataly.role=duty");
   expect(messengerArgs(duty!)).toEqual([]);
   expect(d.store.lane("k")?.sessionRef.runtime).toBe("hc");
   expect(d.store.roles().lead?.runtime).toBe("hc");

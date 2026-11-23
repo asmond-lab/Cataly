@@ -54,7 +54,7 @@ test("queues only the exact settled public answer as Discord-sized parts", () =>
 
 test.each([
   ["a newer local input", { role: "user", content: "local input" }],
-  ["an unrelated monitor input", { role: "custom", customType: "dori-monitor", content: "other message" }],
+  ["an unrelated monitor input", { role: "custom", customType: "cataly-monitor", content: "other message" }],
   ["another extension's hidden prompt", { role: "custom", customType: "other-extension", display: false }],
 ])("drops the reply after %s supersedes the Discord input", (_label, other) => {
   const { replies, inbound, persist, queued } = delivery();

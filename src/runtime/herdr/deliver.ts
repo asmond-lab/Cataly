@@ -17,13 +17,13 @@ const ambiguous = (step: string, failure: unknown): DeliverOutcome => ({
   detail: `herdr ${step} failed: ${reasonOf(failure)}`,
   failure,
 });
-const identity = (seen: Probe): AgentIdentity => ({
+export const identity = (seen: Probe): AgentIdentity => ({
   ...(seen.agent !== undefined ? { agent: seen.agent } : {}),
   ...(seen.pgid !== undefined ? { pgid: seen.pgid } : {}),
   ...(seen.pid !== undefined ? { pid: seen.pid } : {}),
   ...(seen.sessionId !== undefined ? { sessionId: seen.sessionId } : {}),
 });
-const sameAgent = (into: AgentIdentity, seen: Probe): boolean =>
+export const sameAgent = (into: AgentIdentity, seen: Probe): boolean =>
   (into.agent === undefined || into.agent === seen.agent) &&
   (into.pgid === undefined || into.pgid === seen.pgid) &&
   (into.pid === undefined || into.pid === seen.pid) &&
@@ -67,7 +67,7 @@ export async function deliver(
   try {
     first = await probe(cli, paneId, strictIdle, HOLDING, stateDir);
   } catch (e) {
-    process.stderr.write(`dori: herdr pane get failed for ${paneId} (${reasonOf(e)}); ${HOLDING}\n`);
+    process.stderr.write(`cataly: herdr pane get failed for ${paneId} (${reasonOf(e)}); ${HOLDING}\n`);
     return { kind: "not-ready", status: "unknown" };
   }
   const promptHold = deliveryHold(first, expectedSessionId, strictIdle);
@@ -156,7 +156,7 @@ async function pressEnter(
 }
 
 /**
- * The operator's explicit `dori send --to-shell`: types text + Enter into a pane that has no agent. The status is
+ * The operator's explicit `cataly send --to-shell`: types text + Enter into a pane that has no agent. The status is
  * re-read right before typing; if an agent is there now, nothing is typed and false is returned.
  */
 export async function typeIntoShell(cli: HerdrCli, paneId: string, text: string, stateDir?: string): Promise<boolean> {

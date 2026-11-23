@@ -12,7 +12,7 @@ import {
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { platform } from "../platform/index.ts";
-import { alive } from "../../skills/dori-mode/scripts/src/checkpoint-lock.ts";
+import { alive } from "../../skills/cataly-mode/scripts/src/checkpoint-lock.ts";
 import { object, UpdateError } from "./config.ts";
 import { digest } from "./source.ts";
 import type { UpdateLock } from "./types.ts";

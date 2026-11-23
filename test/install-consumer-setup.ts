@@ -27,14 +27,14 @@ export const consumerEnv = (paths: ConsumerPaths) => ({
   HOME: paths.home,
   SKILLS_DIR: join(paths.home, ".agents/skills"),
   OMP_EXTENSIONS_DIR: join(paths.home, ".omp/agent/extensions"),
-  OMP_DORI_HOME: join(paths.home, ".omp-dori"),
-  OMP_DORI_BIN_DIR: join(paths.home, "global-bin"),
+  OMP_CATALY_HOME: join(paths.home, ".omp-cataly"),
+  OMP_CATALY_BIN_DIR: join(paths.home, "global-bin"),
 });
 
 export async function installedConsumer() {
   const f = fixture();
   await installBundle(f.paths, f.release("consumer source stays frozen").bundle, undefined);
   // A stale source marker must not override consumer ownership or the consumer extension link.
-  writeFileSync(join(f.paths.dori, ".omp-dori"), "primary\n");
+  writeFileSync(join(f.paths.dori, ".omp-cataly"), "primary\n");
   return f;
 }

@@ -22,13 +22,13 @@ afterEach(() => {
 });
 
 function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), "dori-native-process-wrapper-"));
+  const directory = mkdtempSync(join(tmpdir(), "cataly-native-process-wrapper-"));
   directories.push(directory);
   for (const name of ["candidate", "remote", "job"]) mkdirSync(join(directory, name), { mode: 0o700 });
   const agent = { argv: ["omp", MODEL, "{prompt}"], timeoutMs: 1000 };
   const config: UpdateConfig = {
     version: 1,
-    target: "dori",
+    target: "cataly",
     runtime: "herdr",
     root: join(directory, "updates"),
     remote: join(directory, "remote"),
@@ -93,7 +93,7 @@ test.each([
   ["npm x", ["npm", "x", "--", PACKAGE]],
 ])("%s retains exact general OMP classification despite native updater refusal", (_, prefix) => {
   const argv = [...prefix, MODEL, "{prompt}"];
-  expect(classifyOmpArgv(argv)).toEqual({ kind: "omp", command: [prefix.at(-1)!, MODEL, "{prompt}"] });
+  expect(classifyOmpArgv(argv)).toEqual({ kind: "omp", command: [prefix.at(-1)!, MODEL, "{prompt}"], argsAt: 1 });
   expect(mayRunOmpArgv(argv)).toBe(true);
   expect(isOmpAgentCommand(argv.join(" "))).toBe(true);
 });

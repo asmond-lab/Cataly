@@ -2,7 +2,7 @@ import { expect } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { UpdateError } from "../src/update/config.ts";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { verifyCandidate } from "../src/update/pipeline.ts";
 import { prepareCandidate } from "../src/update/prepare.ts";
 import { restoreUpdate, snapshotUpdate } from "../src/update/recovery.ts";
@@ -11,12 +11,12 @@ import { assertFrozen, assertSource, freezeSource, gitIdentity, sourceManifest }
 import type { UpdateConfig, UpdateJob } from "../src/update/types.ts";
 import { fixture, git, it } from "./update-setup.ts";
 
-const dependencies = ["node_modules", "skills/dori-mode/scripts/node_modules", "ref/omp-ulw/node_modules"];
+const dependencies = ["node_modules", "skills/cataly-mode/scripts/node_modules", "ref/omp-ulw/node_modules"];
 
 async function prepared(overrides: Partial<Pick<UpdateConfig, "provision" | "checks">> = {}) {
   const f = fixture();
   mkdirSync(join(f.localSource, "ref/omp-ulw"), { recursive: true });
-  const updater = new DoriUpdater({
+  const updater = new CatalyUpdater({
     ...f.config,
     checks: [
       {
@@ -24,7 +24,7 @@ async function prepared(overrides: Partial<Pick<UpdateConfig, "provision" | "che
         argv: [
           process.execPath,
           "-e",
-          'if ((await Bun.file("package.json").json()).name !== "dori-superagent") throw new Error("wrong source");',
+          'if ((await Bun.file("package.json").json()).name !== "cataly") throw new Error("wrong source");',
         ],
         timeoutMs: 10_000,
       },
@@ -56,19 +56,19 @@ for (const revision of ["base", "incoming"] as const) {
   it(`tracked executable bin in pinned ${revision} holds before a worker or check`, async () => {
     const f = fixture();
     const before = sourceManifest(f.remote).hash;
-    f.write(f.remote, "bin/dori", "#!/bin/sh\nexit 0\n");
-    chmodSync(join(f.remote, "bin/dori"), 0o755);
-    git(f.remote, "add", "bin/dori");
+    f.write(f.remote, "bin/cataly", "#!/bin/sh\nexit 0\n");
+    chmodSync(join(f.remote, "bin/cataly"), 0o755);
+    git(f.remote, "add", "bin/cataly");
     git(f.remote, "commit", "-m", "Add tracked executable");
     const payload = git(f.remote, "rev-parse", "HEAD");
-    expect(git(f.remote, "ls-files", "bin/dori")).toBe("bin/dori");
+    expect(git(f.remote, "ls-files", "bin/cataly")).toBe("bin/cataly");
     expect(sourceManifest(f.remote).hash).toBe(before);
     expect(sourceManifest(f.remote).excluded).toContain("bin");
     if (revision === "base") {
-      git(f.remote, "rm", "bin/dori");
+      git(f.remote, "rm", "bin/cataly");
       git(f.remote, "commit", "-m", "Remove executable in incoming only");
     }
-    const updater = new DoriUpdater({
+    const updater = new CatalyUpdater({
       ...f.config,
       baseUpstream: revision === "base" ? payload : f.config.baseUpstream,
     });
@@ -87,7 +87,7 @@ for (const revision of ["base", "incoming"] as const) {
 }
 
 for (const path of [
-  "bin/dori",
+  "bin/cataly",
   "ref/other-library/index.ts",
   "ref/omp-ulw/bin/task",
   "ref/omp-ulw/.cache/payload.ts",
@@ -130,11 +130,11 @@ it("gitignored adaptations retain filesystem hashes, coverage, frozen review inp
   git(join(f.localSource, "ref/omp-ulw"), "init", "-b", "main");
   const privatePaths = ["config.json", "ref/omp-ulw/auth/token.json", "ref/omp-ulw/nested/credentials/token.json"];
   for (const secret of privatePaths) f.write(f.localSource, secret, '{"token":"private-fixture"}\n');
-  f.write(f.localSource, "skills/dori-mode/scripts/node_modules/private/index.js", "installed dependency\n");
+  f.write(f.localSource, "skills/cataly-mode/scripts/node_modules/private/index.js", "installed dependency\n");
   const job = (await f.updater.once("stage")).job!;
   expect(job.commands.at(-1)?.name).toBe("port");
   expect(job.inputs!.local.excluded).toContain("ref/omp-ulw/.git");
-  expect(job.inputs!.local.excluded).toContain("skills/dori-mode/scripts/node_modules");
+  expect(job.inputs!.local.excluded).toContain("skills/cataly-mode/scripts/node_modules");
   expect(job.inputs!.changedPaths).toContain(path);
   expect(job.inputs!.changedPaths).toContain("ref/omp-ulw/runtime.ts");
   expect(job.inputs!.local.files.find((file) => file.path === path)?.executable).toBe(true);

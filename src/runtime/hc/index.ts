@@ -12,8 +12,8 @@ import type {
   ReadOptions,
   SessionInfo,
   SessionRef,
-  SessionRuntime,
   SubmitResult,
+  TerminalRuntime,
 } from "../types.ts";
 import { deliver, keys, read, typeIntoShell } from "./deliver.ts";
 import { probe } from "./probe.ts";
@@ -27,7 +27,7 @@ export type HcRuntimeOptions = {
 };
 
 /** herdr-core (`hc`) behind the session runtime interface, one `hc --json` call per step. */
-export class HcRuntime implements SessionRuntime {
+export class HcRuntime implements TerminalRuntime {
   readonly kind = "hc";
   private readonly env: Readonly<Record<string, string | undefined>>;
   private readonly sleep: (ms: number) => Promise<void>;
@@ -48,14 +48,14 @@ export class HcRuntime implements SessionRuntime {
     return selfRef(this.env);
   }
 
-  /** hc has no workspaces: a group is only the `dori.group` label value. */
+  /** hc has no workspaces: a group is only the `cataly.group` label value. */
   async createGroup(label: string, _cwd: string): Promise<string> {
     return label;
   }
 
-  /** `DORI_HC_SPACE` names the Herdr app space new sessions open in; unset, they stay hidden from the app. */
+  /** `CATALY_HC_SPACE` names the Herdr app space new sessions open in; unset, they stay hidden from the app. */
   create(spec: CreateSpec): Promise<SessionRef> {
-    return create(this.exec, spec, this.env["SHELL"] || "sh", this.env["DORI_HC_SPACE"] || undefined);
+    return create(this.exec, spec, this.env["SHELL"] || "sh", this.env["CATALY_HC_SPACE"] || undefined);
   }
 
   start(ref: SessionRef, command: string): Promise<void> {

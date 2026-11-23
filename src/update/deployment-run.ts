@@ -2,14 +2,15 @@ import { randomUUID } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { saveActiveDeployment } from "./deployment-active.ts";
+import { matchesDeploymentConfigHash } from "./deployment-config.ts";
 import { ownReleaseRoot, saveDeploymentJson, switchPointer } from "./deployment-files.ts";
 import { captureHandoff, captureStartedMonitors, prepareLauncher } from "./deployment-handoff.ts";
 import { observeDeploymentHealth, waitDeploymentHealth } from "./deployment-health.ts";
 import { assertPreparedLayout, refreshBusyHandoff, verifyBusyHold } from "./deployment-hold.ts";
 import { launchRuntime } from "./deployment-launch.ts";
 import { waitForRestartLock } from "./deployment-lock.ts";
-import { assertRetryDeadline, nativeCli, stopRecordedMonitors, stopRuntime } from "./deployment-native.ts";
-import { holdPendingNativeUiExit } from "./deployment-native-ui.ts";
+import { nativeCli, stopRecordedMonitors, stopRuntime } from "./deployment-native.ts";
+import { assertRetryDeadline, forwardStopStarted, holdPendingNativeUiExit } from "./deployment-native-ui.ts";
 import { prepareRelease, validateDeploymentInput } from "./deployment-prepare.ts";
 import { acquireRestartLock, DeploymentBusy, DeploymentHeld, DeploymentRetryable } from "./deployment-process.ts";
 import { restartDeployment } from "./deployment-restart.ts";
@@ -25,10 +26,10 @@ export async function deployRelease(
   previous: DeploymentRecord | undefined,
   persist: (record: DeploymentRecord) => void,
   signal?: AbortSignal,
-  beforeForwardStop?: (record: DeploymentRecord) => Promise<void>,
+  beforeForwardStop?: (record: DeploymentRecord) => Promise<void> | Promise<() => void>,
 ): Promise<DeploymentRecord> {
   const inputHash = digest(JSON.stringify(input));
-  const configHash = digest(JSON.stringify(config));
+  const configHash = previous?.configHash ?? digest(JSON.stringify(config));
   const id = previous?.id ?? randomUUID();
   const record: DeploymentRecord = previous ?? {
     version: 1,
@@ -81,6 +82,7 @@ export async function deployRelease(
   try {
     if (
       !/^[A-Za-z0-9-]+$/.test(id) ||
+      !matchesDeploymentConfigHash(config, configHash) ||
       current.inputHash !== inputHash ||
       current.configHash !== configHash ||
       current.directory !== join(config.releaseRoot, "transactions", id) ||
@@ -89,12 +91,12 @@ export async function deployRelease(
       throw new DeploymentHeld("deployment journal identity differs");
     ownReleaseRoot(config);
     resume();
-    assertRetryDeadline(current);
+    assertRetryDeadline(config, current);
     await waitForRestartLock(config, signal);
-    assertRetryDeadline(current);
+    assertRetryDeadline(config, current);
     if (readRestartIntent(config)) {
       try {
-        const recovered = await restartDeployment(config, signal);
+        const recovered = await restartDeployment(config, signal, beforeForwardStop);
         if (recovered.status !== "healthy")
           throw new DeploymentHeld("pending managed restart needs review before rollout");
       } catch (error) {
@@ -103,7 +105,7 @@ export async function deployRelease(
     }
     releaseLock = acquireRestartLock(config);
     resume();
-    assertRetryDeadline(current);
+    assertRetryDeadline(config, current);
     if (current.status === "healthy") {
       if (!current.launchRequestedAt) throw new DeploymentHeld("healthy deployment has no launch receipt");
       current.runtime = await observeDeploymentHealth(
@@ -131,7 +133,7 @@ export async function deployRelease(
       current.preparedAt = new Date().toISOString();
       save(current);
     } else validateDeploymentInput(input);
-    if ((retryingHandoff || current.step === "stop") && !current.stopRequestedAt && !current.quiesceHash) {
+    if ((retryingHandoff || current.step === "stop") && !forwardStopStarted(config, current) && !current.quiesceHash) {
       await refreshBusyHandoff(config, current);
       save(current);
     }
@@ -142,12 +144,12 @@ export async function deployRelease(
     }
     const cli = nativeCli(config, signal);
     if (current.step === "prepare" || current.step === "stop") {
-      if (!current.stopRequestedAt) assertPreparedLayout(config, current);
-      if (!current.stopRequestedAt) await beforeForwardStop?.(current);
+      if (!forwardStopStarted(config, current)) assertPreparedLayout(config, current);
+      const admission = !forwardStopStarted(config, current) ? await beforeForwardStop?.(current) : undefined;
       current.status = "stopping";
       current.step = "stop";
       save(current);
-      await stopRuntime(config, cli, current, save, true);
+      await stopRuntime(config, cli, current, save, true, typeof admission === "function" ? admission : undefined);
       await stopRecordedMonitors(config, current.oldMonitors ?? []);
       current.step = "switch";
       save(current);
@@ -198,7 +200,7 @@ export async function deployRelease(
       else persist(current);
       return current;
     }
-    if (!completed && releaseLock && current.stopRequestedAt && current.oldRuntime) {
+    if (!completed && releaseLock && forwardStopStarted(config, current) && current.oldRuntime) {
       try {
         const rolledBack = await rollbackDeployment(config, current, save);
         saveActiveDeployment(config, rolledBack, true);
@@ -208,8 +210,8 @@ export async function deployRelease(
         current.rollbackError =
           rollbackError instanceof DeploymentHeld ? rollbackError.message : "rollback did not restore verified service";
       }
-    } else current.status = !current.stopRequestedAt || error instanceof DeploymentHeld ? "held" : "failed";
-    if (error instanceof DeploymentBusy && releaseLock && !current.stopRequestedAt) {
+    } else current.status = !forwardStopStarted(config, current) || error instanceof DeploymentHeld ? "held" : "failed";
+    if (error instanceof DeploymentBusy && releaseLock && !forwardStopStarted(config, current)) {
       try {
         await verifyBusyHold(config, current);
         current.retryableHold = true;
@@ -221,13 +223,13 @@ export async function deployRelease(
     }
     if (
       error instanceof DeploymentRetryable &&
-      !current.stopRequestedAt &&
+      !forwardStopStarted(config, current) &&
       (current.step === "prepare" || current.step === "stop")
     ) {
       current.retryableHold = true;
       current.retryDeadlineAt ??= new Date(Date.now() + 3_600_000).toISOString();
       try {
-        assertRetryDeadline(current);
+        assertRetryDeadline(config, current);
       } catch (deadlineError) {
         delete current.retryableHold;
         current.error = (deadlineError as Error).message;

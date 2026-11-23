@@ -7,7 +7,7 @@ import { isOn, OS_TYPE, otlpLogs, rejectedRecords } from "./telemetry-otlp.ts";
 
 // Anonymous usage counts, sent the way omo sends its own: OTLP/HTTP JSON logs to the omo collector.
 // Only counts and fixed enums leave the machine: never paths, repo names, PR numbers, lane keys or message text.
-// Off with DORI_TELEMETRY=0 or DO_NOT_TRACK=1.
+// Opt in with CATALY_TELEMETRY=1; DO_NOT_TRACK=1 still disables it.
 
 const HOUR_MS = 3_600_000;
 
@@ -15,13 +15,13 @@ export type MergeOutcome = "merged" | "no_receipt" | "review_block" | "no_checks
 export type DutyCounts = { ticks: number; flushed: number; nudges: number; escalations: number; lost: number };
 
 export type TelemetryEvent =
-  | { name: "dori.installed" }
-  | { name: "dori.daily_active"; day_utc: string }
-  | { name: "dori.lane_started"; open_lanes: number }
-  | { name: "dori.lane_ready"; evidence_count: number; lane_minutes: number }
-  | { name: "dori.merge_decided"; outcome: MergeOutcome }
-  | { name: "dori.review_completed"; verdict: "CLEAR" | "BLOCK" }
-  | ({ name: "dori.duty_summary" } & DutyCounts);
+  | { name: "cataly.installed" }
+  | { name: "cataly.daily_active"; day_utc: string }
+  | { name: "cataly.lane_started"; open_lanes: number }
+  | { name: "cataly.lane_ready"; evidence_count: number; lane_minutes: number }
+  | { name: "cataly.merge_decided"; outcome: MergeOutcome }
+  | { name: "cataly.review_completed"; verdict: "CLEAR" | "BLOCK" }
+  | ({ name: "cataly.duty_summary" } & DutyCounts);
 
 export type Sender = (
   url: string,
@@ -36,12 +36,11 @@ export interface Usage {
   flush(maxMs: number): Promise<void>;
 }
 
-export const NOTICE = "dori sends anonymous usage counts (no paths, names or text). Turn it off with DORI_TELEMETRY=0.";
+export const NOTICE =
+  "cataly telemetry is enabled: sending anonymous usage counts (no paths, names or text). Disable with CATALY_TELEMETRY=0.";
 
-const isOff = (v: string | undefined) =>
-  v !== undefined && ["0", "false", "no", "off"].includes(v.trim().toLowerCase());
 export const telemetryEnabled = (env: NodeJS.ProcessEnv): boolean =>
-  !isOff(env["DORI_TELEMETRY"]) && !isOn(env["DO_NOT_TRACK"]);
+  isOn(env["CATALY_TELEMETRY"]) && !isOn(env["DO_NOT_TRACK"]);
 
 type State = {
   installId: string;
@@ -124,8 +123,8 @@ export class Telemetry implements Usage {
       this.save(state);
       const day = new Date(this.now()).toISOString().slice(0, 10);
       const events: TelemetryEvent[] = [];
-      if (!state.installedSent) events.push({ name: "dori.installed" });
-      if (state.lastActiveDay !== day) events.push({ name: "dori.daily_active", day_utc: day });
+      if (!state.installedSent) events.push({ name: "cataly.installed" });
+      if (state.lastActiveDay !== day) events.push({ name: "cataly.daily_active", day_utc: day });
       if (!(await this.emit(state, events))) return;
       state.installedSent = true;
       state.lastActiveDay = day;
@@ -154,16 +153,16 @@ export class Telemetry implements Usage {
       const { since: _since, ...totals } = acc;
       delete state.duty;
       this.save(state);
-      await this.emit(state, [{ name: "dori.duty_summary", ...totals }]);
+      await this.emit(state, [{ name: "cataly.duty_summary", ...totals }]);
     });
   }
 
   private async emit(state: State, events: TelemetryEvent[]): Promise<boolean> {
     if (events.length === 0) return true;
     if (OS_TYPE[platform()] === undefined) return false;
-    const endpoint = (this.env["DORI_TELEMETRY_ENDPOINT"] ?? "https://t.omo.dev").replace(/\/+$/, "");
+    const endpoint = (this.env["CATALY_TELEMETRY_ENDPOINT"] ?? "https://t.omo.dev").replace(/\/+$/, "");
     const installHash = createHash("sha256").update(state.installId).digest("hex");
-    const key = this.env["DORI_TELEMETRY_KEY"] ?? state.key ?? (await this.register(endpoint, installHash, state));
+    const key = this.env["CATALY_TELEMETRY_KEY"] ?? state.key ?? (await this.register(endpoint, installHash, state));
     if (key === undefined) return false;
     const body = JSON.stringify(otlpLogs(installHash, events, this.now(), this.env));
     const res = await this.send(`${endpoint}/v1/logs`, body, {
@@ -188,7 +187,7 @@ export class Telemetry implements Usage {
   private async register(endpoint: string, installHash: string, state: State): Promise<string | undefined> {
     const res = await this.send(
       `${endpoint}/v1/register`,
-      JSON.stringify({ product: "dori-superagent", install_hash: installHash }),
+      JSON.stringify({ product: "cataly-superagent", install_hash: installHash }),
       {
         "content-type": "application/json",
       },

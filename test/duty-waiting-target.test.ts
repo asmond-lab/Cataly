@@ -163,7 +163,7 @@ describe("a path with spaces wider than a line", () => {
 });
 
 describe("a prompts directory whose nudge-waiting.md predates {{wholeTarget}}", () => {
-  // The template an older dori shipped: the target only in its first line and its check line, both cut to fit.
+  // The template an older cataly shipped: the target only in its first line and its check line, both cut to fit.
   const OLD = [
     "[duty -> {{key}}] Waiting on {{target}} since {{waitingSince}}; no new evidence for {{age}}.",
     "- Check that {{target}} is still alive and moving (a check, a process, a request).",
@@ -174,13 +174,13 @@ describe("a prompts directory whose nudge-waiting.md predates {{wholeTarget}}", 
     const own = join(d.store.root, "own-prompts");
     mkdirSync(own);
     writeFileSync(join(own, "nudge-waiting.md"), OLD);
-    const previous = process.env["DORI_PROMPTS_DIR"];
-    process.env["DORI_PROMPTS_DIR"] = own;
+    const previous = process.env["CATALY_PROMPTS_DIR"];
+    process.env["CATALY_PROMPTS_DIR"] = own;
     try {
       expect(await at(10)).toContainEqual({ lane: key, action: "nudge-1" });
     } finally {
-      if (previous === undefined) delete process.env["DORI_PROMPTS_DIR"];
-      else process.env["DORI_PROMPTS_DIR"] = previous;
+      if (previous === undefined) delete process.env["CATALY_PROMPTS_DIR"];
+      else process.env["CATALY_PROMPTS_DIR"] = previous;
     }
     const lines = pane.received.at(-1)!.split("\n");
     expect(lines[0]).toMatch(

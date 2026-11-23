@@ -13,16 +13,16 @@ afterEach(() => {
 });
 
 posix("a lightweight command in a consumer release still validates every native byte before handler loading", () => {
-  const home = realpathSync(mkdtempSync(join(tmpdir(), "dori-cli-native-")));
+  const home = realpathSync(mkdtempSync(join(tmpdir(), "cataly-cli-native-")));
   roots.push(home);
-  const source = join(home, ".dori/releases/releases", `${"a".repeat(40)}-${"b".repeat(16)}`);
+  const source = join(home, ".cataly/releases/releases", `${"a".repeat(40)}-${"b".repeat(16)}`);
   const root = resolve(import.meta.dir, "..");
   const f = overlayFixture(source, join(home, "upstream"), true);
-  for (const tree of ["src", "skills/dori-mode/scripts/src"])
+  for (const tree of ["src", "skills/cataly-mode/scripts/src"])
     cpSync(join(root, tree), join(source, tree), { recursive: true });
   cpSync(join(root, "package.json"), join(source, "package.json"));
   const receipt = nativeCacheFixture(source, home, f.checkout);
-  const manifests = join(home, ".dori/releases/consumer-manifests");
+  const manifests = join(home, ".cataly/releases/consumer-manifests");
   mkdirSync(manifests, { recursive: true, mode: 0o700 });
   writeFileSync(join(manifests, `${basename(source)}.json`), JSON.stringify({ requirements: { omp: "18.20.0" } }), {
     mode: 0o600,
@@ -35,10 +35,10 @@ posix("a lightweight command in a consumer release still validates every native 
     config,
     JSON.stringify({ runtime: "herdr", stateDir: state, agentCommand: ["omp"], ompUlwPath: "/explicit-ulw" }),
   );
-  const cli = join(source, "skills/dori-mode/scripts/src/cli.ts");
+  const cli = join(source, "skills/cataly-mode/scripts/src/cli.ts");
   const invoke = (preload?: string) =>
     Bun.spawnSync([process.execPath, ...(preload ? ["--preload", preload] : []), cli, "checkpoints", "fixture"], {
-      env: { HOME: home, PATH: process.env["PATH"], DORI_CONFIG: config, DORI_TELEMETRY: "0", DO_NOT_TRACK: "1" },
+      env: { HOME: home, PATH: process.env["PATH"], CATALY_CONFIG: config, CATALY_TELEMETRY: "0", DO_NOT_TRACK: "1" },
       timeout: 15_000,
       stdout: "pipe",
       stderr: "pipe",
@@ -67,12 +67,12 @@ plugin({ name: "handler-guard", setup(build) {
 });
 
 test("an explicitly configured external OMP needs no native receipt, but the managed default still does", () => {
-  const home = realpathSync(mkdtempSync(join(tmpdir(), "dori-cli-external-")));
+  const home = realpathSync(mkdtempSync(join(tmpdir(), "cataly-cli-external-")));
   roots.push(home);
-  const source = join(home, ".dori/releases/releases", `${"a".repeat(40)}-${"b".repeat(16)}`);
+  const source = join(home, ".cataly/releases/releases", `${"a".repeat(40)}-${"b".repeat(16)}`);
   const root = resolve(import.meta.dir, "..");
   mkdirSync(source, { recursive: true });
-  for (const tree of ["src", "skills/dori-mode/scripts/src"])
+  for (const tree of ["src", "skills/cataly-mode/scripts/src"])
     cpSync(join(root, tree), join(source, tree), { recursive: true });
   cpSync(join(root, "package.json"), join(source, "package.json"));
   const stateDir = join(home, "state");
@@ -82,15 +82,15 @@ test("an explicitly configured external OMP needs no native receipt, but the man
   const invoke = (executable: string, cwd = home) => {
     writeFileSync(config, JSON.stringify({ stateDir, agentCommand: [executable], ompUlwPath: "/explicit-ulw" }));
     return Bun.spawnSync(
-      [process.execPath, join(source, "skills/dori-mode/scripts/src/cli.ts"), "checkpoints", "fixture"],
+      [process.execPath, join(source, "skills/cataly-mode/scripts/src/cli.ts"), "checkpoints", "fixture"],
       {
         cwd,
         env: {
           HOME: home,
           USERPROFILE: home,
           PATH: process.env["PATH"],
-          DORI_CONFIG: config,
-          DORI_TELEMETRY: "0",
+          CATALY_CONFIG: config,
+          CATALY_TELEMETRY: "0",
           DO_NOT_TRACK: "1",
         },
         timeout: 15_000,
@@ -110,13 +110,13 @@ test("an explicitly configured external OMP needs no native receipt, but the man
   mkdirSync(externalBin, { recursive: true });
   assertExternal(join(externalBin, "omp"));
 
-  const managedPaths = ["omp", join(home, ".dori", "bin", "omp"), join(source, "scripts", "consumer", "omp")];
+  const managedPaths = ["omp", join(home, ".cataly", "bin", "omp"), join(source, "scripts", "consumer", "omp")];
   if (process.platform === "win32") {
     const drive = parse(home).root;
-    assertExternal(join(drive, "bin", "omp"), join(home, ".dori"));
+    assertExternal(join(drive, "bin", "omp"), join(home, ".cataly"));
     assertExternal(join(drive, basename(source), "scripts", "consumer", "omp"), join(source, ".."));
-    const alias = join(home, "dori-junction");
-    symlinkSync(join(home, ".dori"), alias, "junction");
+    const alias = join(home, "cataly-junction");
+    symlinkSync(join(home, ".cataly"), alias, "junction");
     managedPaths.push(
       join(alias, "bin", "omp"),
       join(alias, "releases", "releases", basename(source), "scripts", "consumer", "omp"),

@@ -14,31 +14,31 @@ const [state, run, config] = [join(root, "s"), join(root, "r"), join(root, "c")]
 const cli = resolve(import.meta.dir, "../src/cli.ts");
 export const fixture = resolve(import.meta.dir, "fixtures/fake-agent-7501.sh");
 
-// The caller's own runtime identity is dropped: inside a terminal of another core, dori would reach that core instead.
+// The caller's own runtime identity is dropped: inside a terminal of another core, cataly would reach that core instead.
 const {
   HC_TERMINAL_ID: _id,
   HC_TERMINAL_SOCKET: _sock,
   HC_SOCKET: _hcSock,
   HERDR_PANE_ID: _pane,
   HERDR_WORKSPACE_ID: _ws,
-  DORI_CMD: _cmd,
-  DORI_LANE: _lane,
-  DORI_PROMPTS_DIR: _prompts,
+  CATALY_CMD: _cmd,
+  CATALY_LANE: _lane,
+  CATALY_PROMPTS_DIR: _prompts,
   ...outer
 } = process.env;
 const hcEnv = { ...outer, HC_SESSION: session, XDG_STATE_HOME: state, XDG_RUNTIME_DIR: run, XDG_CONFIG_HOME: config };
 
 /**
- * The env of every `dori` (and of the core, so its terminals inherit it). `sh -c '. "$0"' FILE` runs the fixture
- * without a script-runner shell in front: Dori holds deliveries to `sh FILE` as an interactive shell (#66).
+ * The env of every `cataly` (and of the core, so its terminals inherit it). `sh -c '. "$0"' FILE` runs the fixture
+ * without a script-runner shell in front: Cataly holds deliveries to `sh FILE` as an interactive shell (#66).
  */
-export const doriEnv = (home: string) => ({
+export const catalyEnv = (home: string) => ({
   ...hcEnv,
-  DORI_HOME: home,
-  DORI_STATE_DIR: join(home, "omp-state"),
-  DORI_RUNTIME: "hc",
-  DORI_TELEMETRY: "0",
-  DORI_AGENT_CMD: `sh -c '. "$0"' ${shq(fixture)}`,
+  CATALY_HOME: home,
+  CATALY_STATE_DIR: join(home, "omp-state"),
+  CATALY_RUNTIME: "hc",
+  CATALY_TELEMETRY: "0",
+  CATALY_AGENT_CMD: `sh -c '. "$0"' ${shq(fixture)}`,
 });
 
 export const newHome = (name: string): string => {
@@ -59,9 +59,9 @@ export async function hc(...argv: string[]): Promise<Record<string, unknown>> {
   return JSON.parse(r.out || "{}");
 }
 
-export async function dori(home: string, ...argv: string[]): Promise<string> {
-  const r = await run2(["bun", cli, ...argv], doriEnv(home));
-  if (r.code !== 0) throw new Error(`dori ${argv.join(" ")} -> ${r.code}: ${r.err}${r.out}`);
+export async function cataly(home: string, ...argv: string[]): Promise<string> {
+  const r = await run2(["bun", cli, ...argv], catalyEnv(home));
+  if (r.code !== 0) throw new Error(`cataly ${argv.join(" ")} -> ${r.code}: ${r.err}${r.out}`);
   return r.out;
 }
 
@@ -93,8 +93,8 @@ export async function startCore(): Promise<void> {
   for (const dir of [state, run, join(config, "herdr-core")]) mkdirSync(dir, { recursive: true });
   chmodSync(run, 0o700);
   writeFileSync(join(config, "herdr-core", "config.toml"), "notes = false\n");
-  // Started with the dori env so terminals opened by `dori` (loops included) inherit DORI_RUNTIME and the isolation.
-  const r = await run2(["hc", "--json", "server", "start"], doriEnv(newHome("core")));
+  // Started with the cataly env so terminals opened by `cataly` (loops included) inherit CATALY_RUNTIME and the isolation.
+  const r = await run2(["hc", "--json", "server", "start"], catalyEnv(newHome("core")));
   if (r.code !== 0) throw new Error(`hc server start -> ${r.code}: ${r.err}`);
   corePid = Number((await hc("server", "status"))["pid"]);
 }

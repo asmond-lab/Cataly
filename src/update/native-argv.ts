@@ -1,52 +1,50 @@
 import { UpdateError } from "./config.ts";
+import { NATIVE_VALUE_FLAGS } from "../runtime/omp-options.ts";
 
-const RESUME_FLAG = /^(?:--resume|--continue|--session|--restore|--fork|--from-claude|--from-codex|-r|-c)(?:=|$)/;
+export const RESUME_FLAG =
+  /^(?:--resume|--continue|--session|--restore|--fork|--from-claude|--from-codex|-r|-c)(?:=|$)/;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[^\s/{}*?[\],][^\s{}*?[\],]*$/;
 const OWNED_FLAG =
-  /^(?:--system-prompt|--append-system-prompt|--system-prompt-template|--profile|--alias|-e|--extensions?|--trusted-extension|--hook|--dori-role)(?:=|$)/;
+  /^(?:--system-prompt|--append-system-prompt|--system-prompt-template|--profile|--alias|-e|--extensions?|--trusted-extension|--hook|--(?:cataly|dori)-(?:role|launch-model|monitor-bootstrap|lane-receiver))(?:=|$)/;
 
 export const isNativeOwnedFlag = (arg: string): boolean => OWNED_FLAG.test(arg);
 
-// OMP v18.18.8 cli/flag-tables.ts STRING_SETTERS: a value must not swallow the model flag or final prompt.
-const NATIVE_VALUE_FLAGS: Record<string, true> = {
-  "--cwd": true,
-  "--config": true,
-  "--add-dir": true,
-  "--mode": true,
-  "--fork": true,
-  "--provider": true,
-  "--model": true,
-  "--smol": true,
-  "--slow": true,
-  "--goal": true,
-  "--plan": true,
-  "--prewalk-into": true,
-  "--plan-yolo-into": true,
-  "--max-time": true,
-  "--warn-cost": true,
-  "--max-cost": true,
-  "--service-tier": true,
-  "--spinner-interval": true,
-  "--max-fps": true,
-  "--motion": true,
-  "--api-key": true,
-  "--system-prompt": true,
-  "--system-prompt-template": true,
-  "--append-system-prompt": true,
-  "--provider-session-id": true,
-  "--prompt-cache-key": true,
-  "--session-dir": true,
-  "--models": true,
-  "--tools": true,
-  "--thinking": true,
-  "--export": true,
-  "--hook": true,
-  "--extension": true,
-  "-e": true,
-  "--trusted-extension": true,
-  "--plugin-dir": true,
-  "--skills": true,
-  "--approval-mode": true,
+// OMP v19.0.1 cli/flag-tables.ts VALUELESS_FLAGS, including the parser's short aliases.
+export const NATIVE_BOOLEAN_FLAGS: Readonly<Record<string, true>> = {
+  "--help": true,
+  "-h": true,
+  "--version": true,
+  "-v": true,
+  "--allow-home": true,
+  "--continue": true,
+  "-c": true,
+  "--from-claude": true,
+  "--from-codex": true,
+  "--no-session": true,
+  "--no-tools": true,
+  "--no-judge": true,
+  "--no-spotlight": true,
+  "--offline": true,
+  "--no-lsp": true,
+  "--no-pty": true,
+  "--hide-thinking": true,
+  "--advisor": true,
+  "--wait-async": true,
+  "--external-thinking": true,
+  "--prewalk": true,
+  "--no-prewalk": true,
+  "--plan-yolo": true,
+  "--print": true,
+  "-p": true,
+  "--print-thoughts": true,
+  "--no-extensions": true,
+  "--no-skills": true,
+  "--no-rules": true,
+  "--no-context-files": true,
+  "--no-title": true,
+  "--no-ui": true,
+  "--auto-approve": true,
+  "--yolo": true,
 };
 
 export function checkNativeArgv(argv: readonly string[], label: string): void {
@@ -57,7 +55,7 @@ export function checkNativeArgv(argv: readonly string[], label: string): void {
     throw new UpdateError(`${label} native OMP argv must end with the {prompt} positional`);
   if (argv.slice(0, -1).some(isNativeOwnedFlag)) {
     throw new UpdateError(
-      `${label} native OMP argv must leave controller-owned prompt/profile/alias/extension/hook/Dori-role flags unset`,
+      `${label} native OMP argv must leave controller-owned prompt/profile/alias/extension/hook/Cataly-role flags unset`,
     );
   }
   if (argv.some((arg) => /^(?:--provider|--models)(?:=|$)/.test(arg))) {

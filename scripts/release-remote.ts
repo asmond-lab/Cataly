@@ -11,7 +11,7 @@ export function releaseIdentity(manifest: ReleaseManifest) {
   return {
     tag_name: manifest.tag,
     target_commitish: manifest.commit,
-    name: `OMP-Dori ${manifest.tag}`,
+    name: `Cataly ${manifest.tag}`,
     prerelease: manifest.prerelease,
   };
 }
@@ -32,7 +32,7 @@ export function updateReleaseMetadata(
 
 export function notes(manifest: ReleaseManifest): string {
   return [
-    `OMP-Dori ${manifest.tag}${manifest.prerelease ? " Linux x64 preview" : ""}.`,
+    `Cataly ${manifest.tag}${manifest.prerelease ? " Linux x64 preview" : ""}.`,
     "Supported consumer runtime: Linux x64, herdr, Discord. Other CI platforms do not imply consumer support.",
     `Requires existing Bun ${manifest.requirements.bun}, OMP ${manifest.requirements.omp}, git and herdr.`,
     `Commit: \`${manifest.commit}\`. SourceManifest: \`${manifest.source.hash}\`.`,
@@ -41,7 +41,7 @@ export function notes(manifest: ReleaseManifest): string {
     `Installation, prerequisites and support limits: https://github.com/${RELEASE_REPOSITORY}/blob/${manifest.commit}/docs/releases.md`,
     `Publication requires all required trusted own-main CI jobs at this exact commit: https://github.com/${RELEASE_REPOSITORY}/commit/${manifest.commit}/checks`,
     "Installation starts no messenger, watcher, service or model work. Existing user configuration remains user-owned.",
-    "Stop Dori before install/update/rollback; activation holds while a live actor is detected.",
+    "Stop Cataly before install/update/rollback; activation holds while a live actor is detected.",
   ].join("\n\n");
 }
 
@@ -72,7 +72,7 @@ export function validateRelease(release: Release, manifest: ReleaseManifest, bod
   if (
     release["tag_name"] !== manifest.tag ||
     release["target_commitish"] !== manifest.commit ||
-    release["name"] !== `OMP-Dori ${manifest.tag}` ||
+    release["name"] !== `Cataly ${manifest.tag}` ||
     release["prerelease"] !== manifest.prerelease ||
     typeof release["draft"] !== "boolean" ||
     !allowedBodies.includes(String(release["body"])) ||

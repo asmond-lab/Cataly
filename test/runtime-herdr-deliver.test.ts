@@ -161,7 +161,7 @@ describe("deliver outcomes", () => {
     try {
       expect(await rt.deliver(ref("w1:p1"), "hi")).toEqual({ kind: "no-agent" });
       expect(String(err.mock.calls[0]?.[0])).toBe(
-        "dori: herdr pane process-info failed for w1:p1 (process-info failed); holding delivery\n",
+        "cataly: herdr pane process-info failed for w1:p1 (process-info failed); holding delivery\n",
       );
     } finally {
       err.mockRestore();
@@ -186,7 +186,7 @@ describe("a failed lookup holds the delivery, and only deliver says so", () => {
     expect(result).toEqual({ kind: "not-ready", status: "unknown" });
     expect(r.calls).toEqual([["pane", "get", "w1:p1"]]);
     expect(lines).toEqual([
-      'dori: herdr pane get failed for w1:p1 ({"error":{"code":"server_not_running"}}); holding delivery\n',
+      'cataly: herdr pane get failed for w1:p1 ({"error":{"code":"server_not_running"}}); holding delivery\n',
     ]);
   });
 
@@ -197,7 +197,7 @@ describe("a failed lookup holds the delivery, and only deliver says so", () => {
     const { result, lines } = await stderrOf(() => rt.probe(ref("w1:p1")));
     expect(result).toMatchObject({ status: "idle", shellInFront: true });
     expect(lines).toEqual([
-      "dori: herdr pane process-info failed for w1:p1 (process-info failed); status read as doubt\n",
+      "cataly: herdr pane process-info failed for w1:p1 (process-info failed); status read as doubt\n",
     ]);
   });
 });

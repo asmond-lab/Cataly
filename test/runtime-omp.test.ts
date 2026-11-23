@@ -39,7 +39,7 @@ for (const kind of ["herdr", "hc"] as const) {
       s.record.approvalPending = true;
       s.save();
       const options = {
-        env: { DORI_CONFIG: config, DORI_STATE_DIR: undefined },
+        env: { CATALY_CONFIG: config, CATALY_STATE_DIR: undefined },
         sleep: async () => {},
       };
       for (const raw of [JSON.stringify({ stateDir: s.stateDir }), "{"]) {

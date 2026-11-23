@@ -32,7 +32,7 @@ function flushInFlight(d: Deps, ref: SessionRef): () => void {
 const texts = (d: Deps, ref: SessionRef) => d.store.queued(ref).map((m) => m.text);
 
 describe("a message queued while another process rewrites the same inbox", () => {
-  test("dori send to a busy pane during a flush of its inbox keeps the message; it is delivered once", async () => {
+  test("cataly send to a busy pane during a flush of its inbox keeps the message; it is delivered once", async () => {
     const s = setup();
     s.pane.status = "working";
     const finish = flushInFlight(s.d, href("w1:p2"));
@@ -56,7 +56,7 @@ describe("a message queued while another process rewrites the same inbox", () =>
     expect(texts(s.d, href("w1:p2"))).toEqual(["first", "second"]);
   });
 
-  test("dori send --to-shell whose agent appears before typing, during a flush of the inbox, keeps the message", async () => {
+  test("cataly send --to-shell whose agent appears before typing, during a flush of the inbox, keeps the message", async () => {
     const s = setup();
     s.pane.status = "shell";
     // The first probe sees the shell; the re-read before typing sees an agent, so nothing is typed and it is queued.

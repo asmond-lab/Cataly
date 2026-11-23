@@ -8,7 +8,7 @@
  */
 import { join } from "node:path";
 
-const PROJECTS = ["tsconfig.json", "skills/dori-mode/scripts/tsconfig.json", "extension/tsconfig.json"] as const;
+const PROJECTS = ["tsconfig.json", "skills/cataly-mode/scripts/tsconfig.json", "extension/tsconfig.json"] as const;
 
 interface ProjectRun {
   readonly project: string;

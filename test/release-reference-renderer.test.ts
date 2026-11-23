@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { chmodSync, existsSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { readArchive } from "../src/release/archive.ts";
 import type { VerifiedBundle } from "../src/release/bundle.ts";
 import { installBundle, rollbackRelease } from "../src/release/install.ts";
 import { acquireLaunchGate, registerConsumerLaunch } from "../src/release/launch-leases.ts";
-import { preflightReferences } from "../src/release/references.ts";
+import { installIsolatedReferences, preflightReferences } from "../src/release/references.ts";
 import { releasePath } from "../src/release/state.ts";
 import { digest } from "../src/update/source.ts";
 import { snapshot } from "../scripts/consumer-smoke-inspect.ts";
@@ -147,4 +147,87 @@ posix("postflight reference admission rejects an inconsistent target renderer be
   );
   await expect(installBundle(f.paths, candidate, one)).rejects.toThrow("Consumer reference changed");
   expect(readlinkSync(f.paths.live)).toBe(releasePath(f.paths, one.current));
+});
+
+posix("new side wrappers read the side config even while the old source is still active", () => {
+  const { root, paths } = fixture(true);
+  const old = join(root, "old");
+  const current = join(root, "current");
+  const legacySkill = "skills/dori-mode";
+  mkdirSync(join(current, legacySkill), { recursive: true });
+  writeFileSync(join(current, legacySkill, "SKILL.md"), "---\nname: dori-mode\ndescription: Fixture\n---\n");
+  writeFileSync(join(current, "release-headless.json"), "{}\n");
+  writeFileSync(paths.config, '{"profile":"side"}\n');
+  const primary = join(paths.home, ".dori");
+  mkdirSync(primary);
+  const primaryConfig = join(primary, "config.json");
+  writeFileSync(primaryConfig, '{"profile":"primary"}\n');
+  for (const entry of [join(legacySkill, "scripts/src/cli.ts"), "src/cli.ts"]) {
+    const path = join(old, entry);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      `const profile = await Bun.file(process.env.DORI_CONFIG ?? ${JSON.stringify(primaryConfig)}).json();
+console.log(JSON.stringify({ profile, home: process.env.DORI_HOME, state: process.env.DORI_STATE_DIR ?? null }));
+`,
+    );
+  }
+  symlinkSync(old, paths.live);
+  // This is the ordering used by the existing updater: candidate references first, then the source pointer.
+  installIsolatedReferences(paths, current);
+  expect(readlinkSync(paths.live)).toBe(old);
+  for (const command of ["cataly", "cataly-harness"]) {
+    const result = Bun.spawnSync([join(paths.cataly, "bin", command)], {
+      cwd: root,
+      env: {
+        HOME: paths.home,
+        PATH: process.env["PATH"],
+        CATALY_HOME: primary,
+        CATALY_CONFIG: primaryConfig,
+        DORI_HOME: primary,
+        DORI_CONFIG: primaryConfig,
+        DORI_STATE_DIR: join(primary, "state"),
+      },
+    });
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    expect(JSON.parse(result.stdout.toString())).toEqual({
+      profile: { profile: "side" },
+      home: paths.cataly,
+      state: null,
+    });
+  }
+});
+
+posix("side retirement dispatch retains both caller state roots for the stopped-runtime proof", () => {
+  const { root, paths } = fixture(true);
+  const source = join(root, "selected");
+  const skill = join(source, "skills/dori-mode");
+  const marker = join(source, "release-headless.json");
+  mkdirSync(join(skill, "scripts/src"), { recursive: true });
+  writeFileSync(join(skill, "SKILL.md"), "---\nname: dori-mode\ndescription: Fixture\n---\n");
+  writeFileSync(marker, "{}\n");
+  writeFileSync(
+    join(skill, "scripts/src/cli.ts"),
+    `import { assertStoppedRuntime } from ${JSON.stringify(resolve(import.meta.dir, "../src/release/live.ts"))};
+assertStoppedRuntime(${JSON.stringify(paths)});\n`,
+  );
+  symlinkSync(source, paths.live);
+  installIsolatedReferences(paths, source);
+  for (const [wrapper, stateKey] of [
+    ["cataly", "CATALY_STATE_DIR"],
+    ["omp-cataly", "DORI_STATE_DIR"],
+  ] as const) {
+    const runtime = join(root, stateKey, "runtime");
+    mkdirSync(runtime, { recursive: true });
+    writeFileSync(join(runtime, "active.json"), JSON.stringify({ role: "dori", pid: process.pid }));
+    const result = Bun.spawnSync(
+      [join(paths.cataly, "bin", wrapper), "update", "retire-legacy-roles", "--home", paths.cataly],
+      {
+        cwd: root,
+        env: { HOME: paths.home, PATH: process.env["PATH"], [stateKey]: stateKey },
+      },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain(`Live Cataly PID ${process.pid} holds release activation`);
+  }
 });

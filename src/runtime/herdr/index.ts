@@ -10,8 +10,8 @@ import type {
   SessionInfo,
   ReadOptions,
   SessionRef,
-  SessionRuntime,
   SubmitResult,
+  TerminalRuntime,
 } from "../types.ts";
 import { deliver, keys, type Sleep, submitTyped, typeIntoShell } from "./deliver.ts";
 import { HerdrCli } from "./exec.ts";
@@ -25,7 +25,7 @@ export { omoScreenIdle } from "./probe.ts";
 export type HerdrOptions = { readonly env?: Env; readonly sleep?: Sleep; readonly stateDir?: string };
 
 /** herdr behind the session runtime interface: a session is a pane, its group the pane's workspace. */
-export class HerdrRuntime implements SessionRuntime {
+export class HerdrRuntime implements TerminalRuntime {
   readonly kind = "herdr" as const;
   private readonly cli: HerdrCli;
   private readonly env: Env;
@@ -34,7 +34,7 @@ export class HerdrRuntime implements SessionRuntime {
 
   constructor(
     exec: Exec = spawnExec,
-    session: string | undefined = process.env["DORI_HERDR_SESSION"],
+    session: string | undefined = process.env["CATALY_HERDR_SESSION"],
     options: HerdrOptions = {},
   ) {
     this.cli = new HerdrCli(exec, session);

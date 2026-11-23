@@ -1,5 +1,5 @@
 import { readFileSync, realpathSync } from "node:fs";
-import { readPaneState } from "../../skills/dori-mode/scripts/src/lane-state.ts";
+import { readPaneState } from "../../skills/cataly-mode/scripts/src/lane-state.ts";
 import type { DeploymentCli } from "./deployment-cli.ts";
 import { attestMonitorForeground } from "./deployment-monitor-receipts.ts";
 import { DeploymentBusy, DeploymentHeld, sameProcess, underProcess } from "./deployment-process.ts";
@@ -28,6 +28,20 @@ export async function requestNativeUiExit(cli: DeploymentCli, pane: string): Pro
   } catch {
     return new DeploymentHeld("native UI exit acknowledgement is unavailable and exit remains unobserved");
   }
+}
+
+export function forwardStopStarted(config: DeploymentConfig, record: DeploymentRecord): boolean {
+  return Boolean(
+    record.nativeExitObservedAt ||
+    (config.nativeStopMode === "ui" ? record.nativeUiExitRequestedAt : record.stopRequestedAt),
+  );
+}
+
+/** A retry window never authorizes a native effect after its durable deadline. */
+export function assertRetryDeadline(config: DeploymentConfig, record: DeploymentRecord): void {
+  if (forwardStopStarted(config, record) || record.retryDeadlineAt === undefined) return;
+  if (!(Date.now() < Date.parse(record.retryDeadlineAt)))
+    throw new DeploymentHeld("deployment pre-stop retry deadline expired or is invalid");
 }
 
 /** Never certify a possibly exiting old actor as restored; keep both consumers' forward intent resumable. */
@@ -70,7 +84,7 @@ export async function assertNativeUiIdle(
     throw new DeploymentHeld("UI replacement controller must run independently outside the target actor");
   const state = readPaneState(config.stateDir, config.pane);
   if (current.status === "working" || state?.agentStatus === "working")
-    throw new DeploymentBusy("native Dori is busy; waiting for its idle boundary");
+    throw new DeploymentBusy("native Cataly is busy; waiting for its idle boundary");
   if (
     (current.status !== "idle" && current.status !== "done") ||
     current.agent !== "omp" ||
@@ -79,7 +93,7 @@ export async function assertNativeUiIdle(
     expected.pane !== config.pane ||
     expected.sessionId !== config.sessionId ||
     !state ||
-    state.role !== "dori" ||
+    state.role !== "cataly" ||
     state.paneId !== config.pane ||
     state.pid !== expected.pid ||
     state.sessionId !== expected.sessionId ||

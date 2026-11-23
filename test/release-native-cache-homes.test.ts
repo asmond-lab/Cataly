@@ -56,8 +56,8 @@ posix.each(["explicit", "environment", "loaded", "loaded-override"] as const)(
       env: {
         HOME: home,
         PATH: process.env["PATH"],
-        DORI_HOME: environment,
-        OMP_DORI_HOME: configuredSide,
+        CATALY_HOME: environment,
+        OMP_CATALY_HOME: configuredSide,
       },
     });
     expect(result.stderr.toString()).toBe("");

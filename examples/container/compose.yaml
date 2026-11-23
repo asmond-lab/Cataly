@@ -1,17 +1,13 @@
-# OMP Dori source candidate; state and credentials stay in project-scoped named volumes.
+# Cataly source candidate; state and credentials stay in project-scoped named volumes.
 # First run and daily use are documented in docs/container.md.
-name: omp-dori-candidate
+name: omp-cataly-candidate
 services:
-  dori:
+  cataly:
     build:
       context: ../..
       dockerfile: examples/container/Dockerfile
-    image: omp-dori-candidate:local
+    image: omp-cataly-candidate:local
     init: true
-    # panes are hosted by the herdr server inside the container; a TTY is only needed
-    # by the `docker exec -it` sessions that attach to them
-    tty: true
-    stdin_open: true
     # the container idles in sleep; work happens through docker exec
     command: ["sleep", "infinity"]
     # sized like a small dev machine: lanes run builds and tests of their own
@@ -21,14 +17,14 @@ services:
     # (gh, agent-messenger, OMP providers) are done once inside the running container
     # and persist in the volumes below
     volumes:
-      - dori-state:/home/dori/.dori
-      - omp-state:/home/dori/.omp
-      - gh-auth:/home/dori/.config/gh
-      - messenger-auth:/home/dori/.config/agent-messenger
-      - projects:/home/dori/projects
+      - cataly-state:/home/cataly/.cataly
+      - omp-state:/home/cataly/.omp
+      - gh-auth:/home/cataly/.config/gh
+      - messenger-auth:/home/cataly/.config/agent-messenger
+      - projects:/home/cataly/projects
 
 volumes:
-  dori-state: {}
+  cataly-state: {}
   omp-state: {}
   gh-auth: {}
   messenger-auth: {}

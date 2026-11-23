@@ -1,6 +1,6 @@
+import { importLegacyEnvironment } from "../legacy-environment.ts";
 import { realpathSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { platform } from "../platform/index.ts";
 import { captureSetupFile, SetupConflict, type SetupSnapshot } from "../setup-files.ts";
 import { underProcess } from "../update/deployment-process.ts";
 import { acquireBundle, type VerifiedBundle } from "./bundle.ts";
@@ -14,10 +14,11 @@ import { readAutomaticState, saveAutomaticState, type AutomaticState } from "./a
 import { acquireConsumerLock, ConsumerLockBusy, type ConsumerPaths, consumerPaths, readJson } from "./files.ts";
 import { installBundle } from "./install.ts";
 import { assertNoConsumerLaunches, registerConsumerLaunch, waitLaunchGate } from "./launch-leases.ts";
-import { supportsReleaseProfile, validateReleaseManifest } from "./manifest.ts";
+import { validateReleaseManifest } from "./manifest.ts";
+import { assertUpdateProtocol, releaseTargetRuntime, requestedReleaseRuntime } from "./profile.ts";
 import { prerequisites } from "./provision.ts";
 import { consumerReleaseHome } from "./runtime.ts";
-import { hasConsumerState, loadInstalled, recoverInstalled, releasePath, verifyRelease } from "./state.ts";
+import { hasConsumerState, loadInstalled, recoverInstalled, releaseId, releasePath, verifyRelease } from "./state.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 type AutomaticOptions = {
@@ -101,9 +102,6 @@ export async function automaticUpdate(paths: ConsumerPaths, options: AutomaticOp
         gate();
       }
       preflightAutomaticInstallation(paths);
-      const runtime = config["runtime"];
-      if (typeof runtime !== "string") throw new Error("Consumer config must explicitly select its runtime");
-      (options.checkTools ?? prerequisites)(runtime, true, installed.current.requirements.omp === "18.18.8", paths);
       const candidate = await (options.acquire ?? ((signal) => acquireBundle({}, signal)))(AbortSignal.timeout(15_000));
       const manifest = candidate.manifest;
       if (manifest.prerelease || !newer(manifest.releaseVersion, installed.current.releaseVersion)) {
@@ -112,15 +110,14 @@ export async function automaticUpdate(paths: ConsumerPaths, options: AutomaticOp
         finish("current", undefined, manifest.tag);
         return source;
       }
-      const capabilities = candidate.files.find((file) => file.path === "release-capabilities.json")?.bytes;
-      if (
-        (paths.dori !== join(paths.home, ".dori") && !capabilities) ||
-        !supportsReleaseProfile(manifest, { platform: platform.os, arch: process.arch, runtime }, capabilities)
-      )
-        throw new Error("Available release does not support this installation profile");
-      // Do not remove the bound launcher by automatically selecting the legacy native protocol.
-      if (installed.current.requirements.omp === "18.20.0" && manifest.requirements.omp !== "18.20.0")
-        throw new Error("Automatic updates cannot downgrade the bound native protocol");
+      assertUpdateProtocol(installed.current, manifest);
+      const requested = requestedReleaseRuntime();
+      const runtime = releaseTargetRuntime(
+        paths,
+        { manifest, bytes: (path) => candidate.files.find((file) => file.path === path)?.bytes },
+        { snapshot, ...(requested === undefined ? {} : { requested }) },
+      );
+      (options.checkTools ?? prerequisites)(runtime, true, manifest.requirements.omp === "18.18.8", paths);
       preflightAutomaticInstallation(paths);
       const after = await installBundle(paths, candidate, installed, {
         config: snapshot,
@@ -135,7 +132,9 @@ export async function automaticUpdate(paths: ConsumerPaths, options: AutomaticOp
       if (!current) throw new Error("Consumer installation disappeared during automatic update");
       const runnable = await verifyAutomaticInstallation(paths, current);
       const detail = error instanceof Error ? error.message : String(error);
-      finish(error instanceof SetupConflict || /holds|held|Live/.test(detail) ? "held" : "failed", detail);
+      if (releaseId(current.current) !== releaseId(observed.current))
+        finish("installed", `Committed; maintenance pending: ${detail}`, current.current.tag);
+      else finish(error instanceof SetupConflict || /holds|held|Live/.test(detail) ? "held" : "failed", detail);
       return runnable;
     }
   } finally {
@@ -150,9 +149,9 @@ export async function automaticLaunch(
   launcherPid?: number,
 ): Promise<string> {
   const source = realpathSync(sourceRoot);
-  const dori = consumerReleaseHome(source);
-  if (!dori) return source; // Ordinary source checkouts are not migrated or networked.
-  const paths = consumerPaths(home, dori);
+  const cataly = consumerReleaseHome(source);
+  if (!cataly) return source; // Ordinary source checkouts are not migrated or networked.
+  const paths = consumerPaths(home, cataly);
   if (!hasConsumerState(paths) || !loadInstalled(paths)) throw new Error("Consumer launch has no installed receipt");
   if (launcherPid !== undefined) {
     if (!Number.isSafeInteger(launcherPid) || launcherPid <= 0 || !underProcess(process.pid, launcherPid))
@@ -164,26 +163,27 @@ export async function automaticLaunch(
       gate();
     }
   }
-  const pinned = !!process.env["DORI_MANAGED_STARTUP"] || argv.includes("--no-extensions");
+  const pinned = !!process.env["CATALY_MANAGED_STARTUP"] || argv.includes("--no-extensions");
   return automaticUpdate(paths, {
     source,
     followCurrent: !pinned,
     ...(launcherPid === undefined ? {} : { launchOwner: launcherPid }),
     paused:
-      process.env["DORI_AUTO_UPDATE"] === "0" ||
-      !!process.env["DORI_MANAGED_STARTUP"] ||
+      process.env["CATALY_AUTO_UPDATE"] === "0" ||
+      !!process.env["CATALY_MANAGED_STARTUP"] ||
       argv.some((arg) => ["--version", "--help", "-v", "-h", "--no-extensions"].includes(arg)),
   });
 }
 
 if (import.meta.main) {
+  importLegacyEnvironment();
   const [source, home, rawPid, ...argv] = process.argv.slice(2);
   try {
     if (!source || !home || !rawPid || !/^\d+$/.test(rawPid))
       throw new Error("Automatic launch requires source, home and launcher PID");
     console.log(await automaticLaunch(resolve(source), resolve(home), argv, Number(rawPid)));
   } catch (error) {
-    console.error(`OMP-Dori launch held: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Cataly launch held: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 2;
   }
 }

@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { UpdateDetectionUnavailable, UpdateError, UpdateLockBusy } from "./config.ts";
-import { DoriUpdater } from "./controller.ts";
+import { CatalyUpdater } from "./controller.ts";
 import { restartDeployment } from "./deployment.ts";
 import { loadUpdateConfig } from "./load.ts";
 import { acknowledgeStopped, restoreUpdate, snapshotUpdate } from "./recovery.ts";
@@ -10,23 +10,23 @@ import { persistReport } from "./report.ts";
 import { saveJson } from "./state.ts";
 
 const COMMANDS = ["check", "stage", "watch", "status", "snapshot", "restore", "recover", "restart"];
-const USAGE = `dori upstream <check|stage|watch|status|snapshot|restore|recover|restart> --config FILE
-  check       detect a changed Dori ref once; resume ready promotion before detection
+const USAGE = `cataly upstream <check|stage|watch|status|snapshot|restore|recover|restart> --config FILE
+  check       detect a changed Cataly ref once; resume ready promotion before detection
   stage       explicitly stage the current pinned ref, including the effective baseline (deduplicated)
   watch       keep checking; resume pending exact-head CI, stop on held/interrupted work
-  status      print private local JSON candidate, publication and deployment state
+  status      print private candidate/publication history and current managed runtime identity
   snapshot    --job ID --output NEW_DIR [--app-state DIR]: freeze code, control evidence and explicit candidate app data
   restore     --input SNAPSHOT_DIR --output NEW_DIR: restore an isolated recovery copy, never readiness
   recover     --ack-stopped ID|none: acknowledge every old child stopped; clear ambiguous model ownership
   restart     restart only the configured managed deployment through its identity-bound lock and health readback
-Default is staging only. Explicit promotion config enables verified publication and optional running Dori replacement.`;
+Default is staging only. Explicit promotion config enables verified publication and optional running Cataly replacement.`;
 
 /**
  * Exit codes: 0 ok/unchanged/ready, 3 held/failed candidate, 4 detector unavailable (retryable), 5 root locked by a
  * verified live controller (retryable), 2 operator error, 130 interrupted.
  */
 export async function runUpdate(argv: readonly string[]): Promise<number> {
-  let updater: DoriUpdater | undefined;
+  let updater: CatalyUpdater | undefined;
   const stop = new AbortController();
   const interrupt = (): void => stop.abort();
   try {
@@ -54,13 +54,13 @@ export async function runUpdate(argv: readonly string[]): Promise<number> {
       if (!value) throw new UpdateError(`update ${command} requires --${name}`);
       return value;
     };
-    updater = new DoriUpdater(loadUpdateConfig(resolve(need(args.values.config, "config"))), undefined, stop.signal);
+    updater = new CatalyUpdater(loadUpdateConfig(resolve(need(args.values.config, "config"))), undefined, stop.signal);
     const ctx = updater.context;
     process.on("SIGTERM", interrupt);
     process.on("SIGINT", interrupt);
     if (command === "status") {
-      console.log(JSON.stringify(updater.status(), null, 2));
-      return 0;
+      console.log(JSON.stringify(await updater.status(), null, 2));
+      return stop.signal.aborted ? 130 : 0;
     }
     if (command === "snapshot") {
       const snapshot = snapshotUpdate(
@@ -69,12 +69,12 @@ export async function runUpdate(argv: readonly string[]): Promise<number> {
         need(args.values.output, "output"),
         args.values["app-state"],
       );
-      console.log(JSON.stringify({ type: "DORI_UPDATE_RECOVERY", snapshot }));
+      console.log(JSON.stringify({ type: "CATALY_UPDATE_RECOVERY", snapshot }));
       return 0;
     }
     if (command === "restore") {
       const restored = restoreUpdate(ctx, need(args.values.input, "input"), need(args.values.output, "output"));
-      console.log(JSON.stringify({ type: "DORI_UPDATE_RECOVERY", restored, phase: "interrupted" }));
+      console.log(JSON.stringify({ type: "CATALY_UPDATE_RECOVERY", restored, phase: "interrupted" }));
       return 0;
     }
     if (command === "recover") {
@@ -87,7 +87,7 @@ export async function runUpdate(argv: readonly string[]): Promise<number> {
       if (!deployment) throw new UpdateError("update restart requires configured promotion.deployment");
       const record = await restartDeployment(deployment, stop.signal);
       console.log(
-        JSON.stringify({ type: "DORI_UPDATE", target: "dori", event: "managed-restart", status: record.status }),
+        JSON.stringify({ type: "CATALY_UPDATE", target: "cataly", event: "managed-restart", status: record.status }),
       );
       return stop.signal.aborted ? 130 : record.status === "healthy" ? 0 : 3;
     }
@@ -117,8 +117,8 @@ export async function runUpdate(argv: readonly string[]): Promise<number> {
       error instanceof UpdateError || String((error as NodeJS.ErrnoException).code).startsWith("ERR_PARSE_ARGS");
     console.error(
       JSON.stringify({
-        type: "DORI_UPDATE",
-        target: "dori",
+        type: "CATALY_UPDATE",
+        target: "cataly",
         event: "error",
         reason:
           visible && error instanceof Error ? error.message : "operation failed; inspect dedicated updater artifacts",

@@ -1,5 +1,6 @@
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
+import { parseCatalyRole } from "../../skills/cataly-mode/scripts/src/session-compat.ts";
 import { interactiveShellInFront } from "../runtime/foreground.ts";
 import type { Probe } from "../runtime/types.ts";
 import type { LegacyRollbackForeground } from "./deployment-legacy-monitors.ts";
@@ -28,7 +29,7 @@ export function readRuntimeHealth(
     !Array.isArray(value.monitors) ||
     value.paneId !== config.pane ||
     value.sessionId !== config.sessionId ||
-    value.role !== "dori" ||
+    parseCatalyRole(value.role) !== "cataly" ||
     typeof value.presetLoaded !== "boolean" ||
     !Number.isSafeInteger(value.pid) ||
     value.pid <= 0 ||
@@ -38,7 +39,7 @@ export function readRuntimeHealth(
     Date.parse(value.updatedAt) > Date.now() + 1_000
   )
     throw new DeploymentHeld("runtime health schema differs");
-  return value;
+  return { ...value, role: "cataly" };
 }
 
 export function monitorProcessReceipts(
@@ -146,7 +147,7 @@ export function attestMonitorForeground(
       if (
         !owner ||
         owner.pane !== runtime.pane ||
-        owner.role !== runtime.role ||
+        owner.role !== parseCatalyRole(runtime.role) ||
         owner.sessionId !== runtime.sessionId ||
         owner.startedAt !== runtime.startedAt ||
         !sameProcess(owner, runtime) ||

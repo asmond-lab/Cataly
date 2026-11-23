@@ -1,6 +1,6 @@
 import { writeSync } from "node:fs";
 import { constants } from "node:os";
-import { alive } from "../skills/dori-mode/scripts/src/checkpoint-lock.ts";
+import { alive } from "../skills/cataly-mode/scripts/src/checkpoint-lock.ts";
 import { nameCommand, release } from "./lock-owner.ts";
 import { procStat } from "./update/proc.ts";
 import { checkName, type LockEnv, RETRY_MS, take } from "./lock-queue.ts";
@@ -32,7 +32,7 @@ export function lockEnv(root: string): RunEnv {
     alive,
     sleep: () => Bun.sleep(RETRY_MS),
     spawn: (cmd) => {
-      const p = Bun.spawn(["/bin/sh", "-c", GATE, "dori-lock", ...cmd], {
+      const p = Bun.spawn(["/bin/sh", "-c", GATE, "cataly-lock", ...cmd], {
         stdio: ["inherit", "inherit", "inherit", "pipe"],
       });
       return {

@@ -41,7 +41,7 @@ export async function deliver(
       strictIdle || expectedSessionId !== undefined ? "refresh-foreground" : "observe",
     );
   } catch (e) {
-    process.stderr.write(`dori: hc get ${id} failed (${messageOf(e)}); holding delivery\n`);
+    process.stderr.write(`cataly: hc get ${id} failed (${messageOf(e)}); holding delivery\n`);
     return { kind: "not-ready", status: "unknown" };
   }
   const before = probed.probe;

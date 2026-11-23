@@ -22,6 +22,8 @@ import { liveTasks } from "./process-cwd.ts";
  * reads the prune lock; a prune claims the lock (`claimNativePrune`), then reads the leases, so one sees the other.
  */
 
+export { scriptLeaseHolder } from "./native-lease-holder.ts";
+
 /** A process as a lease or the lock records it. `exec` keeps all three, so a shell's lease covers what it execs. */
 export type CacheHolder = { readonly pid: number; readonly startTicks: string; readonly bootId: string };
 
@@ -32,7 +34,8 @@ const LEASE = /^([1-9]\d*)-(\d+)-([A-Za-z0-9-]+)$/;
 /** How long a writer waits for a running prune before it gives up. */
 const WAIT_MS = 300_000;
 
-export const nativeCacheRoot = (home: string): string => join(home, ".cache/omp-dori");
+export const nativeCacheRoot = (home: string, legacy = false): string =>
+  join(home, ".cache", legacy ? "omp-dori" : "omp-cataly");
 
 /** The running process `pid` as a holder; a process that is gone or a zombie cannot hold anything. */
 export function cacheHolder(pid: number): CacheHolder {
@@ -84,15 +87,6 @@ export function nativeStage(name: string): { readonly identity: string; readonly
     identity: match[1]!,
     ended: holderEnded({ pid: Number(match[2]), startTicks: match[3]!, bootId: match[4]! }),
   };
-}
-
-/** The holder of a script's lease: the shell `DORI_NATIVE_LEASE_PID` names, else the parent that will exec OMP. */
-export function scriptLeaseHolder(env: Readonly<Record<string, string | undefined>> = process.env): number {
-  const named = env["DORI_NATIVE_LEASE_PID"];
-  if (named !== undefined && !/^[1-9]\d*$/.test(named)) throw new Error("DORI_NATIVE_LEASE_PID must be a process id");
-  if (named) return Number(named);
-  // An orphan's parent is init, which never ends; the script itself holds then.
-  return process.ppid > 1 ? process.ppid : process.pid;
 }
 
 /** A private directory that concurrent writers may create at the same moment. */
@@ -155,9 +149,15 @@ function pruneIdle(cache: string): boolean {
  * Lease `identity` for `holder` until that process ends, then wait while a prune holds the cache. Callers create,
  * verify or launch the identity only after this returns, so one a prune removed meanwhile fails their verification.
  */
-export function leaseNativeIdentity(home: string, identity: string, holder = process.pid, waitMs = WAIT_MS): void {
+export function leaseNativeIdentity(
+  home: string,
+  identity: string,
+  holder = process.pid,
+  waitMs = WAIT_MS,
+  legacy = false,
+): void {
   if (!IDENTITY.test(identity)) throw new Error(`Invalid native cache identity: ${identity}`);
-  const cache = nativeCacheRoot(home);
+  const cache = nativeCacheRoot(home, legacy);
   const leases = join(cache, LEASES, identity);
   const own = cacheHolder(holder);
   const name = leaseName(own);

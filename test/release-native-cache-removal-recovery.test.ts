@@ -63,7 +63,7 @@ function partialRemoval() {
   if (!blocker) throw new Error("Native removal fixture could not place its blocking subtree after both marker files");
   writeFileSync(join(x.directory, blocker, "retained"), "must survive the permission failure\n");
   c.prune({ now: 0 });
-  const cache = join(c.home, ".cache/omp-dori");
+  const cache = join(c.home, ".cache/omp-cataly");
   const prefix = `${basename(x.directory)}.`;
   let blocked = false;
   let failure: unknown;
@@ -139,7 +139,7 @@ posix("successful explicit removal still removes the unused copy and its quarant
   expect(c.prune({ now: 0 }).removed).toEqual([]);
   const removed = c.prune({ now: 1, deleteQuarantined: true });
   expect(removed.removed.map((entry) => entry.directory)).toEqual([x.directory]);
-  expect(readdirSync(join(c.home, ".cache/omp-dori")).filter((name) => name.includes(x.identity))).toEqual([]);
+  expect(readdirSync(join(c.home, ".cache/omp-cataly")).filter((name) => name.includes(x.identity))).toEqual([]);
   expect(cachePending(c.home)).toEqual([]);
 });
 

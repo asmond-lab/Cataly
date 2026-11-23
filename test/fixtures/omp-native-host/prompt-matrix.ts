@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ROLE_INVARIANTS } from "../../../extension/role-invariants.ts";
+import { isCatalyEntry } from "../../../skills/cataly-mode/scripts/src/session-compat.ts";
 
 const [root, cwd] = process.argv.slice(2);
 assert(
-  root && cwd && process.env["OMP_ULW_SCOPE_FILE"] && process.env["DORI_TEST_OMP_ROOT"] && process.env["DORI_CONFIG"],
+  root && cwd && process.env["OMP_ULW_SCOPE_FILE"] && process.env["CATALY_TEST_OMP_ROOT"] && process.env["CATALY_CONFIG"],
 );
 let networkAttempts = 0;
 const forbiddenNetwork = (): never => {
@@ -21,9 +22,13 @@ const ulwRoot = realpathSync(join(root, "ref/omp-ulw"));
 assertSourceBundle(ulwRoot, readSourceBundle(root), cwd);
 const { renderPreset } = await import(join(ulwRoot, "presets.ts"));
 assert.equal(typeof renderPreset, "function", "selected ULW source has no renderPreset");
-const dori = join(root, "extension/index.ts");
+const cataly = join(root, "extension/index.ts");
 const ulw = join(ulwRoot, "index.ts");
 type Options = Parameters<typeof nativeComposition>[2];
+const roleRows = (entries: readonly { type: string; customType?: string; data?: unknown }[]) =>
+  entries.flatMap((entry) =>
+    entry.type === "custom" && isCatalyEntry(entry.customType, "omp-cataly:role") ? [[entry.customType, entry.data]] : [],
+  );
 const scenarios: Array<{
   name: string;
   role?: Options["role"];
@@ -44,7 +49,7 @@ const scenarios: Array<{
   { name: "lane normal", role: "lane", prompt: "Describe the fixture." },
   { name: "lane ULW", role: "lane", prompt: "ulw inspect the fixture" },
   { name: "lane specialized", role: "lane", prompt: "ulw-plan design the fixture" },
-  { name: "Dori", role: "dori", prompt: "Describe the fixture." },
+  { name: "Cataly", role: "cataly", prompt: "Describe the fixture." },
   { name: "child", role: "lane", prompt: "ulw inspect the fixture", child: true },
   {
     name: "Terra",
@@ -63,18 +68,17 @@ const scenarios: Array<{
 ];
 let checked = 0;
 for (const [mode, entries] of [
-  ["embedded", [dori]],
-  ["Dori first", [dori, ulw]],
-  ["ULW first", [ulw, dori]],
+  ["embedded", [cataly]],
+  ["Cataly first", [cataly, ulw]],
+  ["ULW first", [ulw, cataly]],
 ] as const) {
   for (const scenario of scenarios) {
     const parent = { kind: "main", id: `NativeParent${checked}`, name: "Main", depth: 0 } as const;
     const child = { kind: "sub", id: `NativeChild${checked}`, name: "Child", depth: 1, parentId: parent.id } as const;
-    let parentRole: unknown;
     const label = `${mode}: ${scenario.name}`;
     const embedded = mode === "embedded";
     writeFileSync(
-      process.env["DORI_CONFIG"]!,
+      process.env["CATALY_CONFIG"]!,
       JSON.stringify({ stateDir: join(cwd, "state"), ompUlwPath: embedded ? ulw : "" }),
     );
     writeFileSync(
@@ -101,9 +105,7 @@ for (const [mode, entries] of [
         agent: parent,
         prompt: "ulw inspect the fixture",
       });
-      parentRole = owner.entries
-        .flatMap((entry) => (entry.type === "custom" && entry.customType === "omp-dori:role" ? [entry.data] : []))
-        .at(-1);
+      assert.equal(roleRows(owner.entries).at(-1)?.[1], "lane", `${label} did not inherit a lane parent`);
       inheritedPolicy = owner.first?.find((block) => block.startsWith("<omp-ulw-policy>"));
       assert(inheritedPolicy, `${label} parent did not produce a policy to inherit`);
     }
@@ -126,12 +128,9 @@ for (const [mode, entries] of [
         monitor: "F67_MONITOR_CAPABILITY",
       },
     });
-    if (scenario.child) assert.equal(parentRole, "lane", `${label} did not inherit a lane parent`);
     assert.deepEqual(
-      result.entries.flatMap((entry) =>
-        entry.type === "custom" && entry.customType === "omp-dori:role" ? [entry.data] : [],
-      ),
-      scenario.child || scenario.role === undefined ? [] : [scenario.role],
+      roleRows(result.entries),
+      scenario.child || scenario.role === undefined ? [] : [["omp-dori:role", scenario.role === "cataly" ? "dori" : "lane"]],
       `${label} changed the recorded role`,
     );
     const first = result.first ?? result.base;
@@ -150,7 +149,7 @@ for (const [mode, entries] of [
     const loaded = !embedded || scenario.role !== undefined;
     const profile = loaded && !scenario.excluded && !scenario.customPrompt;
     const policy = loaded && !scenario.child && scenario.prompt.startsWith("ulw");
-    // Profile exclusion preserves the native profile; Dori's independent Sol lane guidance still applies.
+    // Profile exclusion preserves the native profile; Cataly's independent Sol lane guidance still applies.
     const bookkeeping = scenario.role === "lane" && !scenario.child && model.id === SOL_MODEL.id;
     const rootRole = scenario.child ? undefined : scenario.role;
     const invariant = rootRole === undefined ? undefined : ROLE_INVARIANTS[rootRole];
@@ -186,14 +185,14 @@ for (const [mode, entries] of [
       }
       assert.equal(text.split("<omp-ulw-policy>").length - 1, policy ? 1 : 0, `${label} ULW policy count`);
       assert.equal(
-        text.split("<omp-dori-lane-bookkeeping>").length - 1,
+        text.split("<omp-cataly-lane-bookkeeping>").length - 1,
         bookkeeping ? 1 : 0,
         `${label} bookkeeping count`,
       );
       for (const block of Object.values(ROLE_INVARIANTS))
         assert.equal(blocks.filter((value) => value === block).length, block === invariant ? 1 : 0, `${label} role core`);
       for (const block of downstream) assert(blocks.includes(block), `${label} lost downstream context`);
-      assert.equal(text.includes("F67_MONITOR_CAPABILITY"), scenario.role === "dori", `${label} monitor advertising`);
+      assert.equal(text.includes("F67_MONITOR_CAPABILITY"), scenario.role === "cataly", `${label} monitor advertising`);
       // Native custom profiles deliberately omit the default tool inventory.
       assert.equal(
         text.includes("F67_READ_CAPABILITY"),
@@ -211,7 +210,7 @@ for (const [mode, entries] of [
             (block) =>
               block !== invariant &&
               !block.startsWith("<omp-ulw-policy>") &&
-              !block.startsWith("<omp-dori-lane-bookkeeping>"),
+              !block.startsWith("<omp-cataly-lane-bookkeeping>"),
           ),
           result.base,
           `${label} changed the excluded native profile`,
@@ -245,5 +244,5 @@ for (const [mode, entries] of [
     checked++;
   }
 }
-const manifest = await Bun.file(join(process.env["DORI_TEST_OMP_ROOT"], "package.json")).json();
+const manifest = await Bun.file(join(process.env["CATALY_TEST_OMP_ROOT"], "package.json")).json();
 console.log(JSON.stringify({ nativeVersion: manifest.version, cases: checked, networkAttempts }));

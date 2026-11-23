@@ -1,7 +1,7 @@
 /** Stand-in for omp-ulw's `ompUlw(pi)`: one of each runtime entry point, recording what actually ran. */
-import type { DoriApi, DoriContext } from "../index";
+import type { CatalyApi, CatalyContext } from "../index";
 
-type UlwApi = DoriApi & { recordTestCall(event: string): void };
+type UlwApi = CatalyApi & { recordTestCall(event: string): void };
 
 export default function fakeUlw(pi: UlwApi): void {
   pi.registerFlag("fake-ulw-disabled", { type: "boolean", default: false });
@@ -23,7 +23,7 @@ export default function fakeUlw(pi: UlwApi): void {
     },
   });
   for (const event of ["session_start", "session_switch", "session_branch", "session_tree"]) {
-    pi.on(event, (_event: unknown, ctx: DoriContext) => {
+    pi.on(event, (_event: unknown, ctx: CatalyContext) => {
       pi.recordTestCall(`restore:${ctx.sessionManager.getSessionId()}`);
     });
   }

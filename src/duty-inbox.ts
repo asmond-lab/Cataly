@@ -1,5 +1,6 @@
 import type { Deps } from "./harness.ts";
-import { lockRoute } from "./inbox-spool.ts";
+import { registeredNativeTarget } from "./harness-native.ts";
+import { inboxSealed, lockRoute } from "./inbox-spool.ts";
 import { sameSession } from "./refs.ts";
 import type { SessionRef } from "./runtime/types.ts";
 
@@ -26,8 +27,11 @@ export function underInboxLock(
     let now: SessionRef | undefined;
     try {
       now = name();
-      if (now === undefined || sameSession(now, ref)) {
+      if (now === undefined) return undefined;
+      if (sameSession(now, ref)) {
         const inbox = d.store.destination(ref);
+        if (inboxSealed(d.store.root, ref) || inboxSealed(d.store.root, inbox)) return undefined;
+        registeredNativeTarget(d, inbox);
         const release = d.store.lockInbox(inbox, d.now());
         if (!release) return undefined;
         try {

@@ -13,7 +13,7 @@ afterEach(() => {
 // Native OMP admission applies to argv that starts OMP, including the Linux source launcher's Bun command; an
 // external wrapper that only runs OMP later keeps its own contract.
 const load = (argv: readonly string[], engine?: "omp" | "external") => {
-  const directory = mkdtempSync(join(tmpdir(), "dori-native-source-"));
+  const directory = mkdtempSync(join(tmpdir(), "cataly-native-source-"));
   directories.push(directory);
   for (const name of ["candidate", "remote", "model-client"]) mkdirSync(join(directory, name), { mode: 0o700 });
   const agent = (name: string) => ({
@@ -26,7 +26,7 @@ const load = (argv: readonly string[], engine?: "omp" | "external") => {
     path,
     JSON.stringify({
       version: 1,
-      target: "dori",
+      target: "cataly",
       runtime: "herdr",
       root: join(directory, "updates"),
       remote: join(directory, "remote"),
@@ -73,8 +73,8 @@ test("native argument checks read the OMP argv, not the env options before it", 
   expect(() => load(["env", "-i", "--", "omp", ...model, "{prompt}"])).not.toThrow();
   expect(() => load(["env", "--", "omp", ...model, "--", "{prompt}"])).not.toThrow();
   // The launch-time prompt guard (process.ts nativeLaunch) reads the same part.
-  const runtime = mkdtempSync(join(tmpdir(), "dori-native-runtime-"));
-  const candidate = mkdtempSync(join(tmpdir(), "dori-native-candidate-"));
+  const runtime = mkdtempSync(join(tmpdir(), "cataly-native-runtime-"));
+  const candidate = mkdtempSync(join(tmpdir(), "cataly-native-candidate-"));
   directories.push(runtime, candidate);
   for (const argv of [
     ["env", "-i", "--", "omp", ...model, "{prompt}"],
@@ -94,7 +94,7 @@ test.each([
     ["env", "-S", "omp --resume session", "--model", "anthropic/x", "{prompt}"],
   ],
   ["env -S with a quoted command", ["env", "-S", '"omp"', "--resume", "session", "{prompt}"]],
-  ["an env option Dori does not know", ["env", "--frobnicate", "omp", "--resume", "session", "{prompt}"]],
+  ["an env option Cataly does not know", ["env", "--frobnicate", "omp", "--resume", "session", "{prompt}"]],
 ])("%s is refused unless the agent is declared an external wrapper", (_, argv) => {
   const refused = 'drop -S and unknown env options, or set worker.engine to "external"';
   expect(() => load(argv)).toThrow(refused);

@@ -67,7 +67,7 @@ describe("records written before runtimes existed (IS-3)", () => {
     expect(d.store.lane("old-lane")).toEqual(first.lane!);
   });
 
-  test("dori status shows the old lane as w1:p3 beside a herdr runtime column, the way it prints roles", async () => {
+  test("cataly status shows the old lane as w1:p3 beside a herdr runtime column, the way it prints roles", async () => {
     const { d } = oldHome();
     const { out } = await captureIo(async () => {
       status(d);
@@ -80,7 +80,7 @@ describe("records written before runtimes existed (IS-3)", () => {
     expect(lines.find((l) => l.startsWith("old-lane"))).toMatch(/^old-lane\s+working\s+herdr\s+w1:p3\s/);
   });
 
-  test("dori status with a long home path holding spaces and an unset runtime: each path whole on one line", async () => {
+  test("cataly status with a long home path holding spaces and an unset runtime: each path whole on one line", async () => {
     const { d } = oldHome();
     // Spaces inside a path are no place to break it: either half names no directory.
     const root = join(d.store.root, "Application Support", `${"deep home directory ".repeat(6)}end`);

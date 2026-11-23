@@ -17,9 +17,8 @@ async function remoteRefs(process: PublicationProcess, branch: string) {
   const refs = new Map<string, string>();
   for (const row of raw.trim() ? raw.trim().split(/\r?\n/) : []) {
     const [sha, name] = row.split(/\s+/);
-    if (!sha || !SHA.test(sha) || !name || ![ref, branch].includes(name) || refs.has(name)) {
+    if (!sha || !SHA.test(sha) || !name || ![ref, branch].includes(name) || refs.has(name))
       throw new UpdateError("publication remote ref readback is ambiguous");
-    }
     refs.set(name, sha);
   }
   const main = refs.get(ref);
@@ -70,7 +69,8 @@ export async function publishRelease(
     throw error;
   }
   const process = new PublicationProcess(config, join(job.directory, "publication"), ctx.signal);
-  const branch = `refs/heads/dori-update/${job.id}`;
+  const legacy = previous?.branch === `refs/heads/dori-update/${job.id}`;
+  const branch = `refs/heads/${legacy ? "dori" : "cataly"}-update/${job.id}`;
   let record = previous;
   if (
     record &&
@@ -151,7 +151,7 @@ export async function publishRelease(
   try {
     if (current.status === "awaiting-ci" && waitingExpired()) return held(CI_DEADLINE_PROBLEM);
     if (previous) await fetchCommit(process, current.expectedMain);
-    const built = await publicCommit(process, job, manifest, current.expectedMain, current.basis);
+    const built = await publicCommit(process, job, manifest, current);
     if ((current.commit && current.commit !== built.commit) || (current.tree && current.tree !== built.tree)) {
       return held("retained public commit/tree changed identity");
     }

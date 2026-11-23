@@ -15,7 +15,7 @@ const MODEL = "anthropic/claude-opus-5-5";
 const ROLES = ["worker", "reviewer"] as const;
 
 function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), "dori-native-contract-"));
+  const directory = mkdtempSync(join(tmpdir(), "cataly-native-contract-"));
   directories.push(directory);
   const ancestor = join(directory, "untrusted-parent");
   const candidate = join(ancestor, "candidate");
@@ -28,7 +28,7 @@ function fixture() {
   const agent = (name: string) => ({ name, argv: ["omp", "--model", MODEL, "-p", "{prompt}"], timeoutMs: 1000 });
   const config = {
     version: 1,
-    target: "dori",
+    target: "cataly",
     runtime: "herdr",
     root: join(directory, "updates"),
     remote,
@@ -132,7 +132,7 @@ describe("native staged-update authority", () => {
         "--extensions",
         "--trusted-extension",
         "--hook",
-        "--dori-role",
+        "--cataly-role",
       ]) {
         for (const options of [[flag, "attacker"], [`${flag}=attacker`]]) {
           const argv = ["omp", "--model", MODEL, ...options, "{prompt}"];

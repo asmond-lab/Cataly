@@ -2,58 +2,15 @@ import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { UpdateError } from "./config.ts";
-import { doriPin } from "./source-pin.ts";
+import { excludesSourcePath, isLocalNativeOutput, ULW_LIBRARY } from "./source-omissions.ts";
+import { catalyPin } from "./source-pin.ts";
 import type { SourceEntry, SourceManifest, UpdateInputs, UpdateJob } from "./types.ts";
 
 export const digest = (value: string | Uint8Array): string => createHash("sha256").update(value).digest("hex");
 
-/** Excluded metadata/secrets are never copied; admission separately holds excluded code before it can execute. */
-const OMIT: Readonly<Record<string, true>> = {
-  ".git": true,
-  node_modules: true,
-  ".dori": true,
-  ".omp": true,
-  ".omo": true,
-  ".cache": true,
-  ".DS_Store": true,
-  ".env": true,
-  "auth.json": true,
-  "credentials.json": true,
-};
-const ROOT_RUNTIME: Readonly<Record<string, true>> = {
-  "config.json": true,
-  state: true,
-  sessions: true,
-  auth: true,
-  bin: true,
-  cache: true,
-  tmp: true,
-  globalextensions: true,
-  ref: true,
-  ".qa-home": true,
-  evidence: true,
-};
-const ULW_LIBRARY = "ref/omp-ulw";
-const excluded = (path: string): boolean => {
-  const parts = path.split("/");
-  const library = path === ULW_LIBRARY || path.startsWith(`${ULW_LIBRARY}/`);
-  if (parts[0] === "ref" && path !== "ref" && !library) return true;
-  const relative = library ? parts.slice(2) : parts;
-  return (
-    (path !== "ref" && ROOT_RUNTIME[relative[0] ?? ""] === true) ||
-    parts.some(
-      (part) =>
-        OMIT[part] === true ||
-        (library && (part === "auth" || part === "credentials")) ||
-        /^\.env\.(?!example$|sample$)/.test(part) ||
-        /\.(?:pem|key|p12|pfx|tmp)$/.test(part),
-    )
-  );
-};
-
 type SourceKind = "upstream" | "local" | "candidate";
 
-/** Only explicit local credential metadata may be omitted in addition to Git and installed dependencies. */
+/** Local credential metadata and native output may be omitted in addition to admitted Git and dependency directories. */
 export function assertSourceAdmission(manifest: SourceManifest, kind: SourceKind): void {
   const omitted = manifest.excluded.filter((path) => {
     const name = path.split("/").at(-1)!;
@@ -62,6 +19,7 @@ export function assertSourceAdmission(manifest: SourceManifest, kind: SourceKind
       kind !== "local" ||
       !(
         path === "config.json" ||
+        isLocalNativeOutput(path) ||
         [".DS_Store", ".env", "auth.json", "credentials.json"].includes(name) ||
         /^\.env\.(?!example$|sample$)/.test(name) ||
         /\.(?:pem|key|p12|pfx)$/.test(name) ||
@@ -83,8 +41,8 @@ export function sourceManifest(root: string): SourceManifest {
       const path = dir ? `${dir}/${name}` : name;
       const full = join(root, path);
       const stat = lstatSync(full);
-      if (excluded(path)) {
-        if ((name === ".git" || name === "node_modules") && !stat.isDirectory())
+      if (excludesSourcePath(path)) {
+        if ((name === ".git" || name === "node_modules" || isLocalNativeOutput(path)) && !stat.isDirectory())
           throw new UpdateError(`source metadata must be a real directory: ${path}`);
         omitted.push(path);
         continue;
@@ -164,9 +122,7 @@ export function assertFrozen(job: UpdateJob): void {
     assertSourceAdmission(manifest, name === "local" ? "local" : "upstream");
     const observed = sourceManifest(join(job.directory, "inputs", name));
     assertSourceAdmission(observed, "upstream");
-    if (!sameManifest(observed, manifest)) {
-      throw new UpdateError(`frozen ${name} input changed`);
-    }
+    if (!sameManifest(observed, manifest)) throw new UpdateError(`frozen ${name} input changed`);
   }
 }
 
@@ -180,10 +136,11 @@ export function assertSource(job: UpdateJob): void {
   }
 }
 
-const sameDoriPin = (local: SourceManifest, candidate: SourceManifest): boolean =>
-  local.ulwPresent === candidate.ulwPresent && JSON.stringify(doriPin(local)) === JSON.stringify(doriPin(candidate));
+const sameCatalyPin = (local: SourceManifest, candidate: SourceManifest): boolean =>
+  local.ulwPresent === candidate.ulwPresent &&
+  JSON.stringify(catalyPin(local)) === JSON.stringify(catalyPin(candidate));
 /** Carry only frozen source-bundle payloads and the local pin, never an old-source overlay or library fetch. */
-export function carryDoriPin(local: string, candidate: string, expected: SourceManifest): void {
+export function carryCatalyPin(local: string, candidate: string, expected: SourceManifest): void {
   const incoming = sourceManifest(candidate);
   const library = (manifest: SourceManifest): readonly SourceEntry[] =>
     manifest.files.filter((file) => file.path.startsWith(`${ULW_LIBRARY}/`));
@@ -193,25 +150,24 @@ export function carryDoriPin(local: string, candidate: string, expected: SourceM
     (!expected.files.some((file) => file.path === "omp-ulw.lock") &&
       incoming.files.some((file) => file.path === "omp-ulw.lock"))
   ) {
-    throw new UpdateError("new upstream conflicts with the frozen local ULW lock/library; Dori-only staging held");
+    throw new UpdateError("new upstream conflicts with the frozen local ULW lock/library; Cataly-only staging held");
   }
   if (expected.ulwPresent) mkdirSync(join(candidate, ULW_LIBRARY), { recursive: true, mode: 0o700 });
-  for (const file of doriPin(expected)) {
+  for (const file of catalyPin(expected)) {
     const to = join(candidate, file.path);
     mkdirSync(dirname(to), { recursive: true, mode: 0o700 });
     copyFileSync(join(local, file.path), to);
     chmodSync(to, file.executable ? 0o755 : 0o644);
   }
-  if (!sameDoriPin(expected, sourceManifest(candidate))) {
+  if (!sameCatalyPin(expected, sourceManifest(candidate))) {
     throw new UpdateError("prepared candidate did not preserve the frozen local ULW lock/library");
   }
 }
 
-/** Source-bundle payloads and the ULW library are frozen local pins, carried byte for byte by a Dori-only port. */
-export function assertDoriScope(inputs: UpdateInputs, candidate: SourceManifest): void {
-  if (!sameDoriPin(inputs.local, candidate)) {
-    throw new UpdateError("Dori-only update changed the frozen ULW lock/library");
-  }
+/** Source-bundle payloads and the ULW library are frozen local pins, carried byte for byte by a Cataly-only port. */
+export function assertCatalyScope(inputs: UpdateInputs, candidate: SourceManifest): void {
+  if (!sameCatalyPin(inputs.local, candidate))
+    throw new UpdateError("Cataly-only update changed the frozen ULW lock/library");
 }
 
 /** Git metadata that must not move during a port: HEAD, config, refs and the staged index (no staging, no commits). */

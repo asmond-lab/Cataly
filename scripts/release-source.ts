@@ -38,7 +38,7 @@ export async function committedSource(root: string, commit: string, destination:
     "/bin/sh",
     "-c",
     'umask 077; exec "$@"',
-    "dori-release-source",
+    "cataly-release-source",
     "tar",
     "-xf",
     raw,

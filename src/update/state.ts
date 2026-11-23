@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { hostname } from "node:os";
 import { dirname, join } from "node:path";
-import { alive } from "../../skills/dori-mode/scripts/src/checkpoint-lock.ts";
+import { alive } from "../../skills/cataly-mode/scripts/src/checkpoint-lock.ts";
 import { platform } from "../platform/index.ts";
 import { object, UpdateError, UpdateLockBusy } from "./config.ts";
 import { syncDirectory } from "./deployment-files.ts";
@@ -114,7 +114,7 @@ export function transition(ctx: UpdateContext, job: UpdateJob, phase: UpdatePhas
   job.updatedAt = new Date().toISOString();
   job.history.push({ phase, at: job.updatedAt });
   persistJob(job);
-  ctx.emit({ type: "DORI_UPDATE", target: "dori", event: "phase", job: job.id, phase, upstream: job.upstream });
+  ctx.emit({ type: "CATALY_UPDATE", target: "cataly", event: "phase", job: job.id, phase, upstream: job.upstream });
 }
 
 export function readLock(root: string): UpdateLock | undefined {

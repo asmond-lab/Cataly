@@ -1,12 +1,14 @@
 import type { SessionRef } from "./runtime/types.ts";
+import type { Wait } from "./wait.ts";
 
 export type LaneStatus = "working" | "waiting" | "ready" | "done" | "lost";
 
 /**
  * One lane record. `sessionRef` is the session it runs in, on whichever runtime opened it; `paneId`/`tabId` are written
  * beside it (the ref's id and container) so an older binary still reads the file. `migratedFrom`: the sessions it ran in
- * before a `dori migrate`. `migration`: a handover is in progress, and the duty loop leaves the record alone.
- * `sessionPath`: the agent's own session file, when its command records one; `dori migrate --resume` needs it.
+ * before a `cataly migrate`. `migration`: a handover is in progress, and the duty loop leaves the record alone.
+ * `sessionPath`: the agent's own session file, when its command records one; `cataly migrate --resume` needs it.
+ * `policyBinding`: the root registration's exact headless policy snapshot binding, not a lookup by lane key.
  * `progressAt`: the last time the lane made progress (start, a report with new evidence, READY); the duty loop nudges and
  * escalates on it, and a record from before it existed falls back to its last start, report or READY. `lastEvidence`:
  * the evidence that last moved it. `evidenceSeen`: links that already counted once. `evidenceMtimes`: each file that
@@ -24,6 +26,7 @@ export type Lane = {
   migratedFrom?: SessionRef[];
   migration?: true;
   sessionPath?: string;
+  policyBinding?: string;
   paneId: string;
   tabId: string;
   brief: string;
@@ -40,13 +43,15 @@ export type Lane = {
   escalatedAt?: number;
   waitingFor?: string;
   waitingSince?: number;
+  /** Observed dependency identity; never a progress receipt or authority to resume. */
+  wait?: Wait;
   priority?: number;
   nudges: number;
   final?: { text: string; evidence: string[]; at: number };
   log: { at: number; kind: "start" | "report" | "ready" | "nudge" | "escalate" | "done" | "lost"; text: string }[];
 };
 
-/** The sessions `dori up` opens; roles.json maps each to a ref string (a bare herdr pane id, or `hc:t7`). */
+/** The sessions `cataly up` opens; roles.json maps each to a ref string (a bare herdr pane id, or `hc:t7`). */
 export type Role = "lead" | "duty" | "duty-loop" | "hourly-loop";
 
 /**
@@ -127,6 +132,8 @@ export type LoopRun = {
   started: string[];
   held: string[];
   asked: string[];
+  /** The `[OWNER-DISTILL <date>]` request for the lead, on the one run a day that asks for it (owner-distill.ts). */
+  distill?: string;
 };
 
 export const KEEP_RUNS = 168;

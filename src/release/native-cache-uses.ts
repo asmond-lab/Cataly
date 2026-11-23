@@ -11,7 +11,7 @@ const SUBCOMMAND = /^(?:install|rollback|check|stage|watch|restart|recover)$/;
 const SOURCE_ACTION = /^(?:native|assert-native|consumer|lease-path)$/;
 
 /**
- * Whether a process is a Dori writer that creates, verifies or launches identities, judged by the base names of its
+ * Whether a process is a Cataly writer that creates, verifies or launches identities, judged by the base names of its
  * words so absolute and relative paths (`bun scripts/source-dependencies.ts native ...`) count alike: the home it
  * names for `source-dependencies.ts`, `"env"` when its environment's HOME decides, undefined when it is no writer.
  * Writers from this release lease what they use; an older running checkout does not, so while one runs for this cache
@@ -25,7 +25,10 @@ function writerHome(args: string): string | undefined {
     if (base[at] === "source-dependencies.ts" && SOURCE_ACTION.test(next)) return words[at + 3] ?? "";
     if (base[at] === "install-source.sh") return "env";
     if (base[at] === "cli.ts" && /^(?:install|rollback)$/.test(next)) return "env";
-    if (["cli.ts", "dori", "dori-harness"].includes(base[at]!) && /^(?:update|upstream)$/.test(next))
+    if (
+      ["cli.ts", "cataly", "cataly-harness", "dori", "dori-harness"].includes(base[at]!) &&
+      /^(?:update|upstream)$/.test(next)
+    )
       if (SUBCOMMAND.test(base[at + 2] ?? "")) return "env";
   }
   return undefined;
@@ -84,14 +87,14 @@ const processRows = (table: string): ProcessRow[] =>
     return row ? [{ pid: row[1]!, uid: Number(row[2]), args: row[3]!.trim() }] : [];
   });
 
-/** The running Dori writers for the cache `cache` (see `writerHome`), as reasons that keep every identity. */
+/** The running Cataly writers for the cache `cache` (see `writerHome`), as reasons that keep every identity. */
 function writerReasons(cache: string, rows: readonly ProcessRow[]): string[] {
   const home = resolve(cache, "../..");
   const homes = [...new Set([home, realpathSync(home)])];
   return rows.flatMap(({ pid, args }) => {
     const named = writerHome(args);
     return named !== undefined && writesHere(pid, args, named, homes)
-      ? [`Dori cache writer process ${pid} (${args})`]
+      ? [`Cataly cache writer process ${pid} (${args})`]
       : [];
   });
 }

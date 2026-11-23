@@ -6,14 +6,14 @@ import { git, withUlwRemote } from "./install-setup.ts";
 // POSIX-only: the fixture runs scripts/install-source.sh and shebang stubs through a ':' PATH.
 const posix = test.skipIf(process.platform === "win32");
 
-posix.each(["", "/../.omp-dori"])(
+posix.each(["", "/../.omp-cataly"])(
   "selecting an existing side%s default clears the external choice and restores managed ref updates",
   (suffix) => {
     const { root, home, remote, first, commit, install } = withUlwRemote();
-    const side = join(home, ".omp-dori");
+    const side = join(home, ".omp-cataly");
     const managed = join(side, "omp-ulw");
-    const retained = join(side, ".omp-dori-ulw");
-    expect(install({ DORI_INSTALL_MODE: "side" }).code).toBe(0);
+    const retained = join(side, ".omp-cataly-ulw");
+    expect(install({ CATALY_INSTALL_MODE: "side" }).code).toBe(0);
     const external = join(home, "owner-ulw");
     git(root, "clone", "-q", remote, external);
     expect(install({ OMP_ULW_SRC: external }).code).toBe(0);
@@ -31,7 +31,7 @@ posix.each(["", "/../.omp-dori"])(
     expect(git(managed, "rev-parse", "HEAD")).toBe(first);
     expect(lstatSync(retained, { throwIfNoEntry: false })).toBeUndefined();
     expect(JSON.parse(readFileSync(join(side, "config.json"), "utf8")).ompUlwPath).toBe("");
-    expect(existsSync(join(home, ".dori"))).toBe(false);
+    expect(existsSync(join(home, ".cataly"))).toBe(false);
     expect(existsSync(join(home, "extensions"))).toBe(false);
   },
 );
@@ -43,17 +43,17 @@ posix.each([
   "a legacy unpatched default with %s is preserved rather than accepted as the bound overlay",
   (_label, homeSuffix, sideSuffix, kind) => {
     const { root, home, remote, first, commit, install } = withUlwRemote();
-    const side = join(home, ".omp-dori");
+    const side = join(home, ".omp-cataly");
     const managed = join(side, "omp-ulw");
     mkdirSync(side);
     git(root, "clone", "-q", remote, managed);
-    writeFileSync(join(side, ".omp-dori"), "side\n");
+    writeFileSync(join(side, ".omp-cataly"), "side\n");
     const rawHome = `${home}${homeSuffix}`;
-    const rawSide = `${rawHome}/.omp-dori${sideSuffix}`;
-    const options = { HOME: rawHome, OMP_DORI_HOME: homeSuffix ? "" : rawSide };
+    const rawSide = `${rawHome}/.omp-cataly${sideSuffix}`;
+    const options = { HOME: rawHome, OMP_CATALY_HOME: homeSuffix ? "" : rawSide };
     const configPath = join(side, "config.json");
     const config = {
-      ompUlwPath: kind === "primary" ? join(home, ".dori/omp-ulw/index.ts") : `${rawSide}/omp-ulw/index.ts`,
+      ompUlwPath: kind === "primary" ? join(home, ".cataly/omp-ulw/index.ts") : `${rawSide}/omp-ulw/index.ts`,
       defaultModel: "fixture/preserved",
       agentCommand: ["fixture-omp", "{prompt}"],
     };
@@ -67,35 +67,35 @@ posix.each([
     expect(install({ ...options, OMP_ULW_SRC: managed }).code).toBe(0);
     expect(git(managed, "rev-parse", "HEAD")).toBe(first);
     expect(JSON.parse(readFileSync(configPath, "utf8"))).toEqual({ ...config, ompUlwPath: "" });
-    expect(existsSync(join(home, ".dori"))).toBe(false);
+    expect(existsSync(join(home, ".cataly"))).toBe(false);
     expect(existsSync(join(home, "extensions"))).toBe(false);
   },
 );
 
 posix("a non-normalized custom config retains its real checkout without fetching or selecting a managed ref", () => {
   const { root, home, remote, first, commit, install } = withUlwRemote();
-  const side = join(home, ".omp-dori");
+  const side = join(home, ".omp-cataly");
   const external = join(home, "owner-ulw");
   const unreachable = join(root, "missing-remote");
   git(root, "clone", "-q", remote, external);
   git(external, "remote", "set-url", "origin", unreachable);
   mkdirSync(side);
-  writeFileSync(join(side, ".omp-dori"), "side\n");
+  writeFileSync(join(side, ".omp-cataly"), "side\n");
   const configPath = join(side, "config.json");
   writeFileSync(configPath, JSON.stringify({ ompUlwPath: `${external}/../owner-ulw/./index.ts` }));
-  const options = { OMP_DORI_HOME: `${side}/../.omp-dori//` };
+  const options = { OMP_CATALY_HOME: `${side}/../.omp-cataly//` };
   commit("u2");
 
   expect(install(options).code).toBe(0);
-  expect(readlinkSync(join(side, ".omp-dori-ulw"))).toBe(external);
+  expect(readlinkSync(join(side, ".omp-cataly-ulw"))).toBe(external);
   expect(git(external, "rev-parse", "HEAD")).toBe(first);
   expect(install({ ...options, OMP_ULW_REF: "main" }).code).toBe(0);
-  expect(readlinkSync(join(side, ".omp-dori-ulw"))).toBe(external);
+  expect(readlinkSync(join(side, ".omp-cataly-ulw"))).toBe(external);
   expect(git(external, "rev-parse", "HEAD")).toBe(first);
   expect(git(external, "remote", "get-url", "origin")).toBe(unreachable);
   expect(JSON.parse(readFileSync(configPath, "utf8"))).toEqual({
     ompUlwPath: "",
-    agentCommand: [join(side, "bin/omp"), "--dori-role", "lane", "--model", "{model}", "{prompt}"],
+    agentCommand: [join(side, "bin/omp"), "--cataly-role", "lane", "--model", "{model}", "{prompt}"],
   });
   expect(existsSync(join(side, "omp-ulw"))).toBe(false);
 });
@@ -104,10 +104,10 @@ posix(
   "selecting the managed default preserves a foreign regular retention path before checkout or config changes",
   () => {
     const { home, src, first, commit, upstreamCommit, install } = withUlwRemote();
-    const side = join(home, ".omp-dori");
+    const side = join(home, ".omp-cataly");
     const managed = join(side, "omp-ulw");
-    const retained = join(side, ".omp-dori-ulw");
-    expect(install({ DORI_INSTALL_MODE: "side" }).code).toBe(0);
+    const retained = join(side, ".omp-cataly-ulw");
+    expect(install({ CATALY_INSTALL_MODE: "side" }).code).toBe(0);
     const sourceHead = git(src, "rev-parse", "HEAD");
     const config = readFileSync(join(side, "config.json"), "utf8");
     writeFileSync(retained, "owner data\n");

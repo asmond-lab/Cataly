@@ -5,7 +5,7 @@ import { prepareCandidate } from "./prepare.ts";
 import { runCommand } from "./process.ts";
 import { parseReview, portPrompt, readPortResult, reviewPrompt } from "./review.ts";
 import {
-  assertDoriScope,
+  assertCatalyScope,
   assertFrozen,
   assertSource,
   assertSourceAdmission,
@@ -19,7 +19,7 @@ import type { UpdateContext, UpdateJob } from "./types.ts";
 function assertBoundary(job: UpdateJob, metadata: string): void {
   const source = sourceManifest(job.candidate);
   assertSourceAdmission(source, "candidate");
-  assertDoriScope(job.inputs!, source);
+  assertCatalyScope(job.inputs!, source);
   if (gitIdentity(job.candidate) !== metadata) {
     throw new UpdateError("candidate Git metadata changed: commits/staging/config edits are outside this port");
   }

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { readArchive } from "../src/release/archive.ts";
 import { automaticLaunch, automaticUpdate } from "../src/release/automatic.ts";
 import { readAutomaticState } from "../src/release/automatic-state.ts";
@@ -26,7 +26,7 @@ posix("a candidate without support for the configured host/runtime profile is ne
   const f = fixture();
   const one = await installBundle(f.paths, f.release("one").bundle, undefined);
   const config = JSON.parse(readFileSync(f.paths.config, "utf8"));
-  config.runtime = process.platform === "darwin" ? "herdr" : "hc";
+  config.sessionRuntime = "headless";
   saveJson(f.paths.config, config);
   const settings = readFileSync(f.paths.config);
   const pointer = readlinkSync(f.paths.live);
@@ -40,7 +40,7 @@ posix("a candidate without support for the configured host/runtime profile is ne
   expect(readFileSync(f.paths.config)).toEqual(settings);
   expect(readAutomaticState(f.paths)).toMatchObject({
     outcome: "failed",
-    detail: "Available release does not support this installation profile",
+    detail: expect.stringContaining("conflicts with preserved config runtime"),
   });
 });
 
@@ -61,40 +61,87 @@ posix("bound automatic activation admits native and ULW bundles without mutating
   );
 });
 
-posix("primary consumer shell re-execs the newly selected source before resolving native code", () => {
+posix("the primary OMP link keeps its physical home across source selection from a foreign cwd", () => {
   const f = fixture();
-  const current = join(f.root, "first source");
-  const next = join(f.root, "next source");
-  const native = join(f.root, "native");
-  writeFileSync(native, '#!/bin/sh\nprintf "%s\\n" "new-native" "$@"\n', { mode: 0o755 });
+  const current = join(f.paths.releases, `${"1".repeat(40)}-${"a".repeat(16)}`);
+  const next = join(f.paths.releases, `${"2".repeat(40)}-${"b".repeat(16)}`);
+  writeFileSync(f.paths.config, '{"selected":"historical"}\n');
   for (const source of [current, next]) {
     mkdirSync(join(source, "scripts/consumer"), { recursive: true });
     mkdirSync(join(source, "src/release"), { recursive: true });
     copyFileSync(resolve(import.meta.dir, "../scripts/consumer/omp"), join(source, "scripts/consumer/omp"));
     chmodSync(join(source, "scripts/consumer/omp"), 0o755);
-    writeFileSync(join(source, "src/release/automatic.ts"), `console.log(${JSON.stringify(next)});\n`);
+    writeFileSync(
+      join(source, "src/release/automatic.ts"),
+      `import { importLegacyEnvironment } from ${JSON.stringify(resolve(import.meta.dir, "../src/legacy-environment.ts"))};
+importLegacyEnvironment();
+console.log(process.env.CATALY_MANAGED_STARTUP ? process.argv[2] : ${JSON.stringify(next)});\n`,
+    );
+    const native = join(source, "native");
+    writeFileSync(
+      native,
+      `#!/bin/sh\nprintf "%s\\n" ${basename(source)} "$CATALY_HOME" "$CATALY_CONFIG" "$DORI_HOME" "$DORI_CONFIG" "\${CATALY_STATE_DIR-state unset}" "\${DORI_STATE_DIR-state unset}" "$PWD" "$@"\n`,
+      { mode: 0o755 },
+    );
     writeFileSync(
       join(source, "scripts/source-dependencies.ts"),
-      source === next
-        ? `console.log(${JSON.stringify(native)});\n`
-        : 'throw new Error("stale dependency resolver ran");\n',
+      `const config = await Bun.file(process.env.CATALY_CONFIG).json();
+if (config.selected !== "historical") throw new Error("Wrong consumer dependency config");
+console.log(${JSON.stringify(native)});\n`,
     );
   }
+  const bin = join(f.paths.cataly, "bin");
+  mkdirSync(bin);
+  const wrapper = join(bin, "omp");
+  symlinkSync(`../releases/releases/${basename(current)}/scripts/consumer/omp`, wrapper);
   const cwd = join(f.root, "untrusted-cwd");
   mkdirSync(cwd);
   writeFileSync(join(cwd, "bunfig.toml"), 'preload = ["./injected.ts"]\n');
   writeFileSync(join(cwd, "injected.ts"), 'throw new Error("untrusted preload ran");\n');
-  const launched = Bun.spawnSync([join(current, "scripts/consumer/omp"), "--dori-role", "dori", "space argument"], {
-    cwd,
-    env: { HOME: f.paths.home, PATH: `${dirname(process.execPath)}:${process.env["PATH"]}` },
-  });
-  expect(launched.exitCode, launched.stderr.toString()).toBe(0);
-  expect(launched.stdout.toString().trim().split("\n")).toEqual([
-    "new-native",
-    "--dori-role",
-    "dori",
-    "space argument",
-  ]);
+  writeFileSync(join(cwd, "readlink"), '#!/bin/sh\nprintf "%s\\n" /untrusted\n', { mode: 0o755 });
+  writeFileSync(join(cwd, "config.json"), '{"selected":"foreign"}\n');
+  const foreign = { HOME: cwd, CONFIG: join(cwd, "config.json"), STATE_DIR: join(cwd, "state") };
+  const own = { HOME: f.paths.cataly, CONFIG: f.paths.config, STATE_DIR: join(f.paths.cataly, "managed-state") };
+  for (const [context, managed] of [
+    [undefined, undefined],
+    [foreign, undefined],
+    [own, undefined],
+    [undefined, "CATALY"],
+    [undefined, "DORI"],
+    [foreign, "DORI"],
+  ] as const) {
+    const inherited = Object.fromEntries(
+      Object.entries(context ?? {}).flatMap(([key, value]) => [
+        [`CATALY_${key}`, value],
+        [`DORI_${key}`, value],
+      ]),
+    );
+    if (managed) {
+      inherited[`${managed}_MANAGED_STARTUP`] = "1";
+      inherited[`${managed}_STATE_DIR`] = own.STATE_DIR;
+      if (managed === "DORI") inherited["CATALY_MANAGED_STARTUP"] = "";
+    }
+    const launched = Bun.spawnSync([wrapper, "--cataly-role", "dori", "space argument"], {
+      cwd,
+      env: { ...inherited, HOME: f.paths.home, PATH: `.:${dirname(process.execPath)}:${process.env["PATH"]}` },
+    });
+    const state = (prefix: "CATALY" | "DORI") =>
+      context === own || (context === undefined && managed === prefix) ? own.STATE_DIR : "state unset";
+    expect(launched.exitCode, launched.stderr.toString()).toBe(0);
+    expect(launched.stdout.toString().trim().split("\n")).toEqual([
+      basename(managed ? current : next),
+      f.paths.cataly,
+      f.paths.config,
+      f.paths.cataly,
+      f.paths.config,
+      state("CATALY"),
+      state("DORI"),
+      cwd,
+      "--cataly-role",
+      "dori",
+      "space argument",
+    ]);
+  }
 });
 
 function withAutomatic(bundle: VerifiedBundle, next: string): VerifiedBundle {
@@ -133,7 +180,7 @@ posix("isolated launch computes extension and discovery argv from the new source
   mkdirSync(cwd);
   writeFileSync(join(cwd, "bunfig.toml"), 'preload = ["./injected.ts"]\n');
   writeFileSync(join(cwd, "injected.ts"), 'throw new Error("untrusted preload ran");\n');
-  const launched = Bun.spawnSync([join(f.paths.dori, "bin/omp"), "--dori-role", "dori"], {
+  const launched = Bun.spawnSync([join(f.paths.dori, "bin/omp"), "--cataly-role", "dori"], {
     cwd,
     env: { HOME: f.paths.home, PATH: process.env["PATH"] },
   });
@@ -148,10 +195,10 @@ posix("automatic CLI opt-out and resume are durable and leave config bytes untou
   const f = fixture();
   await installBundle(f.paths, f.release("one").bundle, undefined);
   const config = readFileSync(f.paths.config);
-  const cli = resolve(import.meta.dir, "../skills/dori-mode/scripts/src/cli.ts");
+  const cli = resolve(import.meta.dir, "../skills/cataly-mode/scripts/src/cli.ts");
   for (const mode of ["disable", "status", "enable"] as const) {
     const result = Bun.spawnSync([process.execPath, cli, "update", "auto", mode], {
-      env: { HOME: f.paths.home, DORI_HOME: f.paths.dori, PATH: process.env["PATH"] },
+      env: { HOME: f.paths.home, CATALY_HOME: f.paths.dori, PATH: process.env["PATH"] },
     });
     expect(result.exitCode, result.stderr.toString()).toBe(0);
     expect(JSON.parse(result.stdout.toString()).automatic.enabled).toBe(mode === "enable");

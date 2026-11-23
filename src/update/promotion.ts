@@ -91,7 +91,7 @@ export async function promoteJob(ctx: UpdateContext, state: UpdateState, job: Up
           },
           ctx.signal,
           ctx.config.reporter
-            ? (deployment) => reportPreAction(ctx, job, { action: "dori-replacement", deployment })
+            ? (deployment) => reportPreAction(ctx, job, { action: "cataly-replacement", deployment })
             : undefined,
         );
         if (promotion.deployment.status !== "healthy") {
@@ -123,8 +123,8 @@ export async function promoteJob(ctx: UpdateContext, state: UpdateState, job: Up
   if (outcome === "candidate") {
     persistReport(ctx, job);
     ctx.emit({
-      type: "DORI_UPDATE",
-      target: "dori",
+      type: "CATALY_UPDATE",
+      target: "cataly",
       event: "promotion-pending",
       job: job.id,
       phase: job.phase,

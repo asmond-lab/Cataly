@@ -95,7 +95,7 @@ Cataly 使用你提供的账号和权限工作。对外部系统产生影响的�
 报告应区分观察到的结果、尚存的不确定性和未执行的工作。
 
 不要在公开补丁和报告中包含凭据、私人对话或账号数据。
-可选遥测可以通过 `DORI_TELEMETRY=0` 或 `DO_NOT_TRACK=1` 关闭。
+遥测默认关闭。设置 `CATALY_TELEMETRY=1` 可主动开启；`DO_NOT_TRACK=1` 优先。
 
 ## 从这里开始
 
@@ -103,8 +103,12 @@ Cataly 使用你提供的账号和权限工作。对外部系统产生影响的�
 
 **注意**
 
-Cataly 是项目名称。现有的 `dori`、`omp-dori` 和 `omp` 命令、
-安装主目录以及已发布资源文件的名称均未更改。
+当前命令是 `cataly`、`cataly-harness` 和 `omp-cataly`（独立安装）。
+新安装默认使用 `~/.cataly` 或 `~/.omp-cataly`，默认运行时不需要终端后端。
+
+请[安装经过验证的当前发行版](docs/releases.md#install-a-current-release)，
+或[无需终端后端即可从 v0.1.3 升级](docs/releases.md#upgrade-a-v013-installation)。
+升级保留原安装目录和现有配置。
 
 </td></tr></table>
 
@@ -119,20 +123,21 @@ Cataly 是项目名称。现有的 `dori`、`omp-dori` 和 `omp` 命令、
 
 ### 从源码开展工作
 
-请先安装 git、Bun 1.4.4+，以及 herdr 或 hc；详情见
+请先安装 git 和 Bun 1.4.4+。Linux 和 macOS 的默认配置不需要 herdr 或 hc；详情见
 [源码版前提条件](docs/releases.md#current-source-bundle)。
+源码 `main` 还提供第三种会话运行时 Tern；详见 [Tern](docs/runtime.md#tern)。
 
 请使用独立的检出目录，不要使用正在运行的安装或已冻结的用户发行版：
 
 ```bash
 git clone https://github.com/vntrevx/Cataly.git "$HOME/src/Cataly" || exit 1
 cd "$HOME/src/Cataly" || exit 1
-DORI_INSTALL_MODE=side DORI_NO_PULL=1 DORI_SRC="$PWD" bash scripts/install-source.sh
+CATALY_INSTALL_MODE=side CATALY_NO_PULL=1 CATALY_SRC="$PWD" bash scripts/install-source.sh
 ```
 
-源码安装器会准备与项目绑定的修改版 OMP 18.20.0 和 ULW 覆盖层；
-`PATH` 中未经修改的 `omp` 不能替代它们。side 模式默认使用 `~/.omp-dori`，
-保留自己的包装脚本和配置，不影响主安装 `~/.dori`。
+源码安装器会准备与项目绑定的修改版 OMP 19.0.1 和 ULW 覆盖层；
+`PATH` 中未经修改的 `omp` 不能替代它们。side 模式默认使用 `~/.omp-cataly`，
+保留自己的包装脚本和配置，不影响主安装 `~/.cataly`。
 安装不会启动代理、聊天消息接收器或服务。
 
 请阅读[源码安装指南](docs/releases.md#source-checkouts-for-maintainers)，
@@ -151,8 +156,8 @@ DORI_INSTALL_MODE=side DORI_NO_PULL=1 DORI_SRC="$PWD" bash scripts/install-sourc
 ## 文档
 
 - [安装、支持、更新和回滚](docs/releases.md)
-- [技能与操作规则](skills/dori-mode/SKILL.md)
-- [聊天工具设置](skills/dori-mode/references/setup.md)
+- [技能与操作规则](skills/cataly-mode/SKILL.md)
+- [聊天工具设置](skills/cataly-mode/references/setup.md)
 - [运行时适配器与会话契约](docs/runtime.md)
 - [容器设置](docs/container.md)
 - [调度与待办队列](docs/hourly-loop.md)
@@ -172,6 +177,6 @@ DORI_INSTALL_MODE=side DORI_NO_PULL=1 DORI_SRC="$PWD" bash scripts/install-sourc
 
 许可证依各组件的来源而定。dori-superagent 衍生材料保留
 [Sustainable Use License 1.0](LICENSE)；既有 OMP 集成部分保留其
-[MIT 许可证和版权声明](LICENSE.omp-dori)。其他组件保持各自的条款。
+[MIT 许可证和版权声明](LICENSE.integration)。其他组件保持各自的条款。
 MIT 声明并未将整个仓库改为 MIT 许可。[NOTICE](NOTICE) 记录导入的修订版本和
 修改副本的署名与来源说明。

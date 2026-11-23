@@ -3,7 +3,7 @@ import { existsSync, readFileSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { runUpdate } from "../src/update/cli.ts";
 import { UpdateInterrupted } from "../src/update/config.ts";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { loadUpdateConfig } from "../src/update/load.ts";
 import { detectHead } from "../src/update/prepare.ts";
 import type { UpdateState } from "../src/update/types.ts";
@@ -11,25 +11,35 @@ import { detectionReceipt, detectorFixture, waitFor } from "./update-detection-s
 import { fixture, it } from "./update-setup.ts";
 
 describe("bounded configured ref detection", () => {
+  test("status separates candidates from a missing managed runtime", async () => {
+    const f = fixture();
+    expect((await f.updater.status()).running).toEqual({
+      status: "unknown",
+      reason: "managed deployment is not configured",
+    });
+  });
+
   it("a completed unavailable ref check is retryable and the next check recovers without candidate work", async () => {
     const f = fixture();
     const config = join(f.directory, "config.json");
     f.write(f.directory, "config.json", JSON.stringify(f.config));
-    const updater = new DoriUpdater(loadUpdateConfig(config), () => {});
+    const updater = new CatalyUpdater(loadUpdateConfig(config), () => {});
     renameSync(join(f.remote, ".git"), join(f.remote, ".git.offline"));
     try {
       expect(await runUpdate(["check", "--config", config])).toBe(4);
       expect(detectionReceipt(f.config.root).exitCode).not.toBe(0);
-      expect(updater.status().state.jobs).toEqual({});
-      expect(updater.status().state.active).toBeUndefined();
-      expect(updater.status().state.observed).toBeUndefined();
+      const { state } = await updater.status();
+      expect(state.jobs).toEqual({});
+      expect(state.active).toBeUndefined();
+      expect(state.observed).toBeUndefined();
     } finally {
       renameSync(join(f.remote, ".git.offline"), join(f.remote, ".git"));
     }
     expect(await runUpdate(["check", "--config", config])).toBe(0);
     expect(detectionReceipt(f.config.root).exitCode).toBe(0);
-    expect(updater.status().state.observed).toBe(f.config.baseUpstream);
-    expect(updater.status().state.jobs).toEqual({});
+    const { state } = await updater.status();
+    expect(state.observed).toBe(f.config.baseUpstream);
+    expect(state.jobs).toEqual({});
   });
 
   it("resolves the configured head and retains separate private invocation receipts", async () => {
@@ -59,11 +69,12 @@ describe("bounded configured ref detection", () => {
     const f = fixture();
     const controller = new AbortController();
     controller.abort();
-    const updater = new DoriUpdater(f.config, () => {}, controller.signal);
+    const updater = new CatalyUpdater(f.config, () => {}, controller.signal);
     const error = await updater.once("stage").catch((error: unknown) => error);
     expect(error).toBeInstanceOf(UpdateInterrupted);
-    expect(updater.status().state.jobs).toEqual({});
-    expect(updater.status().state.observed).toBeUndefined();
+    const { state } = await updater.status();
+    expect(state.jobs).toEqual({});
+    expect(state.observed).toBeUndefined();
     expect(existsSync(join(f.config.root, "detector"))).toBe(false);
     expect(existsSync(join(f.config.root, "jobs"))).toBe(false);
   });

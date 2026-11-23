@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { routeDiscordAskReply } from "../../skills/dori-mode/scripts/src/messenger/discord-ask-mailbox.ts";
+import { routeDiscordAskReply } from "../../skills/cataly-mode/scripts/src/messenger/discord-ask-mailbox.ts";
 import { DiscordAsk } from "../discord-ask.ts";
 import { until } from "./fake-pi.ts";
 
@@ -21,7 +21,7 @@ for (const winner of ["Discord", "terminal"] as const) {
   posix(`${winner} answers the native ASK once and closes the other path`, async () => {
     const root = mkdtempSync(join(tmpdir(), "cataly-discord-ask-"));
     const tokenFile = join(root, "bot-token");
-    const previous = process.env["DORI_DISCORD_API_BASE"];
+    const previous = process.env["CATALY_DISCORD_API_BASE"];
     const posts: Array<Record<string, unknown>> = [];
     const questions = Promise.withResolvers<void>();
     const editResponse = Promise.withResolvers<void>();
@@ -46,7 +46,7 @@ for (const winner of ["Discord", "terminal"] as const) {
         return Response.json({ id: posts.length === 1 ? question : next });
       },
     });
-    process.env["DORI_DISCORD_API_BASE"] = `http://127.0.0.1:${server.port}`;
+    process.env["CATALY_DISCORD_API_BASE"] = `http://127.0.0.1:${server.port}`;
     writeFileSync(tokenFile, "synthetic-ask-token\n", { mode: 0o600 });
     writeFileSync(
       join(root, "discord-ask.json"),
@@ -105,8 +105,8 @@ for (const winner of ["Discord", "terminal"] as const) {
       bridge.clear();
       editResponse.resolve();
       terminalAnswer.resolve(undefined);
-      if (previous === undefined) delete process.env["DORI_DISCORD_API_BASE"];
-      else process.env["DORI_DISCORD_API_BASE"] = previous;
+      if (previous === undefined) delete process.env["CATALY_DISCORD_API_BASE"];
+      else process.env["CATALY_DISCORD_API_BASE"] = previous;
       server.stop(true);
       rmSync(root, { recursive: true });
     }

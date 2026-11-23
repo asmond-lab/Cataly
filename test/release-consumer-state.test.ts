@@ -62,8 +62,8 @@ posix("a live identity-bound Dori receipt holds both install and rollback withou
   const runtime = join(f.paths.dori, "state/runtime");
   mkdirSync(runtime, { recursive: true, mode: 0o700 });
   saveJson(join(runtime, "owned-pane.json"), { ...processIdentity(process.pid), role: "dori", sessionId: "isolated" });
-  await expect(installBundle(f.paths, f.release("third\n").bundle, two)).rejects.toThrow("Live Dori PID");
-  await expect(rollbackRelease(f.paths, two)).rejects.toThrow("Live Dori PID");
+  await expect(installBundle(f.paths, f.release("third\n").bundle, two)).rejects.toThrow("Live Cataly PID");
+  await expect(rollbackRelease(f.paths, two)).rejects.toThrow("Live Cataly PID");
   expect(processIdentity(process.pid)).toBeDefined();
   expect(readlinkSync(f.paths.live)).toBe(pointer);
   expect(readFileSync(f.paths.state)).toEqual(state);
@@ -112,9 +112,9 @@ posix(
 posix("consumer status works before user configuration parsing and performs no runtime launch", () => {
   const f = fixture();
   writeFileSync(f.paths.config, "invalid user config\n", { mode: 0o600 });
-  const cli = resolve(import.meta.dir, "../skills/dori-mode/scripts/src/cli.ts");
-  const result = Bun.spawnSync([process.execPath, cli, "update", "status"], {
-    env: { HOME: f.paths.home, PATH: process.env["PATH"], DORI_TELEMETRY: "0", DO_NOT_TRACK: "1" },
+  const cli = resolve(import.meta.dir, "../skills/cataly-mode/scripts/src/cli.ts");
+  const result = Bun.spawnSync([process.execPath, cli, "update", "status", "--home", f.paths.cataly], {
+    env: { HOME: f.paths.home, PATH: process.env["PATH"], CATALY_TELEMETRY: "0", DO_NOT_TRACK: "1" },
   });
   expect(result.exitCode).toBe(0);
   expect(JSON.parse(result.stdout.toString())).toEqual({ installed: false });

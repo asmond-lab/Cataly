@@ -1,22 +1,64 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync, renameSync, symlinkSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, statSync, symlinkSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
+import type { DetectionReceipt } from "../src/update/detection-process.ts";
 import { acknowledgeStopped, restoreUpdate, snapshotUpdate } from "../src/update/recovery.ts";
 import { sourceManifest } from "../src/update/source.ts";
 import { persistJob, persistState, readState, saveJson, transition } from "../src/update/state.ts";
 import { fixture, git, posixSuite } from "./update-setup.ts";
 
-posixSuite("Dori staged updater", () => {
+// Report progress before the CI test deadline, without logging command arguments, paths or output.
+async function observedCycle(updater: CatalyUpdater, phase: string, trigger?: "stage") {
+  const detector = join(updater.context.config.root, "detector");
+  const since = Date.now();
+  const report = () => {
+    try {
+      const started = JSON.parse(readFileSync(join(detector, "detection-started.json"), "utf8")) as {
+        readonly receiptPath: string;
+      };
+      const receipt = JSON.parse(readFileSync(started.receiptPath, "utf8")) as DetectionReceipt;
+      if (Date.parse(receipt.startedAt) < since) {
+        console.error("updater fixture", { phase, detection: "not started for this cycle" });
+        return;
+      }
+      console.error("updater fixture", {
+        phase,
+        exitCode: receipt.exitCode,
+        signal: receipt.signal,
+        finished: receipt.finishedAt !== undefined,
+        hadError: receipt.error !== undefined,
+        stdoutBytes: statSync(receipt.stdout, { throwIfNoEntry: false })?.size,
+        stderrBytes: statSync(receipt.stderr, { throwIfNoEntry: false })?.size,
+        outputComplete: receipt.detector?.outputComplete,
+        stopReason: receipt.detector?.reason,
+      });
+    } catch (error) {
+      console.error("updater fixture", { phase, readErrorKind: error instanceof Error ? error.name : typeof error });
+    }
+  };
+  const diagnostic = setTimeout(report, 15_000);
+  diagnostic.unref();
+  try {
+    return await updater.once(trigger);
+  } catch (error) {
+    report();
+    throw error;
+  } finally {
+    clearTimeout(diagnostic);
+  }
+}
+
+posixSuite("Cataly staged updater", () => {
   test("automatic baseline observation does no port; manual current-head staging propagates failure and deduplicates across restart", async () => {
     const f = fixture();
-    expect(await f.updater.once()).toEqual({ outcome: "unchanged" });
+    expect(await observedCycle(f.updater, "observe baseline")).toEqual({ outcome: "unchanged" });
     expect(Object.keys(readState(f.updater.context).jobs)).toHaveLength(0);
     f.write(f.localSource, "src/behavior.ts", "export const behavior = 'local OMP adaptation';\n");
     f.write(f.localSource, "src/new-adaptation.ts", "export const added = true;\n");
     f.write(f.localSource, "config.json", '{"token":"private fixture config"}');
-    const result = await f.updater.once("stage");
+    const result = await observedCycle(f.updater, "stage current head", "stage");
     const job = result.job!;
     expect(result.outcome).toBe("candidate");
     expect(job.phase).toBe("failed");
@@ -29,8 +71,8 @@ posixSuite("Dori staged updater", () => {
     );
     expect(existsSync(join(job.directory, "inputs", "local", "config.json"))).toBe(false);
     const before = readFileSync(join(job.directory, "job.json"), "utf8");
-    const restarted = new DoriUpdater(f.config, (event) => f.events.push(event));
-    expect((await restarted.once("stage")).outcome).toBe("duplicate");
+    const restarted = new CatalyUpdater(f.config, (event) => f.events.push(event));
+    expect((await observedCycle(restarted, "restart after staging", "stage")).outcome).toBe("duplicate");
     expect(readFileSync(join(job.directory, "job.json"), "utf8")).toBe(before);
     expect(readState(restarted.context).active).toBeUndefined();
     expect(JSON.parse(readFileSync(join(job.directory, "report.json"), "utf8")).phase).toBe("failed");
@@ -41,7 +83,7 @@ posixSuite("Dori staged updater", () => {
     const before = sourceManifest(f.localSource).hash;
     f.write(f.remote, "src/behavior.ts", "export const behavior = 2;\n");
     git(f.remote, "add", ".");
-    git(f.remote, "commit", "-m", "Dori upstream behavior change");
+    git(f.remote, "commit", "-m", "Cataly upstream behavior change");
     const head = git(f.remote, "rev-parse", "HEAD");
     const result = await f.updater.once();
     expect(result.job?.upstream).toBe(head);
@@ -97,15 +139,15 @@ posixSuite("Dori staged updater", () => {
   test("a failed reporter is retained once and never resent by a restarted updater", async () => {
     const f = fixture();
     const config = { ...f.config, reporter: { name: "notify", argv: ["false", "{text}"], timeoutMs: 10_000 } };
-    const updater = new DoriUpdater(config, (event) => f.events.push(event));
-    const result = await updater.once("stage");
+    const updater = new CatalyUpdater(config, (event) => f.events.push(event));
+    const result = await observedCycle(updater, "stage with failing reporter", "stage");
     const job = result.job!;
     expect(result.outcome).toBe("candidate");
     expect(job.phase).toBe("failed");
     expect(job.notification).toEqual({ state: "failed", exitCode: 1 });
     expect(readState(updater.context).active).toBeUndefined();
-    const restarted = new DoriUpdater(config, (event) => f.events.push(event));
-    expect((await restarted.once("stage")).outcome).toBe("duplicate");
+    const restarted = new CatalyUpdater(config, (event) => f.events.push(event));
+    expect((await observedCycle(restarted, "restart after reporting", "stage")).outcome).toBe("duplicate");
     expect(job.commands.filter((receipt) => receipt.name === "notify")).toHaveLength(1);
     expect(JSON.stringify(f.events)).not.toContain(f.directory);
   });
@@ -114,12 +156,12 @@ posixSuite("Dori staged updater", () => {
     const f = fixture();
     const reporter = { name: "notify", argv: ["sh", "-c", "exec sleep 30", "notify", "{text}"], timeoutMs: 100 };
     const config = { ...f.config, reporter };
-    const updater = new DoriUpdater(config, (event) => f.events.push(event));
+    const updater = new CatalyUpdater(config, (event) => f.events.push(event));
     const job = (await updater.once("stage")).job!;
     expect(job.phase).toBe("failed");
     expect(job.notification?.state).toBe("ambiguous");
     expect(readState(updater.context).active).toBeUndefined();
-    const restarted = new DoriUpdater(config, (event) => f.events.push(event));
+    const restarted = new CatalyUpdater(config, (event) => f.events.push(event));
     const again = await restarted.once("stage");
     expect(again.outcome).toBe("duplicate");
     expect(again.job?.commands.filter((receipt) => receipt.name === "notify")).toHaveLength(1);

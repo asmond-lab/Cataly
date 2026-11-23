@@ -6,220 +6,223 @@ import { git, script, setup } from "./install-setup.ts";
 // POSIX-only: the fixture runs scripts/install-source.sh and links commands with POSIX symlinks.
 const posix = test.skipIf(process.platform === "win32");
 
-const OTHER_CONFIG = '{"owner":"another Dori"}\n';
+const OTHER_CONFIG = '{"owner":"another Cataly"}\n';
 
-// Another Dori's installation: its home, its dori-mode skill link and its global dori bin.
-function withOtherDori(home: string) {
-  mkdirSync(join(home, ".dori"));
-  writeFileSync(join(home, ".dori/config.json"), OTHER_CONFIG);
+// Another Cataly's installation: its home, its cataly-mode skill link and its global cataly bin.
+function withOtherCataly(home: string) {
+  mkdirSync(join(home, ".cataly"));
+  writeFileSync(join(home, ".cataly/config.json"), OTHER_CONFIG);
   mkdirSync(join(home, "skills"));
-  symlinkSync("/elsewhere/dori-mode", join(home, "skills/dori-mode"));
+  symlinkSync("/elsewhere/cataly-mode", join(home, "skills/cataly-mode"));
   mkdirSync(join(home, "global-bin"));
-  symlinkSync("/elsewhere/cli.ts", join(home, "global-bin/dori"));
+  symlinkSync("/elsewhere/cli.ts", join(home, "global-bin/cataly"));
 }
 
-const expectOtherDoriUntouched = (home: string) => {
-  expect(readFileSync(join(home, ".dori/config.json"), "utf8")).toBe(OTHER_CONFIG);
-  expect(readdirSync(join(home, ".dori"))).toEqual(["config.json"]);
-  expect(readlinkSync(join(home, "skills/dori-mode"))).toBe("/elsewhere/dori-mode");
-  expect(readlinkSync(join(home, "global-bin/dori"))).toBe("/elsewhere/cli.ts");
+const expectOtherCatalyUntouched = (home: string) => {
+  expect(readFileSync(join(home, ".cataly/config.json"), "utf8")).toBe(OTHER_CONFIG);
+  expect(readdirSync(join(home, ".cataly"))).toEqual(["config.json"]);
+  expect(readlinkSync(join(home, "skills/cataly-mode"))).toBe("/elsewhere/cataly-mode");
+  expect(readlinkSync(join(home, "global-bin/cataly"))).toBe("/elsewhere/cli.ts");
 };
 
-posix("another Dori in ~/.dori stops an install with no terminal and no mode, and nothing changes", () => {
-  // Given another Dori's ~/.dori.
+posix("another Cataly in ~/.cataly stops an install with no terminal and no mode, and nothing changes", () => {
   const { root, home, install } = setup();
-  withOtherDori(home);
-  // When scripts/install-source.sh runs without a terminal or DORI_INSTALL_MODE.
+  withOtherCataly(home);
   const r = install();
-  // Then it stops, names both modes, and leaves every file of the other Dori and every OMP location as it was.
   expect(r.code).toBe(1);
-  expect(r.err).toContain("DORI_INSTALL_MODE=side");
-  expect(r.err).toContain("DORI_INSTALL_MODE=primary");
-  expectOtherDoriUntouched(home);
-  expect(existsSync(join(home, "extensions/omp-dori"))).toBe(false);
-  expect(existsSync(join(home, ".omp-dori"))).toBe(false);
+  expect(r.err).toContain("CATALY_INSTALL_MODE=side");
+  expect(r.err).toContain("CATALY_INSTALL_MODE=primary");
+  expectOtherCatalyUntouched(home);
+  expect(existsSync(join(home, "extensions/omp-cataly"))).toBe(false);
+  expect(existsSync(join(home, ".omp-cataly"))).toBe(false);
   expect(existsSync(join(root, "bun.log"))).toBe(false);
 });
 
-posix("a side install lives in ~/.omp-dori and leaves ~/.dori, the dori-mode link and the dori command alone", () => {
-  // Given another Dori's ~/.dori.
-  const { home, src, ulw, install } = setup();
-  withOtherDori(home);
-  // When scripts/install-source.sh runs with DORI_INSTALL_MODE=side.
-  const r = install({ DORI_INSTALL_MODE: "side" });
-  // Then the other Dori is unchanged, no global extension or dori bin was linked, and only omp-dori was added.
-  expect(r.code).toBe(0);
-  expectOtherDoriUntouched(home);
-  const side = join(home, ".omp-dori");
-  expect(existsSync(join(home, "extensions/omp-dori"))).toBe(false);
-  expect(readlinkSync(join(home, "global-bin/omp-dori"))).toBe(join(side, "bin/omp-dori"));
-  expect(readFileSync(join(side, ".omp-dori"), "utf8")).toBe("side\n");
-  // And its configuration keeps state and lanes inside the side home.
-  const config = JSON.parse(readFileSync(join(side, "config.json"), "utf8"));
-  expect(config.stateDir).toBe(join(side, "state"));
-  expect(config.agentCommand).toEqual([join(side, "bin/omp"), "--dori-role", "lane", "--model", "{model}", "{prompt}"]);
-  // omp-ulw loads as an OMP extension of omp-dori omp, so the omp-dori extension imports no second copy.
-  expect(config.ompUlwPath).toBe("");
-  expect(existsSync(join(ulw, "index.ts"))).toBe(true);
-  // And its skill is a renamed copy whose description differs from dori-mode's, so omp lists both apart.
-  const skill = readFileSync(join(side, "skills/omp-dori-mode/SKILL.md"), "utf8");
-  expect(skill).toContain("\nname: omp-dori-mode\n");
-  const description = skill.match(/^description: (.+)$/m)?.[1];
-  const original = readFileSync(join(src, "skills/dori-mode/SKILL.md"), "utf8");
-  expect(description).toBeDefined();
-  expect(description).not.toBe(original.match(/^description: (.+)$/m)?.[1]);
-  expect(readlinkSync(join(side, "skills/omp-dori-mode/references"))).toBe(join(src, "skills/dori-mode/references"));
-  // And omp-dori omp never self-updates: OMP would overwrite this wrapper, the first omp on the side PATH.
-  expect(readFileSync(join(side, "bin/omp"), "utf8")).toContain(`--config ${join(side, "omp.yml")}`);
-  expect(readFileSync(join(side, "env.sh"), "utf8")).toContain(`export PATH=${join(side, "bin")}:`);
-  expect(Bun.YAML.parse(readFileSync(join(side, "omp.yml"), "utf8"))).toMatchObject({ update: { auto: false } });
-});
+posix(
+  "a side install lives in ~/.omp-cataly and leaves ~/.cataly, the cataly-mode link and the cataly command alone",
+  () => {
+    // Given another Cataly's ~/.cataly.
+    const { home, src, ulw, install } = setup();
+    withOtherCataly(home);
+    // When scripts/install-source.sh runs with CATALY_INSTALL_MODE=side.
+    const r = install({ CATALY_INSTALL_MODE: "side" });
+    // Then the other Cataly is unchanged, no global extension or cataly bin was linked, and only omp-cataly was added.
+    expect(r.code).toBe(0);
+    expectOtherCatalyUntouched(home);
+    const side = join(home, ".omp-cataly");
+    expect(existsSync(join(home, "extensions/omp-cataly"))).toBe(false);
+    expect(readlinkSync(join(home, "global-bin/omp-cataly"))).toBe(join(side, "bin/omp-cataly"));
+    expect(readFileSync(join(side, ".omp-cataly"), "utf8")).toBe("side\n");
+    // And its configuration keeps state and lanes inside the side home.
+    const config = JSON.parse(readFileSync(join(side, "config.json"), "utf8"));
+    expect(config.stateDir).toBe(join(side, "state"));
+    expect(config.agentCommand).toEqual([
+      join(side, "bin/omp"),
+      "--cataly-role",
+      "lane",
+      "--model",
+      "{model}",
+      "{prompt}",
+    ]);
+    // omp-ulw loads as an OMP extension of omp-cataly omp, so the omp-cataly extension imports no second copy.
+    expect(config.ompUlwPath).toBe("");
+    expect(existsSync(join(ulw, "index.ts"))).toBe(true);
+    // And its skill is a renamed copy whose description differs from cataly-mode's, so omp lists both apart.
+    const skill = readFileSync(join(side, "skills/omp-cataly-mode/SKILL.md"), "utf8");
+    expect(skill).toContain("\nname: omp-cataly-mode\n");
+    const description = skill.match(/^description: (.+)$/m)?.[1];
+    const original = readFileSync(join(src, "skills/cataly-mode/SKILL.md"), "utf8");
+    expect(description).toBeDefined();
+    expect(description).not.toBe(original.match(/^description: (.+)$/m)?.[1]);
+    expect(readlinkSync(join(side, "skills/omp-cataly-mode/references"))).toBe(
+      join(src, "skills/cataly-mode/references"),
+    );
+    // And omp-cataly omp never self-updates: OMP would overwrite this wrapper, the first omp on the side PATH.
+    expect(readFileSync(join(side, "bin/omp"), "utf8")).toContain(`--config ${join(side, "omp.yml")}`);
+    expect(readFileSync(join(side, "env.sh"), "utf8")).toContain(`export PATH=${join(side, "bin")}:`);
+    expect(Bun.YAML.parse(readFileSync(join(side, "omp.yml"), "utf8"))).toMatchObject({ update: { auto: false } });
+  },
+);
 
 posix("a side install from a linked git worktree installs that checkout instead of cloning over it", () => {
-  // Given another Dori's ~/.dori and a linked worktree of the omp-dori checkout, whose .git is a file.
   const { root, home, src, cli, install } = setup();
-  withOtherDori(home);
+  withOtherCataly(home);
   const worktree = join(root, "worktree");
   git(src, "worktree", "add", "-q", "-b", "wt", worktree);
-  // When scripts/install-source.sh runs in side mode with DORI_SRC naming the worktree.
-  const r = install({ DORI_INSTALL_MODE: "side", DORI_SRC: worktree, DORI_NO_PULL: "1" });
-  // Then it installs the worktree as it is, and the side dori wrapper runs the worktree's CLI.
+  const r = install({ CATALY_INSTALL_MODE: "side", CATALY_SRC: worktree, CATALY_NO_PULL: "1" });
   expect(r.code).toBe(0);
-  expectOtherDoriUntouched(home);
-  expect(readFileSync(join(home, ".omp-dori/bin/dori"), "utf8")).toContain(join(worktree, cli));
+  expectOtherCatalyUntouched(home);
+  expect(readFileSync(join(home, ".omp-cataly/bin/cataly"), "utf8")).toContain(join(worktree, cli));
 });
 
-posix("OMP_DORI_HC_SPACE puts DORI_HC_SPACE into the side env; without it the side env names no space", () => {
-  // Given another Dori's ~/.dori.
-  const { home, install } = setup();
-  withOtherDori(home);
-  const env = () => readFileSync(join(home, ".omp-dori/env.sh"), "utf8");
-  // When a side install runs without a space, then again with one.
-  expect(install({ DORI_INSTALL_MODE: "side" }).code).toBe(0);
-  expect(env()).not.toContain("DORI_HC_SPACE");
-  const r = install({ DORI_INSTALL_MODE: "side", OMP_DORI_HC_SPACE: "sp0a1b" });
-  expect(r.code).toBe(0);
-  // Then only the second env exports it, the lead command it prints opens in that space, and the other Dori is unchanged.
-  expect(env()).toContain("export DORI_HC_SPACE=sp0a1b\n");
-  expect(r.out).toContain("--label herdr.space=sp0a1b --");
-  expectOtherDoriUntouched(home);
+posix("an optional hc command still uses the side namespace and requested Herdr space", () => {
+  const s = setup();
+  const { home, install } = s;
+  withOtherCataly(home);
+  writeFileSync(join(s.root, "bin/hc"), '#!/bin/sh\nprintf "%s\\n" "$HC_SESSION" "${CATALY_HC_SPACE:-}" "$@"\n', {
+    mode: 0o700,
+  });
+  const terminal = () => Bun.spawnSync([join(home, "global-bin/omp-cataly"), "hc", "ls"], { env: s.env() });
+
+  expect(install({ CATALY_INSTALL_MODE: "side" }).code).toBe(0);
+  expect(terminal().stdout.toString()).toBe("omp-cataly\n\nls\n");
+  expect(install({ CATALY_INSTALL_MODE: "side", OMP_CATALY_HC_SPACE: "sp0a1b" }).code).toBe(0);
+  expect(terminal().stdout.toString()).toBe("omp-cataly\nsp0a1b\nls\n");
+  expectOtherCatalyUntouched(home);
 });
 
-posix("an omp-dori install from before the marker, with its checkout elsewhere, is updated without asking", () => {
+posix("an omp-cataly install from before the marker, with its checkout elsewhere, is updated without asking", () => {
   // Given an unmanaged source home whose earlier source installer linked the external checkout's extension.
   const { home, src, install } = setup();
-  mkdirSync(join(home, ".dori"));
-  writeFileSync(join(home, ".dori/config.json"), "{}\n");
+  mkdirSync(join(home, ".cataly"));
+  writeFileSync(join(home, ".cataly/config.json"), "{}\n");
   mkdirSync(join(home, "extensions"));
-  symlinkSync(join(src, "extension"), join(home, "extensions/omp-dori"));
+  symlinkSync(join(src, "extension"), join(home, "extensions/omp-cataly"));
   mkdirSync(join(home, "global-bin"));
-  symlinkSync(join(src, "skills/dori-mode/scripts"), join(home, "global-bin/old-scripts"));
-  symlinkSync("old-scripts/src/cli.ts", join(home, "global-bin/dori"));
+  symlinkSync(join(src, "skills/cataly-mode/scripts"), join(home, "global-bin/old-scripts"));
+  symlinkSync("old-scripts/src/cli.ts", join(home, "global-bin/cataly"));
   // When scripts/install-source.sh runs with no mode and no terminal.
   const r = install();
   // Then it installs in place as before: no question, no backup, and the marker now records it.
   expect(r.code).toBe(0);
-  expect(existsSync(join(home, ".dori/backups"))).toBe(false);
-  expect(readFileSync(join(home, ".dori/.omp-dori"), "utf8")).toBe("primary\n");
-  expect(readlinkSync(join(home, "global-bin/dori"))).toBe(join(src, "skills/dori-mode/scripts/src/cli.ts"));
+  expect(existsSync(join(home, ".cataly/backups"))).toBe(false);
+  expect(readFileSync(join(home, ".cataly/.omp-cataly"), "utf8")).toBe("primary\n");
+  expect(readlinkSync(join(home, "global-bin/cataly"))).toBe(join(src, "skills/cataly-mode/scripts/src/cli.ts"));
 });
 
 posix("a later run of a side install stays a side install without asking", () => {
-  // Given a side install next to another Dori.
+  // Given a side install next to another Cataly.
   const { home, install } = setup();
-  withOtherDori(home);
-  expect(install({ DORI_INSTALL_MODE: "side" }).code).toBe(0);
+  withOtherCataly(home);
+  expect(install({ CATALY_INSTALL_MODE: "side" }).code).toBe(0);
   // When scripts/install-source.sh runs again with no mode and no terminal.
   const r = install();
   expect(r.code).toBe(0);
-  expect(readFileSync(join(home, ".omp-dori/.omp-dori"), "utf8")).toBe("side\n");
-  expectOtherDoriUntouched(home);
+  expect(readFileSync(join(home, ".omp-cataly/.omp-cataly"), "utf8")).toBe("side\n");
+  expectOtherCatalyUntouched(home);
 });
 
-posix("primary over another Dori keeps its config and link targets, then takes ~/.dori", () => {
-  // Given another Dori's ~/.dori.
+posix("primary over another Cataly keeps its config and link targets, then takes ~/.cataly", () => {
+  // Given another Cataly's ~/.cataly.
   const { home, src, install } = setup();
-  withOtherDori(home);
-  // When scripts/install-source.sh runs with DORI_INSTALL_MODE=primary.
-  expect(install({ DORI_INSTALL_MODE: "primary" }).code).toBe(0);
-  // Then a backup holds the previous config and link targets, and the dori-mode link now points at omp-dori.
-  const backups = readdirSync(join(home, ".dori/backups"));
+  withOtherCataly(home);
+  // When scripts/install-source.sh runs with CATALY_INSTALL_MODE=primary.
+  expect(install({ CATALY_INSTALL_MODE: "primary" }).code).toBe(0);
+  // Then a backup holds the previous config and link targets, and the cataly-mode link now points at omp-cataly.
+  const backups = readdirSync(join(home, ".cataly/backups"));
   expect(backups).toHaveLength(1);
-  const backup = join(home, ".dori/backups", backups[0] ?? "");
+  const backup = join(home, ".cataly/backups", backups[0] ?? "");
   expect(readFileSync(join(backup, "config.json"), "utf8")).toBe(OTHER_CONFIG);
-  expect(readFileSync(join(backup, "links.txt"), "utf8")).toContain("-> /elsewhere/dori-mode");
+  expect(readFileSync(join(backup, "links.txt"), "utf8")).toContain("-> /elsewhere/cataly-mode");
   expect(readFileSync(join(backup, "links.txt"), "utf8")).toContain(
-    `${join(home, "global-bin/dori")} -> /elsewhere/cli.ts\n`,
+    `${join(home, "global-bin/cataly")} -> /elsewhere/cli.ts\n`,
   );
-  expect(readlinkSync(join(home, "global-bin/dori"))).toBe(join(src, "skills/dori-mode/scripts/src/cli.ts"));
-  expect(readlinkSync(join(home, "skills/dori-mode"))).toBe(join(src, "skills/dori-mode"));
-  expect(readFileSync(join(home, ".dori/.omp-dori"), "utf8")).toBe("primary\n");
+  expect(readlinkSync(join(home, "global-bin/cataly"))).toBe(join(src, "skills/cataly-mode/scripts/src/cli.ts"));
+  expect(readlinkSync(join(home, "skills/cataly-mode"))).toBe(join(src, "skills/cataly-mode"));
+  expect(readFileSync(join(home, ".cataly/.omp-cataly"), "utf8")).toBe("primary\n");
 });
 
-posix.each([".bun/bin", "custom-bin"])("primary backs up and replaces a foreign dori symlink in %s", (directory) => {
+posix.each([".bun/bin", "custom-bin"])("primary backs up and replaces a foreign cataly symlink in %s", (directory) => {
   const { home, src, install } = setup();
   const bin = join(home, directory);
   const untouchedBin = join(home, directory === ".bun/bin" ? "global-bin" : ".bun/bin");
   mkdirSync(bin, { recursive: true });
   mkdirSync(untouchedBin, { recursive: true });
-  symlinkSync("/elsewhere/cli.ts", join(bin, "dori"));
-  symlinkSync("/untouched/cli.ts", join(untouchedBin, "dori"));
-  const options = { DORI_INSTALL_MODE: "primary", OMP_DORI_BIN_DIR: directory === ".bun/bin" ? "" : bin };
+  symlinkSync("/elsewhere/cli.ts", join(bin, "cataly"));
+  symlinkSync("/untouched/cli.ts", join(untouchedBin, "cataly"));
+  const options = { CATALY_INSTALL_MODE: "primary", OMP_CATALY_BIN_DIR: directory === ".bun/bin" ? "" : bin };
 
   expect(install(options).code).toBe(0);
-  expect(readlinkSync(join(bin, "dori"))).toBe(join(src, "skills/dori-mode/scripts/src/cli.ts"));
-  expect(existsSync(join(bin, "dori"))).toBe(true);
-  expect(readlinkSync(join(untouchedBin, "dori"))).toBe("/untouched/cli.ts");
-  const backups = readdirSync(join(home, ".dori/backups"));
+  expect(readlinkSync(join(bin, "cataly"))).toBe(join(src, "skills/cataly-mode/scripts/src/cli.ts"));
+  expect(existsSync(join(bin, "cataly"))).toBe(true);
+  expect(readlinkSync(join(untouchedBin, "cataly"))).toBe("/untouched/cli.ts");
+  const backups = readdirSync(join(home, ".cataly/backups"));
   expect(backups).toHaveLength(1);
-  const backup = join(home, ".dori/backups", backups[0] ?? "");
+  const backup = join(home, ".cataly/backups", backups[0] ?? "");
   const links = readFileSync(join(backup, "links.txt"), "utf8");
-  expect(links).toContain(`${join(bin, "dori")} -> /elsewhere/cli.ts\n`);
+  expect(links).toContain(`${join(bin, "cataly")} -> /elsewhere/cli.ts\n`);
 
   expect(install(options).code).toBe(0);
-  expect(readlinkSync(join(bin, "dori"))).toBe(join(src, "skills/dori-mode/scripts/src/cli.ts"));
-  expect(readlinkSync(join(untouchedBin, "dori"))).toBe("/untouched/cli.ts");
-  expect(readdirSync(join(home, ".dori/backups"))).toEqual(backups);
+  expect(readlinkSync(join(bin, "cataly"))).toBe(join(src, "skills/cataly-mode/scripts/src/cli.ts"));
+  expect(readlinkSync(join(untouchedBin, "cataly"))).toBe("/untouched/cli.ts");
+  expect(readdirSync(join(home, ".cataly/backups"))).toEqual(backups);
   expect(readFileSync(join(backup, "links.txt"), "utf8")).toBe(links);
 });
 
-posix("primary preserves a regular dori command and names the conflicting destination", () => {
+posix("primary preserves a regular cataly command and names the conflicting destination", () => {
   const { home, install } = setup();
-  const command = join(home, "global-bin/dori");
+  const command = join(home, "global-bin/cataly");
   mkdirSync(join(home, "global-bin"));
   writeFileSync(command, "owner command\n");
 
-  const r = install({ DORI_INSTALL_MODE: "primary" });
+  const r = install({ CATALY_INSTALL_MODE: "primary" });
   expect(r.code).toBe(1);
   expect(r.err).toContain(command);
-  expect(r.err).toContain("OMP_DORI_BIN_DIR");
+  expect(r.err).toContain("OMP_CATALY_BIN_DIR");
   expect(readFileSync(command, "utf8")).toBe("owner command\n");
-  expect(existsSync(join(home, ".dori/.omp-dori"))).toBe(false);
+  expect(existsSync(join(home, ".cataly/.omp-cataly"))).toBe(false);
 });
 
-posix("primary refuses a ~/.dori/src that is another repository and changes nothing", () => {
-  // Given another Dori whose ~/.dori/src checks out a different repository.
+posix("primary refuses a ~/.cataly/src that is another repository and changes nothing", () => {
   const { root, home, install } = setup();
-  withOtherDori(home);
-  const other = join(home, ".dori/src");
+  withOtherCataly(home);
+  const other = join(home, ".cataly/src");
   mkdirSync(other);
   git(other, "init", "-q", "-b", "main");
-  git(other, "remote", "add", "origin", "https://github.com/example/dori-superagent.git");
-  // When the source installer would use it as the omp-dori checkout.
-  const r = install({ DORI_INSTALL_MODE: "primary", DORI_SRC: "" });
-  // Then it stops before any backup, link or package install, and points at the side mode.
+  git(other, "remote", "add", "origin", "https://github.com/example/cataly-superagent.git");
+  const r = install({ CATALY_INSTALL_MODE: "primary", CATALY_SRC: "" });
   expect(r.code).toBe(1);
-  expect(r.err).toContain("dori-superagent");
-  expect(r.err).toContain("DORI_INSTALL_MODE=side");
-  expect(readdirSync(join(home, ".dori")).sort()).toEqual(["config.json", "src"]);
-  expect(readlinkSync(join(home, "skills/dori-mode"))).toBe("/elsewhere/dori-mode");
+  expect(r.err).toContain("cataly-superagent");
+  expect(r.err).toContain("CATALY_INSTALL_MODE=side");
+  expect(readdirSync(join(home, ".cataly")).sort()).toEqual(["config.json", "src"]);
+  expect(readlinkSync(join(home, "skills/cataly-mode"))).toBe("/elsewhere/cataly-mode");
   expect(existsSync(join(root, "bun.log"))).toBe(false);
 });
 
-posix("in a terminal the owner is asked, and the default answer installs next to the other Dori", async () => {
-  // Given another Dori's ~/.dori and the source installer in a terminal with no mode.
+posix("in a terminal the owner is asked, and the default answer installs next to the other Cataly", async () => {
+  // Given another Cataly's ~/.cataly and the source installer in a terminal with no mode.
   const { home, env } = setup();
-  withOtherDori(home);
+  withOtherCataly(home);
   let screen = "";
   let answered = false;
   const proc = Bun.spawn([script], {
@@ -238,9 +241,9 @@ posix("in a terminal the owner is asked, and the default answer installs next to
       },
     },
   });
-  // Then the install finishes as a side install and the other Dori is unchanged.
+  // Then the install finishes as a side install and the other Cataly is unchanged.
   expect(await proc.exited).toBe(0);
-  expect(screen).toContain("belongs to another Dori installation");
-  expect(readFileSync(join(home, ".omp-dori/.omp-dori"), "utf8")).toBe("side\n");
-  expectOtherDoriUntouched(home);
+  expect(screen).toContain("belongs to another Cataly installation");
+  expect(readFileSync(join(home, ".omp-cataly/.omp-cataly"), "utf8")).toBe("side\n");
+  expectOtherCatalyUntouched(home);
 });

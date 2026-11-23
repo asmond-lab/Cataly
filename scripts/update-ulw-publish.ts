@@ -64,7 +64,8 @@ export async function publishUlwCandidate(source: string, directory: string, api
     return prior.url;
   }
   const base = await api(`${root}/git/commits/${candidate["sourceCommit"]}`);
-  if (!object(base) || !object(base["tree"]) || !sha(base["tree"]["sha"])) throw new Error("Invalid Dori base commit");
+  if (!object(base) || !object(base["tree"]) || !sha(base["tree"]["sha"]))
+    throw new Error("Invalid Cataly base commit");
   const files = [];
   for (const path of ULW_UPDATE_FILES) {
     const blob = await api(`${root}/git/blobs`, "POST", {
@@ -108,7 +109,7 @@ export async function publishUlwCandidate(source: string, directory: string, api
     head: branch,
     base: "main",
     draft: true,
-    body: `Automatically prepared from Dori ${candidate["sourceCommit"]}.\n\nULW ${candidate["previous"]} → ${candidate["commit"]}. The current overlay applied without a Git three-way conflict and its new patch/tree/file hashes were verified. This is **not** a compatibility review or passing CI claim.\n\nThe existing CI workflow is dispatched on exact candidate ${commit}; all required checks and an independent review remain necessary before merge. Resolve any behavioral conflicts, update provenance as needed, then publish through the ordinary verified release process. No live install, consumer pointer, main ref, tag, release, or auto-merge setting was changed. Consumers only receive this through a separately reviewed compatible stable release.`,
+    body: `Automatically prepared from Cataly ${candidate["sourceCommit"]}.\n\nULW ${candidate["previous"]} → ${candidate["commit"]}. The current overlay applied without a Git three-way conflict and its new patch/tree/file hashes were verified. This is **not** a compatibility review or passing CI claim.\n\nThe existing CI workflow is dispatched on exact candidate ${commit}; all required checks and an independent review remain necessary before merge. Resolve any behavioral conflicts, update provenance as needed, then publish through the ordinary verified release process. No live install, consumer pointer, main ref, tag, release, or auto-merge setting was changed. Consumers only receive this through a separately reviewed compatible stable release.`,
   });
   const createdPull = canonicalUlwPull(pull, branch, commit);
   // GITHUB_TOKEN-created PRs do not trigger pull_request workflows. Explicit workflow_dispatch does.

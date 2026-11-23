@@ -1,10 +1,12 @@
 import { DeliveryUncertain, failureDetail } from "./delivery.ts";
 import type { Deps } from "./harness.ts";
+import { registeredNativeTarget } from "./harness-native.ts";
 import { Refusal } from "./refusal.ts";
 import { nonEmpty } from "./inbox-files.ts";
+import { inboxSealed } from "./inbox-spool.ts";
 import { resolveTarget } from "./target.ts";
 import { refText } from "./refs.ts";
-import type { AgentStatus, SessionRef } from "./runtime/types.ts";
+import type { AgentStatus, SessionRef, SubmitResult } from "./runtime/types.ts";
 import { migrating } from "./store-journal.ts";
 import type { DeliveryAttempt, QueuedMessage } from "./store-types.ts";
 
@@ -43,17 +45,20 @@ export async function sendOrThrow(
   return (await flushInbox(d, queued.at)) === "delivered" ? "DELIVERED" : "QUEUED";
 }
 
-/**
- * `target` resolved again (for queueMessage's recheck under the route): a lane or role that switched sessions since
- * `ref` was resolved names its new session; a name that no longer resolves stays at `ref`.
- */
+/** Re-resolve under the route: follow a new binding, but a disappeared name keeps its original ref. */
 export function resolveAgain(d: Deps, target: string, ref: SessionRef): () => SessionRef {
   return () => {
+    let current = ref;
     try {
-      return resolveTarget(d, target);
-    } catch {
-      return ref;
+      current = resolveTarget(d, target);
+    } catch (error) {
+      if (!(error instanceof Refusal)) throw error;
     }
+    if (!inboxSealed(d.store.root, current)) {
+      const binding = registeredNativeTarget(d, current);
+      if (binding && !binding.sessionId) throw new Refusal(`${binding.role} has no native agent inbox`);
+    }
+    return current;
   };
 }
 
@@ -74,7 +79,7 @@ export async function settled<T extends SendResult | undefined>(delivery: Promis
 /** The lead delivery's result, or undefined when no lead is registered. Throws DeliveryUncertain like sendOrThrow. */
 export async function tellLead(d: Deps, text: string, from: string): Promise<"DELIVERED" | "QUEUED" | undefined> {
   if (!d.store.roles().lead) {
-    process.stderr.write(`dori: no lead pane registered; message kept only in the lane log\n`);
+    process.stderr.write(`cataly: no lead pane registered; message kept only in the lane log\n`);
     return undefined;
   }
   return sendOrThrow(d, "lead", text, from);
@@ -95,6 +100,7 @@ export async function flushInbox(d: Deps, from: SessionRef): Promise<"delivered"
   const release = d.store.lockInbox(ref, d.now());
   if (!release) return "queued";
   try {
+    if (inboxSealed(d.store.root, ref)) return "held";
     d.store.mergeForwarded(ref);
     return await flushLocked(d, ref);
   } finally {
@@ -107,7 +113,8 @@ async function flushLocked(d: Deps, ref: SessionRef): Promise<"delivered" | "que
   const all = d.store.queued(ref);
   if (all.length === 0) return "delivered";
   const queued = all.filter((m) => m.attempt?.state !== "ambiguous");
-  const rt = d.runtimes.for(ref);
+  const binding = registeredNativeTarget(d, ref);
+  const rt = binding?.runtime ?? d.runtimes.for(ref);
   // The probe carries the #62 screen check on herdr: an omo with live monitors between turns reads idle.
   const { status } = await rt.probe(ref);
   // Before the held check, so a gone session with only held messages says so instead of delivery-ambiguous forever (#108).
@@ -130,15 +137,21 @@ async function flushLocked(d: Deps, ref: SessionRef): Promise<"delivered" | "que
       ...(first.attempt?.pid !== undefined ? { pid: first.attempt.pid } : {}),
       ...(first.attempt?.sessionId !== undefined ? { sessionId: first.attempt.sessionId } : {}),
     };
-    let submitted: Awaited<ReturnType<typeof rt.submitTyped>>;
-    try {
-      submitted = await rt.submitTyped(ref, into);
-    } catch (e) {
-      throw new DeliveryUncertain(e, true, into);
+    let submitted: SubmitResult | undefined;
+    if (rt.kind !== "headless") {
+      try {
+        submitted = await rt.submitTyped(ref, into);
+      } catch (error) {
+        throw new DeliveryUncertain(error, true, into);
+      }
     }
     if (submitted === "wait") return "no-agent";
-    if (submitted === "changed") {
-      await holdTyped(d, ref, typed, "a different agent is in the pane than the one the text was typed into");
+    if (submitted !== "submitted") {
+      const why =
+        submitted === undefined
+          ? "native OMP has no terminal input to submit"
+          : "a different agent is in the pane than the one the text was typed into";
+      await holdTyped(d, ref, typed, why);
       return typed.length === queued.length ? "held" : "queued";
     }
     settleInbox(d, ref, typed);
@@ -150,7 +163,7 @@ async function flushLocked(d: Deps, ref: SessionRef): Promise<"delivered" | "que
       ? (queued[0]?.text ?? "")
       : `${queued.length} messages arrived while you were busy:\n\n` +
         queued.map((m, i) => `(${i + 1}) from ${m.from}:\n${m.text}`).join("\n\n");
-  const out = await rt.deliver(ref, body);
+  const out = await rt.deliver(ref, body, binding?.sessionId ? { expectedSessionId: binding.sessionId } : undefined);
   switch (out.kind) {
     case "delivered":
       settleInbox(d, ref, queued);
@@ -190,7 +203,7 @@ function settleInbox(d: Deps, ref: SessionRef, batch: readonly QueuedMessage[], 
   d.store.saveInbox(ref, rest, gone);
 }
 
-const NOTICE_FROM = "dori-delivery";
+const NOTICE_FROM = "cataly-delivery";
 
 /**
  * Records an uncertain delivery on the queued messages. Typed text only waits for its Enter. An ambiguous batch is
@@ -221,17 +234,17 @@ async function holdTyped(d: Deps, ref: SessionRef, typed: readonly QueuedMessage
 }
 
 async function noticeHeld(d: Deps, ref: SessionRef, batch: readonly QueuedMessage[], why: string): Promise<void> {
-  if (batch.every((m) => m.from === NOTICE_FROM)) return;
+  if (batch.every((m) => m.from === NOTICE_FROM || m.from === "dori-delivery")) return;
   const paneId = refText(ref);
   const which = batch.map((m) => `from ${m.from} queued ${new Date(m.at).toISOString()}`).join(", ");
   const text =
     `[DELIVERY-AMBIGUOUS ${paneId}] ${batch.length} message(s) (${which}) may or may not have reached the pane; ${why}. ` +
-    `Held and not resent. Check the pane and see dori harness inbox list ${paneId}: if it did not arrive, dori harness inbox resend ${paneId} <index>; if it did, dori harness inbox ack ${paneId} <index>.`;
+    `Held and not resent. Check the pane and see cataly harness inbox list ${paneId}: if it did not arrive, cataly harness inbox resend ${paneId} <index>; if it did, cataly harness inbox ack ${paneId} <index>.`;
   try {
     await tellLead(d, text, NOTICE_FROM);
   } catch (err) {
     process.stderr.write(
-      `dori: telling the lead about the ambiguous delivery to ${paneId} failed too (${failureDetail(err)}); the notice is kept in the lead's inbox\n`,
+      `cataly: telling the lead about the ambiguous delivery to ${paneId} failed too (${failureDetail(err)}); the notice is kept in the lead's inbox\n`,
     );
   }
 }

@@ -6,7 +6,7 @@ import { OWNERLESS_MS } from "../../src/lock-owner.ts";
 import { lockEnv } from "../../src/lock.ts";
 
 // Only the owning recovery test enables this actual, abruptly exiting producer.
-const request = process.env["DORI_TEST_LOCK_RECLAIMER"];
+const request = process.env["CATALY_TEST_LOCK_RECLAIMER"];
 if (request !== undefined) {
   test("producer exits holding its actual file lock or reclaimer claim", () => {
     const { path, claim } = JSON.parse(request) as { path: string; claim: boolean };

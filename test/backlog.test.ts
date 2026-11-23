@@ -42,20 +42,20 @@ describe("backlog", () => {
         ? {
             code: 0,
             stdout: JSON.stringify([
-              { number: 12, title: "Fix login", body: "steps", labels: [{ name: "dori" }, { name: "p1" }] },
-              { number: 13, title: "New billing", body: "", labels: [{ name: "dori" }, { name: "needs-decision" }] },
+              { number: 12, title: "Fix login", body: "steps", labels: [{ name: "cataly" }, { name: "p1" }] },
+              { number: 13, title: "New billing", body: "", labels: [{ name: "cataly" }, { name: "needs-decision" }] },
             ]),
           }
         : { code: 0, stdout: JSON.stringify({ state: argv[2] === "12" ? "CLOSED" : "OPEN" }) };
-    expect(await backlogImport(d, "acme/web-app", "dori", d.store.root)).toEqual({
+    expect(await backlogImport(d, "acme/web-app", "cataly", d.store.root)).toEqual({
       added: ["web-app-12", "web-app-13"],
       capped: false,
     });
     expect(d.store.item("web-app-12")).toMatchObject({ priority: 1, source: "acme/web-app#12" });
     expect(readFileSync(d.store.item("web-app-12")!.brief, "utf8")).toContain("issues/12");
     expect(d.store.item("web-app-13")!.decision).toContain("needs-decision");
-    expect(await backlogImport(d, "acme/web-app", "dori", d.store.root)).toEqual({ added: [], capped: false });
-    await expect(backlogImport(d, "other/web-app", "dori", d.store.root)).rejects.toThrow(
+    expect(await backlogImport(d, "acme/web-app", "cataly", d.store.root)).toEqual({ added: [], capped: false });
+    await expect(backlogImport(d, "other/web-app", "cataly", d.store.root)).rejects.toThrow(
       "already used by acme/web-app#12",
     );
     const run = await loopTick(d);

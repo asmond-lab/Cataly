@@ -84,7 +84,7 @@ Here is the workflow on current `main`:
    metadata into the work.
 2. **The lead assigns the work.** The lead can handle small requests directly or
    launch a **lane**: a dedicated [oh-my-pi (OMP)](https://github.com/can1357/oh-my-pi)
-   coding session in herdr or hc, with a brief and an explicit `Done` condition.
+   coding session with a brief and an explicit `Done` condition. Native sessions run without a terminal by default.
    The lane registry ties the work to its session and messenger thread.
 3. **The lane works and reports.** Worklogs, reports, and checkpoints make
    progress inspectable across restarts. Ordinary Discord chat
@@ -101,7 +101,8 @@ Here is the workflow on current `main`:
 - Installation starts no agent, messenger receiver, or service. Enable only the
   monitors and integrations you want.
 - Keep credentials and private transcripts out of public reports.
-- Optional telemetry can be disabled with `DORI_TELEMETRY=0` or `DO_NOT_TRACK=1`.
+- Optional telemetry is off by default. Set `CATALY_TELEMETRY=1` to opt in;
+  `DO_NOT_TRACK=1` overrides it.
 
 ## Get started
 
@@ -109,24 +110,49 @@ Here is the workflow on current `main`:
 
 **Note**
 
-Cataly is the project name. The CLI and launchers still use `dori`, `omp-dori`,
-and `omp`; existing install paths and release asset names are unchanged.
+Use `cataly` for operation, `cataly-harness` for the standalone harness, and
+`omp-cataly` for a separate installation. Fresh homes default to `~/.cataly`
+(primary) or `~/.omp-cataly` (side). An upgrade stays in its original home.
+
+[Install a verified current release](docs/releases.md#install-a-current-release)
+or [upgrade an existing v0.1.3 installation without terminal tooling](docs/releases.md#upgrade-a-v013-installation).
+The upgrade leaves existing configuration unchanged.
 
 </td></tr></table>
+
+### Install the npm package
+
+With Bun 1.4.4 or newer available on `PATH`, run one of these in your project
+directory:
+
+```bash
+npm install cataly
+# Or, with Bun:
+bun add cataly
+```
+
+The Cataly package exposes `cataly-harness`:
+
+```bash
+./node_modules/.bin/cataly-harness --help
+```
+
+This installs the harness CLI, not the full OMP and messenger setup. For that
+setup, use one of the options below.
 
 |                | [Published preview](#try-the-published-preview) | [Current source](#work-from-current-source)          |
 | -------------- | ----------------------------------------------- | ---------------------------------------------------- |
 | **Build**      | v0.1.2 prerelease                               | current `main`                                       |
-| **Scope**      | Linux x64 / herdr / Discord                     | herdr or hc, your chosen messenger                   |
-| **OMP**        | independently installed native OMP 18.18.8      | pinned, patched OMP 18.20.0 with the omp-ulw overlay |
-| **Home**       | primary `~/.dori`                               | side mode `~/.omp-dori`                              |
+| **Scope**      | Linux x64 / herdr / Discord                     | native headless sessions; optional herdr or hc       |
+| **OMP**        | independently installed native OMP 18.18.8      | pinned, patched OMP 19.0.1 with the omp-ulw overlay |
+| **Home**       | historical primary `~/.dori`                   | side mode `~/.omp-cataly`                            |
 
 ### Try the published preview
 
 The [v0.1.2 prerelease](https://github.com/vntrevx/Cataly/releases/tag/v0.1.2)
 is the published **Linux x64 / herdr / Discord** preview. The tested baseline
 is Ubuntu 24.04 x64, Bun 1.4.4, native OMP 18.18.8, and herdr 0.9.5. This tag
-requires an independently installed OMP and uses the primary `~/.dori` home.
+requires an independently installed OMP and uses the historical `~/.dori` home.
 It does not contain the newer `main` features or toolchain.
 
 1. [Install the exact preview](https://github.com/vntrevx/Cataly/blob/v0.1.2/docs/releases.md#install-the-exact-preview).
@@ -140,10 +166,11 @@ It does not contain the newer `main` features or toolchain.
 
 ### Work from current source
 
-Use a separate checkout with git, Bun 1.4.4+, and your chosen runtime (herdr or
-hc). The default source installer prepares the pinned, patched **OMP 18.20.0**
+Use a separate checkout with git and Bun 1.4.4+. On Linux and macOS the
+default session runtime needs neither herdr nor hc. The installer prepares the pinned, patched **OMP 19.0.1**
 and **omp-ulw** overlay; a stock `omp` is not a substitute. No preinstalled OMP
 or Cargo is needed for this default setup.
+Tern is a third session runtime on source `main`; see [Tern](docs/runtime.md#tern).
 
 To inspect configuration changes first, add `--preview` to the final command below;
 review its paths and hashes, then run it without that flag to install. The preview
@@ -152,16 +179,171 @@ does not update the checkout, prepare dependencies, or change installation files
 ```bash
 git clone https://github.com/vntrevx/Cataly.git "$HOME/src/Cataly" || exit 1
 cd "$HOME/src/Cataly" || exit 1
-DORI_INSTALL_MODE=side DORI_NO_PULL=1 DORI_SRC="$PWD" \
+CATALY_INSTALL_MODE=side CATALY_NO_PULL=1 CATALY_SRC="$PWD" \
   bash scripts/install-source.sh
 ```
 
-Side mode uses `~/.omp-dori` by default and leaves the primary `~/.dori`
-installation alone. After configuring the side home, use `omp-dori omp` to
-start OMP through the generated wrapper. Follow the
+Side mode uses `~/.omp-cataly` by default and leaves the primary `~/.cataly`
+installation alone. Use `omp-cataly omp` to open the bound OMP for provider
+setup, and `omp-cataly harness up` to start the harness explicitly. Follow the
 [source setup and startup guide](docs/releases.md#source-checkouts-for-maintainers)
-for your runtime and messenger. Use `omp-dori doctor` for a read-only setup
-check and `omp-dori status` to see your lanes.
+for your runtime and messenger. Use `omp-cataly doctor` for a read-only setup
+check and `omp-cataly status` to see your lanes.
+
+For new sessions, `cataly harness status` shows `RUNTIME headless (from default)`
+unless you explicitly select another runtime. Old installations may have
+`"runtime": "hc"` or `"herdr"`; leave that field in place. To opt in to a terminal
+for new sessions, set `"sessionRuntime": "hc"` or `"herdr"`. Stored terminal
+sessions still belong to their original backend.
+
+Opt-in [source updates](skills/cataly-mode/references/scripts.md#ci-gated-source-updates)
+follow CI-passing main with idle and quiet admission, same-session restart,
+monitor health, and rollback. This is separate from consumer release updates
+and the model-assisted `cataly upstream` workflow.
+
+### Develop the Rust controller for stock OMP
+
+This opt-in CLI does not change the default source installation above. Build
+it with Cargo, then run it by path so it does not replace an installed
+`cataly` command:
+
+```bash
+cargo build --locked --release
+./target/release/cataly --omp "$(command -v omp)" doctor
+./target/release/cataly --omp "$(command -v omp)" harness --state-dir ./.cataly-native <<'JSON'
+{"op":"run","id":"request-1","key":"review","prompt":"Explain the task in one paragraph."}
+{"op":"receipt","id":"request-1"}
+JSON
+```
+
+`doctor` probes RPC without submitting a prompt. `resume` verifies an exact
+OMP session file and ID. On Unix, `harness` starts a lane on demand and can
+resume it from a separate state directory on the next request. `open`, `status`,
+and `close` also manage resident sessions explicitly. Repeating a request ID
+with the same input retrieves the stored receipt without another model call;
+uncertain requests are held, not replayed. `run` uses the configured OMP model
+and currently returns text only. It does not handle tools, approvals, or
+messenger delivery.
+
+For interactive clients, `run_controlled` accepts the same fields as `run`.
+While it is active, send `{"op":"run_status","id":"request-1"}` or
+`{"op":"cancel","id":"request-1"}` on the same stream. Control replies carry
+`control: "running"` or `"cancelling"`; the run's receipt arrives separately.
+Cancellation before dispatch leaves no run claim. After dispatch, Cataly closes
+the lane's OMP process. An unconfirmed outcome is not a rollback and must not
+be automatically replayed.
+
+`run_with_tools` takes the same fields and opens a new or parked lane with
+one read-only tool, `cataly_read_readme`. When OMP calls it, Cataly emits
+`{"id":"request-1","approval_id":"…","tool":"cataly_read_readme"}`.
+On the same stream, reply with
+`{"op":"decide","id":"request-1","approval_id":"…","decision":"approve"}` or
+use `"deny"`. Only an exact, pending approval ID is accepted. The decision
+acknowledgement is separate from the final run receipt. Approval reads only
+the lane's `README.md`: a regular UTF-8 file up to 16 KiB with no symbolic or
+hard links. Denial or disconnect before approval discloses no file content.
+`run` and `run_controlled` still use the text-only path.
+
+Build with `cargo build --release`. On Unix, the Rust binary can run Discord
+without Bun: `target/release/cataly --cwd "$WORKSPACE" discord --state-dir "$STATE_DIR" --channel "$CHANNEL_ID" --gateway`.
+Set `CATALY_DISCORD_TOKEN` and `CATALY_DISCORD_OWNER_ID` in its environment.
+Without `--gateway`, Rust uses REST polling; `--poll-seconds 0` runs one poll.
+The existing `cataly inbound discord` can launch the Rust monitor with:
+
+| Setting | Value |
+| --- | --- |
+| `CATALY_DISCORD_NATIVE_BIN` | Optional absolute Rust binary override; set `off` for legacy Discord commands. |
+| `CATALY_DISCORD_NATIVE_WORKSPACE` | Optional absolute workspace override for the native monitor; otherwise it uses `laneWorkspace`. |
+| `CATALY_DISCORD_NATIVE_CHANNEL_ID` | Optional exact channel or thread ID from the inbound list. If unset, use all explicitly listed inbound channels as roots. |
+| `CATALY_DISCORD_THREADS` | Follow active threads under those roots by default. Set `off` to watch only explicit IDs. Direct Rust invocation uses `--follow-threads`. |
+| `CATALY_OMP` / `CATALY_DISCORD_NATIVE_MODEL` | Optional OMP executable and model overrides. |
+
+Rust owns Gateway heartbeat and resume, REST history and sends, button
+callbacks, and the OMP lane. Each discovered thread has its own cursor, lane,
+and reply destination. Stop the legacy monitor before switching; the
+compatibility launcher imports existing cursors on first use. With the native
+binary installed, supervised monitors share one on-demand Rust process per OMP
+supervisor for ASK replies and head admission against persisted OMP receipts.
+The OMP extension still owns the active session, its admission queue, and
+`message_end` delivery. An interrupted routing request is not silently replayed
+or redirected to the head.
+Discord intake is Rust-only. Under the OMP `monitor` tool, `cataly inbound discord`
+(filter `^INBOUND`) replaces itself in place with `cataly discord --supervised`,
+keeping its PID, stdout and IPC channel. `CATALY_DISCORD_SCOPE=all`, `--context`,
+`--activity-file`, recall and `--wake-lanes` all run in Rust. `--wake-lanes` starts a lane's
+OMP directly, without herdr or hc. The OMP extension still owns the live session.
+Without the native binary, `cataly inbound discord` fails and names the build command.
+
+For a head owned entirely by Rust, run a separate receiver with
+`--head-channel "$CHANNEL_ID"` and an explicit `--channel "$CHANNEL_ID"`.
+Only that conversation goes to the head; other configured channels and threads
+keep independent lanes. The receiver loads the exact saved `head` identity in
+`--state-dir`, or creates it on the first turn, and parks OMP again when the
+turn finishes. Do not open the same native state or transcript in another OMP
+process. Pass `--ask-state "$CATALY_STATE_DIR"` (an absolute path) to consume
+answers for existing ASK mailboxes before starting a turn.
+
+For the installed CLI, set `CATALY_DISCORD_HEAD_CHANNEL_ID` to one of the
+explicit inbound channels and run `cataly inbound discord --gateway` outside
+an interactive OMP monitor. Its state is `$CATALY_STATE_DIR/discord-head`.
+Stop the old receiver before switching. Rust takes over its `gateway.sqlite`
+queue and cursors in `$CATALY_STATE_DIR/discord-inbound`: a pending head
+admission is settled only from its original OMP receipt, and the queue is
+kept untouched while that receipt is missing. Rust never takes over a live
+interactive OMP session.
+
+When the native binary is installed or bundled, `cataly send discord` and
+`cataly presence discord` select it automatically. To run without Bun or OMP:
+`target/release/cataly discord-send --thread "$THREAD_ID" < reply.txt`.
+Use `--reply MESSAGE_ID` to reply or `--edit MESSAGE_ID` to update a single
+message. For a channel, use `--to CHANNEL_ID` or a unique `--to '#name'`
+in `CATALY_DISCORD_GUILD_ID`. The direct command emits a JSON delivery receipt.
+Long fenced Markdown closes and reopens its code block at each UTF-16-safe cut.
+Use `target/release/cataly discord-presence` to run only the Gateway presence connection.
+Linux x64 release archives contain the checksummed Rust binary. Source installs
+on supported Unix hosts build it with Cargo when a toolchain is available.
+Discord intake has no fallback: installations without that binary must build it.
+
+Ordinary owner text runs with OMP's tools disabled; attachments are not
+downloaded. Follow-ups reuse the saved session, and the OMP process exits
+between turns. On Gateway, `!cataly <request>` enables the approval-gated
+README tool when OMP advertises host tools. Use private channels: results are
+visible to channel members and reply to the original message.
+
+Rust records a send intent before each Discord reply part and saves the remote
+message ID after confirmation. Restarting does not rerun completed requests or
+repeat confirmed parts. If a POST cannot be confirmed, that part and later
+parts are held rather than retried blindly. Check the monitor for
+`DISCORD_REPLY_HELD` and inspect the original thread and the native state
+directory before reconciling a receipt.
+
+#### Local memory for native Discord
+
+The native monitor uses the local [ai-memory](https://github.com/akitaonrails/ai-memory)
+installation when `~/.local/bin/ai-memory` exists. Use `CATALY_MEMORY_BIN`
+to select another absolute binary path, or set it to an empty value to turn
+off native checkpoints. The recorder is a separate bounded local worker,
+not another model call. It indexes notes on `127.0.0.1:49374`; if the server
+is down, private checkpoints remain on disk for later export.
+
+Cataly checkpoints bounded owner text to its room. It exports after eight
+new notes, on the ten-minute maintenance tick, or when the session reaches
+16 MB, before the 20 MB warning point. For durable notes use
+`!remember room …`, `!remember person …`, `!remember project …`, or
+`!remember common …`. These commands save locally without launching OMP.
+Only explicit notes leave the room scope, and common notes are shared across
+projects within the same bot-owner account and state directory, never
+between owners. Person notes are not sent into channel replies. Read them
+locally in ai-memory. Approved tool output and attachments are not captured.
+Checkpoints do not delete, truncate, or rotate the original OMP session.
+
+Cataly depends on the installed OMP's public RPC, not its version string,
+SDK, or patched core. The latest official Linux release is tested daily by
+the `Cataly Native` workflow alongside pinned release tests on changes.
+Use `cataly doctor` to check the installed protocol and optional host tools.
+An incompatible RPC change still needs an adapter fix; an ambiguous turn stays
+held rather than being replayed. Build with `--no-default-features` if you
+only want the OMP harness without Discord's networking libraries.
 
 <table width="100%"><tr><td>
 
@@ -179,11 +361,11 @@ claimed here. A merge to `main` does not update the published preview.
 | Set up and operate                                                          | Go deeper                                                                       |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | [Installation, support, updates, and rollback](docs/releases.md)            | [Runtime adapters and session contracts](docs/runtime.md)                       |
-| [Messenger setup](skills/dori-mode/references/setup.md)                     | [Container setup for source development](docs/container.md)                     |
-| [Dori operating rules](skills/dori-mode/SKILL.md)                           | [Scheduling and backlog](docs/hourly-loop.md)                                   |
-| [Lane commands and configuration](skills/dori-mode/references/scripts.md)   | [Shared locks and lane priority](docs/locks.md)                                 |
-| [Done protocol](skills/dori-mode/references/done-protocol.md)               | [Opt-in paid Discord voice assistant (current source)](docs/discord-voice.md)   |
-| [Changelog](CHANGELOG.md)                                                   |                                                                                 |
+| [Messenger setup](skills/cataly-mode/references/setup.md)                     | [Container setup for source development](docs/container.md)                     |
+| [Cataly operating rules](skills/cataly-mode/SKILL.md)                           | [Scheduling and backlog](docs/hourly-loop.md)                                   |
+| [Lane commands and configuration](skills/cataly-mode/references/scripts.md)   | [Shared locks and lane priority](docs/locks.md)                                 |
+| [Done protocol](skills/cataly-mode/references/done-protocol.md)               | [Opt-in paid Discord voice assistant (current source)](docs/discord-voice.md)   |
+| [Changelog](CHANGELOG.md)                                                   | [Opt-in owner profile for the lead](docs/owner-profile.md)                      |
 
 ## Contributing
 
@@ -198,7 +380,7 @@ Cataly integrates [dori-superagent](https://github.com/sisyphuslabs/dori-superag
 [oh-my-pi](https://github.com/can1357/oh-my-pi), and
 [omp-ulw](https://github.com/dbc-hbin/omp-ulw). The dori-superagent-derived
 material retains the [Sustainable Use License 1.0](LICENSE). The existing OMP
-integration retains its [MIT license and copyright notices](LICENSE.omp-dori);
+integration retains its [MIT license and copyright notices](LICENSE.integration);
 the MIT notice does not apply to the whole repository. Other components keep
 their own terms. See the [licensing guide](LICENSING.md) and [NOTICE](NOTICE) for
 source revisions and modified-copy attribution.

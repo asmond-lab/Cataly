@@ -9,9 +9,14 @@ import { migrateWorld, msg, NEW, OLD, snapshot } from "./migrate-setup.ts";
 
 const HELD = { at: 5, state: "ambiguous" as const, detail: "timeout" };
 
-describe("dori migrate: one lane herdr -> hc", () => {
+describe("cataly migrate: one lane herdr -> hc", () => {
   test("happy: MIGRATED, checkpoint asked, handoff brief, queued stay queued, held stays held, old closed", async () => {
     const { w, d, lines, opts } = migrateWorld();
+    // A brief written before the rename must not carry the old controller's instructions into the new footer.
+    writeFileSync(
+      d.store.briefPath("k"),
+      "Fix the flaky login test.\n\n## Lane rules (added by dori for lane `k`)\n\nold rules\n",
+    );
     d.store.saveInbox(OLD, [msg("one", 1), msg("two", 2), msg("held", 3, HELD)]);
     expect(await migrate(d, { lane: "k" }, opts())).toBe(0);
     expect(lines).toEqual(["MIGRATED k w1:p3 -> hc:t1"]);
@@ -37,7 +42,7 @@ describe("dori migrate: one lane herdr -> hc", () => {
     expect(text).toContain("## Handoff");
     expect(text).toContain("screen line 2");
     expect(text.match(/## Lane rules/g)).toHaveLength(1);
-    expect(w.hc.terminals.get("t1")!.labels["dori.lane"]).toBe("k");
+    expect(w.hc.terminals.get("t1")!.labels["cataly.lane"]).toBe("k");
     expect(await flushInbox(d, NEW)).toBe("delivered");
     expect(w.hc.sent.at(-1)!.text).toContain("one");
     expect(w.hc.sent.at(-1)!.text).not.toContain("held");
@@ -219,6 +224,6 @@ function fakeTerminal() {
     reported: true,
     turn: 1,
     foreground: { name: "omo", argv: ["omo"], pid: 4242 },
-    labels: { "dori.lane": "k" },
+    labels: { "cataly.lane": "k" },
   };
 }

@@ -62,7 +62,7 @@ describe("native OMP candidate evidence", () => {
 
   test("aborted/error/toolUse or mismatched terminal messages hold even with verdict-like text", () => {
     for (const stop of ["error", "aborted", "toolUse"]) {
-      const message = assistant("DORI_UPDATE_REVIEW {}", stop);
+      const message = assistant("CATALY_UPDATE_REVIEW {}", stop);
       expect(() =>
         readAgentResponse(
           events({ type: "message_end", message }, { type: "agent_end", messages: [message], isTerminal: true }),

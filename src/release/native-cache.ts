@@ -82,7 +82,7 @@ export function reportNativeCache(
   readCwds: typeof processCwds = processCwds,
   uses: UseHoldOptions = {},
 ): NativeCacheEntry[] {
-  const cache = join(home, ".cache/omp-dori");
+  const cache = join(home, ".cache/omp-cataly");
   if (!lstatSync(cache, { throwIfNoEntry: false })) return [];
   realDirectory(cache);
   owned(cache);

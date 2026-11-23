@@ -7,8 +7,8 @@ import { deploymentConfig } from "./update-deploy-setup.ts";
 // POSIX-only: the fixture links extensionless executables and shebang scripts onto PATH, which Windows cannot run.
 const it = test.skipIf(process.platform === "win32");
 
-it("replacement children resolve private Bun and OMP before installed Dori while dropping ambient capabilities", async () => {
-  const root = mkdtempSync(join(tmpdir(), "dori-deploy-env-"));
+it("replacement children resolve private Bun and OMP before installed Cataly while dropping ambient capabilities", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cataly-deploy-env-"));
   try {
     const config = deploymentConfig(root);
     mkdirSync(config.stateDir, { recursive: true });
@@ -20,16 +20,16 @@ it("replacement children resolve private Bun and OMP before installed Dori while
     const ambient = join(root, "ambient");
     mkdirSync(installed, { recursive: true });
     mkdirSync(ambient);
-    symlinkSync(process.execPath, join(installed, "dori"));
-    for (const path of [join(installed, "bun"), join(installed, "omp"), join(ambient, "dori")])
+    symlinkSync(process.execPath, join(installed, "cataly"));
+    for (const path of [join(installed, "bun"), join(installed, "omp"), join(ambient, "cataly")])
       writeFileSync(path, "#!/bin/sh\nexit 93\n", { mode: 0o755 });
     const input = join(config.stateDir, "consumer-input");
     writeFileSync(input, "8");
     const code = `console.log(JSON.stringify({
       result: Number(await Bun.file(${JSON.stringify(input)}).text()) * 7,
       home: process.env.HOME, pane: process.env.HERDR_PANE_ID, workspace: process.env.HERDR_WORKSPACE_ID,
-      namespace: process.env.DORI_HERDR_SESSION,
-      telemetry: process.env.DORI_TELEMETRY, tracking: process.env.DO_NOT_TRACK,
+      namespace: process.env.CATALY_HERDR_SESSION,
+      telemetry: process.env.CATALY_TELEMETRY, tracking: process.env.DO_NOT_TRACK,
       leakedCapabilities: Object.keys(process.env).filter(name => /TOKEN|PASSWORD|COOKIE|SUDO|TEST_CONFIG/.test(name))
     }))`;
     const module = new URL("../src/update/deployment-process.ts", import.meta.url).href;
@@ -41,7 +41,7 @@ it("replacement children resolve private Bun and OMP before installed Dori while
       import { actorEnv, command } from ${JSON.stringify(module)};
       const config = JSON.parse(process.env.TEST_CONFIG);
       const env = actorEnv(config);
-      const observed = JSON.parse(await command(["dori", "-e", ${JSON.stringify(code)}], config.home, env, 10000));
+      const observed = JSON.parse(await command(["cataly", "-e", ${JSON.stringify(code)}], config.home, env, 10000));
       observed.tools = [];
       for (const [name, multiplier] of [["bun", 2], ["omp", 3]]) {
         const program = "console.log(Number(await Bun.file(" + ${JSON.stringify(JSON.stringify(input))} + ").text()) * " + multiplier + ")";
@@ -54,9 +54,9 @@ it("replacement children resolve private Bun and OMP before installed Dori while
         cwd: root,
         env: {
           TEST_CONFIG: JSON.stringify(config),
-          DORI_DISCORD_TOKEN: "fixture-credential",
+          CATALY_DISCORD_TOKEN: "fixture-credential",
           SUDO_PASSWORD: "fixture-sudo",
-          DORI_TELEMETRY: "1",
+          CATALY_TELEMETRY: "1",
           DO_NOT_TRACK: "0",
           PATH: ambient,
         },

@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { verifyCandidate } from "../src/update/pipeline.ts";
 import { prepareCandidate } from "../src/update/prepare.ts";
 import { candidateReport } from "../src/update/report.ts";
@@ -45,7 +45,7 @@ ${mutatingCheck ? 'await Bun.write("src/behavior.ts", "export const behavior = 3
       },
     ],
   };
-  const updater = new DoriUpdater(config);
+  const updater = new CatalyUpdater(config);
   const id = "c".repeat(64);
   const directory = join(config.root, "jobs", id);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -95,9 +95,9 @@ it("explicit preparation normalizes before final binding; check writes and stale
     findings: ["No model review was executed."],
     limitations: ["Verification-phase unit coverage only."],
   };
-  expect(parseReview(`DORI_UPDATE_REVIEW ${JSON.stringify(rejection)}`, finalHash).sourceHash).toBe(finalHash);
+  expect(parseReview(`CATALY_UPDATE_REVIEW ${JSON.stringify(rejection)}`, finalHash).sourceHash).toBe(finalHash);
   expect(() =>
-    parseReview(`DORI_UPDATE_REVIEW ${JSON.stringify({ ...rejection, sourceHash: before })}`, finalHash),
+    parseReview(`CATALY_UPDATE_REVIEW ${JSON.stringify({ ...rejection, sourceHash: before })}`, finalHash),
   ).toThrow("stale source");
 
   const changed = await prepared(true);

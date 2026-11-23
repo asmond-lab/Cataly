@@ -7,18 +7,18 @@ import { spawnExec } from "../src/runtime/exec.ts";
 
 // Real herdr, isolated named session, fake agent instead of a model: proves the pane plumbing end to end.
 const herdrBin = Bun.which("herdr");
-const session = `dori-e2e-${process.pid}`;
-const home = mkdtempSync(join(tmpdir(), "dori-e2e-"));
+const session = `cataly-e2e-${process.pid}`;
+const home = mkdtempSync(join(tmpdir(), "cataly-e2e-"));
 const cli = resolve(import.meta.dir, "../src/cli.ts");
 // Pinned to herdr, and outside any session of the host's own runtimes, so the lane opens in the isolated session only.
 const { HC_TERMINAL_ID: _hc, HERDR_PANE_ID: _pane, HERDR_WORKSPACE_ID: _ws, ...outer } = process.env;
 const env = {
   ...outer,
-  DORI_HOME: home,
-  DORI_STATE_DIR: join(home, "omp-state"),
-  DORI_HERDR_SESSION: session,
-  DORI_TELEMETRY: "0",
-  DORI_RUNTIME: "herdr",
+  CATALY_HOME: home,
+  CATALY_STATE_DIR: join(home, "omp-state"),
+  CATALY_HERDR_SESSION: session,
+  CATALY_TELEMETRY: "0",
+  CATALY_RUNTIME: "herdr",
 };
 let server: ReturnType<typeof Bun.spawn> | undefined;
 
@@ -27,10 +27,10 @@ const herdr = async (...argv: string[]) => {
   if (r.code !== 0) throw new Error(r.stderr || r.stdout);
   return JSON.parse(r.stdout || "{}").result;
 };
-const dori = async (...argv: string[]) => {
+const cataly = async (...argv: string[]) => {
   const p = Bun.spawn(["bun", cli, ...argv], { env, stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
-  if (code !== 0) throw new Error(`dori ${argv.join(" ")} -> ${code}: ${err}`);
+  if (code !== 0) throw new Error(`cataly ${argv.join(" ")} -> ${code}: ${err}`);
   return out;
 };
 const until = async <T>(what: string, probe: () => Promise<T | undefined>, ms = 20_000): Promise<T> => {
@@ -68,16 +68,16 @@ test.skipIf(!herdrBin)(
     const ws = await herdr("workspace", "create", "--label", "e2e", "--cwd", home, "--no-focus");
     const lead = ws.root_pane.pane_id as string;
     await herdr("pane", "run", lead, "cat");
-    await dori("role", "lead", lead);
+    await cataly("role", "lead", lead);
     const brief = join(home, "brief.md");
     writeFileSync(brief, "E2E-BRIEF say hello\n");
 
     const fake = resolve(import.meta.dir, "fixtures/fake-agent.sh");
-    const doriCmd = `DORI_HOME=${shq(home)} DORI_STATE_DIR=${shq(join(home, "omp-state"))} DORI_HERDR_SESSION=${session} DORI_TELEMETRY=0 bun ${shq(cli)}`;
+    const catalyCmd = `CATALY_HOME=${shq(home)} CATALY_STATE_DIR=${shq(join(home, "omp-state"))} CATALY_HERDR_SESSION=${session} CATALY_TELEMETRY=0 bun ${shq(cli)}`;
     const started = Bun.spawn(
       ["bun", cli, "start", "e2e-lane", "--brief", brief, "--workspace", ws.workspace.workspace_id],
       {
-        env: { ...env, DORI_AGENT_CMD: `DORI_E2E_CMD=${shq(doriCmd)} ${shq(fake)}`, DORI_CMD: doriCmd },
+        env: { ...env, CATALY_AGENT_CMD: `CATALY_E2E_CMD=${shq(catalyCmd)} ${shq(fake)}`, CATALY_CMD: catalyCmd },
         stdout: "pipe",
         stderr: "pipe",
       },
@@ -92,8 +92,8 @@ test.skipIf(!herdrBin)(
     expect(leadText).toContain("[START e2e-lane]");
     expect(leadText).toContain("[REPORT e2e-lane] read brief: E2E-BRIEF say hello");
     expect(leadText).toContain("[READY e2e-lane] e2e lane finished");
-    expect(await dori("status")).toMatch(/e2e-lane\s+ready/);
-    expect(await dori("done", "e2e-lane")).toContain("DONE e2e-lane");
+    expect(await cataly("status")).toMatch(/e2e-lane\s+ready/);
+    expect(await cataly("done", "e2e-lane")).toContain("DONE e2e-lane");
   },
   60_000,
 );
@@ -104,21 +104,21 @@ test.skipIf(!herdrBin)(
     const ws = await herdr("workspace", "create", "--label", "e2e-loop", "--cwd", home, "--no-focus");
     const lead = ws.root_pane.pane_id as string;
     await herdr("pane", "run", lead, "cat");
-    await dori("role", "lead", lead);
+    await cataly("role", "lead", lead);
     const brief = join(home, "loop-brief.md");
     writeFileSync(brief, "E2E-LOOP-BRIEF\n");
-    expect(await dori("backlog", "add", "loop-item", "--brief", brief, "--cwd", home, "--priority", "2")).toContain(
+    expect(await cataly("backlog", "add", "loop-item", "--brief", brief, "--cwd", home, "--priority", "2")).toContain(
       "ADDED loop-item p2",
     );
 
     const fake = resolve(import.meta.dir, "fixtures/fake-agent.sh");
-    const doriCmd = `DORI_HOME=${shq(home)} DORI_STATE_DIR=${shq(join(home, "omp-state"))} DORI_HERDR_SESSION=${session} DORI_TELEMETRY=0 bun ${shq(cli)}`;
+    const catalyCmd = `CATALY_HOME=${shq(home)} CATALY_STATE_DIR=${shq(join(home, "omp-state"))} CATALY_HERDR_SESSION=${session} CATALY_TELEMETRY=0 bun ${shq(cli)}`;
     const loop = Bun.spawn(["bun", cli, "loop", "--once", "--max-lanes", "5", "--max-load", "100000"], {
       env: {
         ...env,
         HERDR_WORKSPACE_ID: ws.workspace.workspace_id,
-        DORI_AGENT_CMD: `DORI_E2E_CMD=${shq(doriCmd)} ${shq(fake)}`,
-        DORI_CMD: doriCmd,
+        CATALY_AGENT_CMD: `CATALY_E2E_CMD=${shq(catalyCmd)} ${shq(fake)}`,
+        CATALY_CMD: catalyCmd,
       },
       stdout: "pipe",
       stderr: "pipe",
@@ -134,11 +134,11 @@ test.skipIf(!herdrBin)(
     expect(leadText).toContain("[START loop-item]");
     expect(leadText).toContain("[LOOP ");
     expect(leadText).toContain("started: loop-item (p2)");
-    expect(await dori("backlog", "list")).toMatch(/loop-item\s+running/);
-    expect(await dori("loop", "status")).toContain("started: loop-item (p2)");
-    expect(await dori("loop", "stop", "--text", "e2e pause")).toContain("LOOP STOPPED");
-    expect(await dori("loop", "--once")).toContain("LOOP skipped: stopped: e2e pause");
-    expect(await dori("done", "loop-item")).toContain("DONE loop-item");
+    expect(await cataly("backlog", "list")).toMatch(/loop-item\s+running/);
+    expect(await cataly("loop", "status")).toContain("started: loop-item (p2)");
+    expect(await cataly("loop", "stop", "--text", "e2e pause")).toContain("LOOP STOPPED");
+    expect(await cataly("loop", "--once")).toContain("LOOP skipped: stopped: e2e pause");
+    expect(await cataly("done", "loop-item")).toContain("DONE loop-item");
   },
   60_000,
 );

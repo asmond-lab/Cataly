@@ -5,9 +5,9 @@ export type DeploymentConfig = {
   readonly releaseRoot: string;
   readonly liveSource: string;
   readonly home: string;
-  readonly doriHome: string;
-  readonly doriConfig: string;
-  /** Dori's pane/monitor metadata root; native session files stay where they are. */
+  readonly catalyHome: string;
+  readonly catalyConfig: string;
+  /** Cataly's pane/monitor metadata root; native session files stay where they are. */
   readonly stateDir: string;
   readonly bun: string;
   /** Omitted selects the release-bound native source; an absolute path is an explicit external-toolchain override. */
@@ -54,7 +54,7 @@ export type RuntimeIdentity = ProcessIdentity & {
   readonly sessionFile: string;
   readonly startedAt: string;
   readonly cwd: string;
-  readonly role: "dori";
+  readonly role: "cataly";
   readonly busy?: boolean;
   readonly approvalPending?: boolean;
   readonly executableHash?: string;
@@ -79,12 +79,14 @@ export type MonitorSpec = {
   readonly argv: readonly string[];
   readonly filter: string;
   readonly cwd: string;
-  readonly restart?: "on-failure";
+  readonly mode?: "once" | "daemon";
+  readonly restart?: "on-failure" | { readonly max: number; readonly backoffSec: number };
+  readonly silentAfterMin?: number;
 };
 export type MonitorProcessIdentity = ProcessIdentity & { readonly name: string; readonly argv: readonly string[] };
 export type IntakeSpec = { readonly path: string; readonly monitor: string; readonly maxAgeMs: number };
 export type MonitorSet = {
-  readonly version: 1;
+  readonly version: 1 | 3;
   readonly sessionId: string;
   readonly monitors: readonly MonitorSpec[];
   readonly intake: IntakeSpec;
@@ -138,6 +140,7 @@ export type DeploymentRecord = {
   pointers?: readonly PointerRecord[];
   stopRequestedAt?: string;
   nativeUiExitRequestedAt?: string;
+  nativeExitObservedAt?: string;
   launchRequestedAt?: string;
   runtime?: RuntimeIdentity;
   launchProcess?: ProcessIdentity;

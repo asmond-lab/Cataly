@@ -8,7 +8,7 @@ import type { PreActionNotice, UpdateContext, UpdateJob } from "./types.ts";
 
 type Notice =
   | { readonly action: "main-publication"; readonly publication: PublicationRecord }
-  | { readonly action: "dori-replacement"; readonly deployment: DeploymentRecord };
+  | { readonly action: "cataly-replacement"; readonly deployment: DeploymentRecord };
 
 function acceptedReceipt(ctx: UpdateContext, job: UpdateJob, index: number): boolean {
   const receipt = Number.isInteger(index) && index >= 0 ? job.commands[index] : undefined;
@@ -51,13 +51,19 @@ export async function reportPreAction(ctx: UpdateContext, job: UpdateJob, notice
           tree: notice.deployment.tree,
           sourceHash: notice.deployment.sourceHash,
         };
-  const intentHash = digest(JSON.stringify({ job: job.id, action: notice.action, config: ctx.configHash, intent }));
-  const retained = job.preActionNotices?.[notice.action];
+  const intentHash = (action: PreActionNotice["action"]) =>
+    digest(JSON.stringify({ job: job.id, action, config: ctx.configHash, intent }));
+  const current = job.preActionNotices?.[notice.action];
+  const legacy = notice.action === "cataly-replacement" ? job.preActionNotices?.["dori-replacement"] : undefined;
+  if (current !== undefined && legacy !== undefined)
+    throw new Hold(`pre-action ${notice.action} has multiple retained receipts; action held`);
+  const retained = current ?? legacy;
+  const action = legacy === undefined ? notice.action : "dori-replacement";
   if (retained !== undefined) {
     if (
       retained.job === job.id &&
-      retained.action === notice.action &&
-      retained.intentHash === intentHash &&
+      retained.action === action &&
+      retained.intentHash === intentHash(action) &&
       retained.state === "accepted" &&
       retained.exitCode === 0 &&
       acceptedReceipt(ctx, job, retained.commandIndex)
@@ -70,8 +76,8 @@ export async function reportPreAction(ctx: UpdateContext, job: UpdateJob, notice
     throw new Hold(`pre-action ${notice.action} notice lacks a matching accepted receipt; action held`);
   }
   const text = JSON.stringify({
-    type: "DORI_UPDATE",
-    target: "dori",
+    type: "CATALY_UPDATE",
+    target: "cataly",
     outcome: `before-${notice.action}`,
     job: job.id,
     publicationCommit: intent.commit,
@@ -82,7 +88,7 @@ export async function reportPreAction(ctx: UpdateContext, job: UpdateJob, notice
   const delivery: PreActionNotice = {
     job: job.id,
     action: notice.action,
-    intentHash,
+    intentHash: intentHash(notice.action),
     commandIndex: job.commands.length,
     state: "sending",
   };

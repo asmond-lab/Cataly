@@ -49,7 +49,7 @@ it.each(["deployment", "publication"] as const)(
         basis,
         remote: f.target,
         ref: "refs/heads/main",
-        branch: `refs/heads/dori-update/${f.job.id}`,
+        branch: `refs/heads/cataly-update/${f.job.id}`,
         expectedMain: f.expectedMain,
         sourceHash: f.job.sourceHash!,
         exportHash,

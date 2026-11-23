@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 const load = (argv: readonly string[], engine?: "omp" | "external", role: "worker" | "reviewer" = "worker") => {
-  const directory = mkdtempSync(join(tmpdir(), "dori-native-launchers-"));
+  const directory = mkdtempSync(join(tmpdir(), "cataly-native-launchers-"));
   directories.push(directory);
   for (const name of ["candidate", "remote"]) mkdirSync(join(directory, name), { mode: 0o700 });
   const agent = { argv: ["omp", "--model=anthropic/claude-opus-5-5", "{prompt}"], timeoutMs: 1000 };
@@ -21,7 +21,7 @@ const load = (argv: readonly string[], engine?: "omp" | "external", role: "worke
     path,
     JSON.stringify({
       version: 1,
-      target: "dori",
+      target: "cataly",
       runtime: "herdr",
       root: join(directory, "updates"),
       remote: join(directory, "remote"),
@@ -82,9 +82,9 @@ test.each([
   ["sh -c with a quoted bare omp", ["sh", "-c", "exec 'omp' \"$@\"", "audit"]],
   ["sh -c in a loop", ["bash", "-c", 'while true; do omp "$@"; done', "audit"]],
   ["an unreadable launcher before a shell", ["timeout", "--unknown", "600", "sh", "-c", 'exec omp "$@"', "a"]],
-  ["the side wrapper", ["omp-dori", "omp"]],
-  ["the side wrapper by path", ["/home/user/.omp-dori/bin/omp-dori", "omp"]],
-  ["the installed wrapper", ["/home/user/.dori/bin/omp"]],
+  ["the side wrapper", ["omp-cataly", "omp"]],
+  ["the side wrapper by path", ["/home/user/.omp-cataly/bin/omp-cataly", "omp"]],
+  ["the installed wrapper", ["/home/user/.cataly/bin/omp"]],
   ["node --require separate", ["node", "--require", "/hook.js", "/x/omp"]],
   ["node --require attached", ["node", "--require=/hook.js", "/x/omp"]],
   ["timeout", ["timeout", "-k", "5", "600", "/opt/bin/omp"]],
@@ -112,10 +112,10 @@ test.each([
   ["nice", ["nice", "-n", "5", "omp"]],
   ["stdbuf", ["stdbuf", "-e", "L", "omp"]],
   ["nested env", ["env", "X=1", "env", "Y=2", "omp"]],
-  ["the side wrapper", ["omp-dori", "omp"]],
+  ["the side wrapper", ["omp-cataly", "omp"]],
 ])("%s is native OMP: it keeps the capability guard and its own arguments", (_, prefix) => {
   for (const engine of [undefined, "omp"] as const) {
-    for (const flag of ["-e", "--profile", "--dori-role"]) {
+    for (const flag of ["-e", "--profile", "--cataly-role"]) {
       expect(() => load([...prefix, MODEL, flag, "untrusted", "{prompt}"], engine)).toThrow("controller-owned");
     }
     const argv = [...prefix, MODEL, "{prompt}"];
@@ -158,7 +158,7 @@ test.each([
       ["--resume", "s"],
       ["-e", "untrusted"],
       ["--profile", "untrusted"],
-      ["--dori-role", "lane"],
+      ["--cataly-role", "lane"],
     ]) {
       const argv = [...prefix, MODEL, ...flags, "{prompt}"];
       expect(mayRunOmpArgv(argv)).toBe(true);
@@ -212,7 +212,7 @@ test.each([
   ["an agent given a setting whose value is omp", ["env", "PROFILE=omp", "codex"]],
   ["an external script", ["node", "/opt/not-omp.js", "/x/omp"]],
   ["echo", ["echo", "omp"]],
-  ["the side wrapper's other commands", ["omp-dori", "hc", "run", "--", "omp"]],
+  ["the side wrapper's other commands", ["omp-cataly", "hc", "run", "--", "omp"]],
   ["bunx whose cwd value names omp", ["bunx", "--cwd", "/tmp/omp", "--no-install", "echo"]],
   ["npx whose cache value names omp", ["npx", "--offline", "--cache", "/tmp/omp", "--", "/bin/echo"]],
 ])("%s stays external", (_, prefix) => {

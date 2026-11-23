@@ -61,9 +61,9 @@ export async function enforceWorkerTools(
 
 /** Loaded explicitly by this controller only. Late MCP discovery cannot widen the worker: every call is gated. */
 export default function installWorkerGuard(api: GuardApi): void {
-  const path = process.env["DORI_UPDATE_WORKER_SCOPE"];
-  const nonce = process.env["DORI_UPDATE_WORKER_NONCE"];
-  const job = process.env["DORI_UPDATE_WORKER_JOB"];
+  const path = process.env["CATALY_UPDATE_WORKER_SCOPE"];
+  const nonce = process.env["CATALY_UPDATE_WORKER_NONCE"];
+  const job = process.env["CATALY_UPDATE_WORKER_JOB"];
   if (!path || !nonce || !job) process.exit(70);
   const stages = new Set<string>();
   const blocked = new Set<string>();
@@ -85,7 +85,7 @@ export default function installWorkerGuard(api: GuardApi): void {
   };
   const halt = (): never => {
     // Hook exceptions may be caught by the host. End our own child before any unproven request proceeds.
-    process.stderr.write("DORI_UPDATE_WORKER_SCOPE_FAILED\n");
+    process.stderr.write("CATALY_UPDATE_WORKER_SCOPE_FAILED\n");
     process.exit(70);
   };
   const guard = (stage: string) => async (_event: unknown, ctx: GuardContext) => {

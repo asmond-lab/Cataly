@@ -9,8 +9,10 @@ import { payLead } from "./inbox-forward.ts";
 import { underInboxLock } from "./duty-inbox.ts";
 import { Refusal } from "./refusal.ts";
 import { refText } from "./refs.ts";
+import { observeWait, renderWait, waitEnded, waitKey } from "./wait.ts";
 import { escalation, progressOf, stalled, waitingOn, waitingSinceOf, waitingTarget } from "./progress.ts";
 import type { SessionRef } from "./runtime/types.ts";
+import { sameLaneRegistration } from "./store-lanes.ts";
 import type { Lane } from "./store-types.ts";
 import { ageText, hhmm, indented, WIDTH } from "./fit.ts";
 
@@ -24,11 +26,11 @@ const watched = (lane: Lane): boolean =>
   (lane.status === "working" || lane.status === "waiting") && lane.migration !== true;
 
 /** Persist a legacy lane's incarnation before queueing; retries must reuse its identity and progress epoch. */
-function noticeId(d: Deps, lane: Lane): string {
+function noticeId(lane: Lane, save: (lane: Lane) => void): string {
   if (lane.noticeId === undefined) {
     lane.noticeId = randomUUID();
     lane.progressEpoch ??= 0;
-    d.store.saveLane(lane);
+    save(lane);
   }
   return lane.noticeId;
 }
@@ -39,14 +41,50 @@ const busy = (lane: Lane, whose: string): DutyEvent => ({
   detail: `${whose} inbox is being flushed; tried again on the next pass`,
 });
 
+type Nudge = { lane: Lane; at: number; id: string; text: string; minutes: number };
+
+function queueNudge(d: Deps, { lane, at, id, text, minutes }: Nudge, events: DutyEvent[]): SessionRef | undefined {
+  let counted = false;
+  const nudged = underInboxLock(
+    d,
+    () => d.store.lane(lane.key)?.sessionRef,
+    (inbox) => {
+      counted = d.store.withCurrentLane(lane.key, (current, save) => {
+        // Route resolution can follow a completed migration, but not a new lane or a report that made this nudge stale.
+        if (
+          !current ||
+          !watched(current) ||
+          current.noticeId !== lane.noticeId ||
+          current.nudges !== lane.nudges ||
+          current.progressEpoch !== lane.progressEpoch ||
+          current.lastActivityAt !== lane.lastActivityAt ||
+          current.escalatedAt !== lane.escalatedAt ||
+          current.status !== lane.status ||
+          (current.status === "waiting" &&
+            (waitingTarget(current) !== waitingTarget(lane) || waitingSinceOf(current) !== waitingSinceOf(lane)))
+        )
+          return false;
+        d.store.enqueueOnce(inbox, { at, from: "duty", text, id });
+        current.nudges += 1;
+        current.log.push({ at, kind: "nudge", text: `idle ${minutes} min` });
+        save(current);
+        events.push({ lane: current.key, action: `nudge-${current.nudges}` });
+        return true;
+      });
+    },
+  );
+  if (!nudged) events.push(busy(lane, "the lane's"));
+  return counted ? nudged : undefined;
+}
+
 /**
  * Queues the LOST notice for the lead under a fixed id. With no lead registered, or while a flush holds the lead's
  * inbox, it waits in a queue of its own (`oweLead`), not in the lane record: the same key may be started again,
  * replacing that record, before the notice is moved. Returns the lead's inbox it reached, if it did.
  */
-function queueLost(d: Deps, lane: Lane, now: number): SessionRef | undefined {
+function queueLost(d: Deps, lane: Lane, now: number, save: (lane: Lane) => void): SessionRef | undefined {
   const text = `[LOST ${lane.key}] pane ${refText(lane.sessionRef)} closed without a final answer`;
-  const msg = { at: now, from: "duty", text, id: `lost:${lane.key}:${noticeId(d, lane)}` };
+  const msg = { at: now, from: "duty", text, id: `lost:${lane.key}:${noticeId(lane, save)}` };
   const inbox = underInboxLock(
     d,
     () => d.store.roles().lead,
@@ -67,7 +105,6 @@ function payOwed(d: Deps): void {
 
 /** One proactive pass: flush inboxes of panes that became idle, nudge silent lanes, escalate, detect lost panes. */
 export async function dutyTick(d: Deps): Promise<DutyEvent[]> {
-  // Kill switch: a stopped duty loop delivers, nudges and escalates nothing. Queued messages wait for the resume.
   const stop = d.store.stop("duty");
   if (stop) return [{ action: "stopped", detail: stop.reason }];
   const events: DutyEvent[] = [];
@@ -76,7 +113,6 @@ export async function dutyTick(d: Deps): Promise<DutyEvent[]> {
     const paneId = refText(ref);
     try {
       const result = await flushInbox(d, ref);
-      // flushInbox follows the migration redirects; the counts are read where the entries live now.
       const at = d.store.destination(ref);
       if (result === "delivered") events.push({ pane: paneId, action: "flushed" });
       if (result === "no-agent") {
@@ -86,12 +122,10 @@ export async function dutyTick(d: Deps): Promise<DutyEvent[]> {
           detail: `no agent in front; ${d.store.queued(at).length} message(s) kept`,
         });
       }
-      // Held after an ambiguous delivery (#89): shown on every pass, resent never; the lead was told once.
       const held = d.store.queued(at).filter((m) => m.attempt?.state === "ambiguous").length;
       if (held > 0)
         events.push({ pane: paneId, action: "delivery-ambiguous", detail: `${held} message(s) held, not resent` });
     } catch (e) {
-      // One pane's failed delivery must never kill the loop for every other pane and lane.
       if (e instanceof Refusal) events.push({ pane: paneId, action: "inbox-target-gone" });
       else if (e instanceof DeliveryUncertain && !e.typed)
         events.push({ pane: paneId, action: "delivery-ambiguous", detail: failureDetail(e) });
@@ -101,106 +135,100 @@ export async function dutyTick(d: Deps): Promise<DutyEvent[]> {
   for (const listed of d.store.lanes()) {
     if (!watched(listed)) continue;
     try {
-      const { status: st } = await d.runtimes.for(listed.sessionRef).probe(listed.sessionRef);
-      // Re-read right before deciding and saving: a report, a READY or a migration may have landed during the probe.
-      const lane = d.store.lane(listed.key);
-      if (lane === undefined || !watched(lane) || lane.sessionRef.id !== listed.sessionRef.id) continue;
-      const now = d.now();
-      if (st === "gone") {
-        // Marked lost and its hook run whether or not a lead is registered: a lost lane must stop counting as open. The
-        // notice is queued first, under a fixed id, so a pass cut short before the lane is saved repeats it without a
-        // second notice.
-        const leadRef = d.store.roles().lead;
-        const queued = queueLost(d, lane, now);
-        lane.status = "lost";
-        lane.log.push({ at: now, kind: "lost", text: "pane disappeared without READY" });
-        d.store.saveLane(lane);
-        void runHook(d, "onLost", { key: lane.key, text: "pane disappeared without READY", evidence: "" });
-        events.push({ lane: lane.key, action: "lost" });
-        if (queued) await flushInbox(d, queued);
-        else if (leadRef) events.push(busy(lane, "the lead's"));
-        else events.push({ lane: lane.key, action: "lost-no-lead", detail: "no lead registered; told once one is" });
-        continue;
-      }
-      if (st === "working") {
-        lane.lastActivityAt = now;
-        d.store.saveLane(lane);
-      }
-      // The lead hears of a stall whatever the pane is doing: a lane can be busy, blocked, chatty or waiting without
-      // progress. A waiting lane is not exempt: the thing it waits on can be dead.
-      if (stalled(lane, now)) {
-        // The stall counts as told once the message is in the lead's inbox: from there the inbox delivers it whatever
-        // this flush does. It is queued under the stall's id before the lane is marked, so a pass cut short in between
-        // marks it next time without a second message. With no lead registered nothing is queued or marked.
-        const lead = () => d.store.roles().lead;
-        if (!lead()) {
-          events.push({ lane: lane.key, action: "escalate-no-lead", detail: "no lead registered; told once one is" });
-          continue;
+      const probe = await d.runtimes.for(listed.sessionRef).probe(listed.sessionRef);
+      const st = probe.status;
+      const notice = d.store.withCurrentLane<SessionRef | Nudge | undefined>(listed.key, (lane, save) => {
+        if (!lane || !watched(lane) || !sameLaneRegistration(listed, lane)) return;
+        const now = d.now();
+        if (
+          lane.wait &&
+          listed.wait &&
+          waitKey(lane.wait.target) === waitKey(listed.wait.target) &&
+          lane.wait.startedAt === listed.wait.startedAt
+        ) {
+          const observed = observeWait(lane.wait, probe);
+          if (JSON.stringify(observed) !== JSON.stringify(lane.wait)) {
+            if (waitEnded(observed) && !waitEnded(lane.wait))
+              events.push({
+                lane: lane.key,
+                action: "wait-ended",
+                detail: `${renderWait(observed)}; lane state and progress unchanged`,
+              });
+            lane.wait = observed;
+            save(lane);
+          }
         }
-        const msg = escalation(lane, st, now);
-        const id = `escalate:${lane.key}:${noticeId(d, lane)}:${lane.progressEpoch ?? 0}`;
-        const told = underInboxLock(d, lead, (inbox) =>
-          d.store.enqueueOnce(inbox, { at: now, from: "duty", text: msg, id }),
-        );
-        if (!told) {
-          events.push(busy(lane, "the lead's"));
-          continue;
+        if (st === "gone") {
+          const leadRef = d.store.roles().lead;
+          const queued = queueLost(d, lane, now, save);
+          lane.status = "lost";
+          lane.log.push({ at: now, kind: "lost", text: "pane disappeared without READY" });
+          save(lane);
+          void runHook(d, "onLost", { key: lane.key, text: "pane disappeared without READY", evidence: "" });
+          events.push({ lane: lane.key, action: "lost" });
+          if (!queued) {
+            if (leadRef) events.push(busy(lane, "the lead's"));
+            else
+              events.push({ lane: lane.key, action: "lost-no-lead", detail: "no lead registered; told once one is" });
+          }
+          return queued;
         }
-        lane.escalatedAt = now;
-        lane.log.push({ at: now, kind: "escalate", text: msg });
-        d.store.saveLane(lane);
-        events.push({ lane: lane.key, action: "escalated" });
-        await flushInbox(d, told);
-        continue;
-      }
-      // Older binaries could retain a prior epoch's marker; only this epoch's queued alert ends nudges.
-      if (lane.escalatedAt !== undefined && lane.escalatedAt > progressOf(lane)) continue;
-      if (st === "working" || st === "blocked" || st === "error") continue;
-      // Nudges answer silence: any report or a working pane restarts the quiet time, but only progress resets the count.
-      const quietMin = (now - Math.max(progressOf(lane), lane.lastActivityAt)) / 60_000;
-      const due = NUDGE_MINUTES[lane.nudges];
-      if (due === undefined || quietMin < due) continue;
-      const since = progressOf(lane);
-      const waiting = lane.status === "waiting";
-      const whole = waiting ? waitingTarget(lane) : "";
-      const vars = {
-        key: lane.key,
-        minutes: String(Math.floor(quietMin)),
-        since: hhmm(since),
-        age: ageText(now - since),
-        dori: d.doriCmd,
-        ...(waiting
-          ? { target: "", wholeTarget: indented(whole).join("\n"), waitingSince: hhmm(waitingSinceOf(lane)) }
-          : {}),
-      };
-      // Built and queued before it is counted: a nudge that could not be built or queued is not used up. A waiting
-      // nudge's first line names the target in what it leaves of WIDTH beside the key (at most 40 columns), so the time
-      // shows; its body names the target whole, since a cut link or job id names nothing the lane can check. A
-      // template from before {{wholeTarget}} (DORI_PROMPTS_DIR) gets the whole target under its first line instead.
-      const name = waiting ? "nudge-waiting.md" : "nudge.md";
-      const template = readFileSync(promptFile(name), "utf8");
-      const room = waiting ? WIDTH - Bun.stringWidth(fill(template, vars).split("\n")[0]!) : 0;
-      const target = waitingOn(lane, Math.max(1, room));
-      const [first, ...rest] = fill(template, waiting ? { ...vars, target } : vars).split("\n");
-      const named = template.includes("{{wholeTarget}}") || (target === whole && template.includes("{{target}}"));
-      const text = [first, ...(waiting && !named ? indented(whole) : []), ...rest].join("\n");
-      const id = `nudge:${lane.key}:${noticeId(d, lane)}:${lane.progressEpoch ?? 0}:${lane.nudges + 1}`;
-      const nudged = underInboxLock(
-        d,
-        () => d.store.lane(lane.key)?.sessionRef,
-        (inbox) => d.store.enqueueOnce(inbox, { at: now, from: "duty", text, id }),
-      );
-      if (!nudged) {
-        events.push(busy(lane, "the lane's"));
-        continue;
-      }
-      lane.nudges += 1;
-      lane.log.push({ at: now, kind: "nudge", text: `idle ${Math.floor(quietMin)} min` });
-      d.store.saveLane(lane);
-      events.push({ lane: lane.key, action: `nudge-${lane.nudges}` });
-      await flushInbox(d, nudged);
+        if (st === "working") {
+          lane.lastActivityAt = now;
+          save(lane);
+        }
+        if (stalled(lane, now)) {
+          const lead = () => d.store.roles().lead;
+          if (!lead()) {
+            events.push({ lane: lane.key, action: "escalate-no-lead", detail: "no lead registered; told once one is" });
+            return;
+          }
+          const msg = escalation(lane, st, now);
+          const id = `escalate:${lane.key}:${noticeId(lane, save)}:${lane.progressEpoch ?? 0}`;
+          const told = underInboxLock(d, lead, (inbox) =>
+            d.store.enqueueOnce(inbox, { at: now, from: "duty", text: msg, id }),
+          );
+          if (!told) {
+            events.push(busy(lane, "the lead's"));
+            return;
+          }
+          lane.escalatedAt = now;
+          lane.log.push({ at: now, kind: "escalate", text: msg });
+          save(lane);
+          events.push({ lane: lane.key, action: "escalated" });
+          return told;
+        }
+        if (lane.escalatedAt !== undefined && lane.escalatedAt > progressOf(lane)) return;
+        if (st === "working" || st === "blocked" || st === "error") return;
+        const quietMin = (now - Math.max(progressOf(lane), lane.lastActivityAt)) / 60_000;
+        const due = NUDGE_MINUTES[lane.nudges];
+        if (due === undefined || quietMin < due) return;
+        const since = progressOf(lane);
+        const waiting = lane.status === "waiting";
+        const whole = waiting ? waitingTarget(lane) : "";
+        const vars = {
+          key: lane.key,
+          minutes: String(Math.floor(quietMin)),
+          since: hhmm(since),
+          age: ageText(now - since),
+          cataly: d.catalyCmd,
+          ...(waiting
+            ? { target: "", wholeTarget: indented(whole).join("\n"), waitingSince: hhmm(waitingSinceOf(lane)) }
+            : {}),
+        };
+        const name = waiting ? "nudge-waiting.md" : "nudge.md";
+        const template = readFileSync(promptFile(name), "utf8");
+        const room = waiting ? WIDTH - Bun.stringWidth(fill(template, vars).split("\n")[0]!) : 0;
+        const target = waitingOn(lane, Math.max(1, room));
+        const [first, ...rest] = fill(template, waiting ? { ...vars, target } : vars).split("\n");
+        const named = template.includes("{{wholeTarget}}") || (target === whole && template.includes("{{target}}"));
+        const text = [first, ...(waiting && !named ? indented(whole) : []), ...rest].join("\n");
+        const id = `nudge:${lane.key}:${noticeId(lane, save)}:${lane.progressEpoch ?? 0}:${lane.nudges + 1}`;
+        return { lane, at: now, id, text, minutes: Math.floor(quietMin) };
+      });
+      const queued = notice && ("text" in notice ? queueNudge(d, notice, events) : notice);
+      if (queued) await flushInbox(d, queued);
     } catch (e) {
-      // One lane's failed status read or delivery must not end the loop for the other lanes.
       events.push({ lane: listed.key, action: "lane-failed", detail: failureDetail(e) });
     }
   }

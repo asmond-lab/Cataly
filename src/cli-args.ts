@@ -1,45 +1,56 @@
 import { Refusal } from "./refusal.ts";
 
-export const USAGE = `dori harness - a proactive multi-session harness on herdr or hc + OMP
+export const USAGE = `cataly harness - a proactive multi-session harness using native OMP (headless by default)
 
-  dori harness up [--cwd DIR]                         open lead, duty, duty loop and hourly loop sessions
-  dori harness role <lead|duty> [REF]                 register a session (w1:p3, herdr:w1:p3, hc:t7) as lead or duty (default: this one)
-  dori harness start <key> --brief FILE [--cwd DIR]   open a lane: new tab, OMP session, brief + lane rules
+  cataly harness up [--cwd DIR]                         open lead, duty, duty loop and hourly loop sessions
+  cataly harness stop                                   gracefully stop only the owned native harness; busy and blocked agents hold
+                                                      legacy terminals are never stopped; retire only proven-gone registrations
+  cataly harness observe <role|lane|headless:UUID>        show native session identity, recent output and pending dialog IDs (JSON)
+  cataly harness answer <role|lane|headless:UUID> --session ID --request ID --text JSON
+                                                      explicitly answer one pending native dialog (e.g. {"value":"Deny"})
+  cataly harness role <lead|duty> [REF]                 register a session (w1:p3, herdr:w1:p3, hc:t7, tern:42) as lead or duty (default: this one)
+  cataly harness start <key> --brief FILE [--cwd DIR]   open an OMP lane with the brief and lane rules
                           [--priority 1-9]            its turn for a lock (1 first, 9 last; default 5)
-  dori harness priority <key> <1-9>                   set an open lane's priority
-  dori harness report <key> --text T [--status working|waiting [--for TARGET]] [--evidence FILE|LINK ...]
+  cataly harness priority <key> <1-9>                   set an open lane's priority
+  cataly harness report <key> --text T [--status working|waiting [--for TARGET]] [--evidence FILE|LINK ...]
                                                       only new evidence (a file changed since the last progress, a link
                                                       not reported before) resets the nudge and escalation clock; a
                                                       waiting lane stays on it, named with what it waits on
-  dori harness ready <key> --text T --evidence LINK [--evidence LINK ...]
-  dori harness send <lead|duty|key|pane> --text T     deliver now, or queue until the pane's agent is idle
+                                                      TARGET: job:ID, approval:ID, ci:owner/repo#N[@CHECK_RUN_ID];
+                                                      other text is an unverified label, not a pending-operation proof
+  cataly harness ready <key> --text T --evidence LINK [--evidence LINK ...]
+  cataly harness send <lead|duty|key|pane> --text T     deliver now, or queue until the pane's agent is idle
                           [--to-shell]                operator only: type this one message into a pane with no agent
-  dori harness inbox list <pane|role|key>             queued entries: index, state (queued|typed|held), sender, time, first 60 chars
-  dori harness inbox ack <pane|role|key> <index>      drop a held entry: it did reach the pane
-  dori harness inbox resend <pane|role|key> <index>   release a held entry: the next flush delivers it
-  dori harness duty [--once] [--interval SECONDS]     flush inboxes, nudge idle lanes, escalate, detect lost lanes
-  dori harness duty stop [--text WHY] | resume | status   kill switch
-  dori harness loop [--once] [--interval S] [--max-lanes N] [--max-starts N] [--max-load L] [--force]
+  cataly harness inbox list <pane|role|key>             queued entries: index, state (queued|typed|held), sender, time, first 60 chars
+  cataly harness inbox ack <pane|role|key> <index>      drop a held entry: it did reach the pane
+  cataly harness inbox resend <pane|role|key> <index>   release a held entry: the next flush delivers it
+  cataly harness duty [--once] [--interval SECONDS]     flush inboxes, nudge idle lanes, escalate, detect lost lanes
+  cataly harness duty stop [--text WHY] | resume | status   kill switch
+  cataly harness loop [--once] [--interval S] [--max-lanes N] [--max-starts N] [--max-load L] [--force]
                                                       hourly: sync backlog, audit missed work, start the next item, ask decisions
-  dori harness loop stop [--text WHY] | resume | status   kill switch and last run
-  dori harness backlog add <id> --brief FILE [--title T] [--priority 1-9] [--cwd DIR] [--decision Q]
-  dori harness backlog list | decide <id> --text ANSWER | drop <id> [--text WHY]
-  dori harness backlog import <owner/repo> [--label dori] [--cwd DIR]   open labelled issues -> items
-  dori harness review <owner/repo#N> [--model M]      fresh OMP reviewer at the exact head -> receipt
-  dori harness merge <owner/repo#N> [--dry-run]       CLEAR receipt at head + green checks -> squash merge
-  dori harness done <key>                             lead closes a READY lane
-  dori harness lock <name> --lane K [--priority 1-9] -- CMD [ARG ...]
+  cataly harness loop stop [--text WHY] | resume | status   kill switch and last run
+  cataly harness backlog add <id> --brief FILE [--title T] [--priority 1-9] [--cwd DIR] [--decision Q]
+  cataly harness backlog list | decide <id> --text ANSWER | drop <id> [--text WHY]
+  cataly harness backlog import <owner/repo> [--label cataly] [--cwd DIR]   open labelled issues -> items
+  cataly harness review <owner/repo#N> [--model M]      fresh OMP reviewer at the exact head -> receipt
+  cataly harness merge <owner/repo#N> [--dry-run]       CLEAR receipt at head + green checks -> squash merge
+  cataly harness done <key>                             lead closes a READY lane
+  cataly harness lock <name> --lane K [--priority 1-9] -- CMD [ARG ...]
                                                       wait in line for lock <name> (lowest priority number first, then
                                                       first come), run CMD holding it, exit with CMD's code
-  dori harness lock <name> --list                     the lock's holder and its queue, one line
-  dori harness migrate [--to hc|herdr] (--lane K | --role lead|duty|duty-loop|hourly-loop | --all) [--dry-run]
+  cataly harness lock <name> --list                     the lock's holder and its queue, one line
+  cataly harness migrate [--to hc|herdr|tern] (--lane K | --role lead|duty|duty-loop|hourly-loop | --all) [--dry-run]
                        [--wait-minutes N] [--resume]  hand sessions over to another runtime; MIGRATED, SKIP, DEFERRED,
                                                       or MIGRATE_ROLLBACK (exit 3) per session
-  dori harness status
+  cataly harness owner init | show | snapshot | check   opt-in owner profile ($CATALY_HOME/owner.md) at the end of the
+                                                      lead's prompt: create it, print what the lead reads, keep
+                                                      today's copy, validate it (OWNER_OK or OWNER_PROBLEM, exit 1)
+  cataly harness owner diff [DATE] | revert DATE        compare with or restore a dated snapshot in owner-history/
+  cataly harness status
 
 --text may be omitted to read the message from stdin.
 send, report and ready exit 3 and print HELD <target> when the delivery may or may not have reached the pane:
-it is held and never resent, so do not send it again: check the pane, then dori harness inbox ack or dori harness inbox resend it.
+it is held and never resent, so do not send it again: check the pane, then cataly harness inbox ack or cataly harness inbox resend it.
 QUEUED (exit 0) means it waits in the pane's inbox.`;
 
 /** `rest`: every argument after a bare `--` in flag position, verbatim (the command `lock` runs). */

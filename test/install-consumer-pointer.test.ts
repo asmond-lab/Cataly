@@ -21,7 +21,7 @@ posix(
     const before = protectedSnapshot(paths);
     const checkout = snapshot(source.src);
     expect(source.install(consumerEnv(paths)).code).toBe(1);
-    expect(source.install({ DORI_INSTALL_MODE: "side", OMP_DORI_HOME: alias }).code).toBe(1);
+    expect(source.install({ CATALY_INSTALL_MODE: "side", OMP_CATALY_HOME: alias }).code).toBe(1);
     expect(protectedSnapshot(paths)).toEqual(before);
     expect(snapshot(source.src)).toBe(checkout);
     expect(existsSync(join(source.root, "bun.log"))).toBe(false);
@@ -35,7 +35,8 @@ posix(
     const { root, paths: physicalPaths } = await installedConsumer();
     const parent = join(source.root, "consumer-home-parent");
     symlinkSync(root, parent);
-    const paths = consumerPaths(join(parent, "home"));
+    const home = join(parent, "home");
+    const paths = consumerPaths(home, join(home, basename(physicalPaths.dori)));
     const target = join(paths.releases, basename(readlinkSync(paths.live)));
     rmSync(paths.live);
     symlinkSync(target, paths.live);
@@ -49,9 +50,9 @@ posix(
     const sourceHome = snapshot(source.home);
     const checkout = snapshot(source.src);
     const attempts: Record<string, string>[] = [
-      { ...consumerEnv(paths), DORI_INSTALL_MODE: "primary" },
-      { DORI_INSTALL_MODE: "side", OMP_DORI_HOME: physicalPaths.dori },
-      { DORI_INSTALL_MODE: "side", OMP_DORI_HOME: alias },
+      { ...consumerEnv(paths), CATALY_INSTALL_MODE: "primary" },
+      { CATALY_INSTALL_MODE: "side", OMP_CATALY_HOME: physicalPaths.dori },
+      { CATALY_INSTALL_MODE: "side", OMP_CATALY_HOME: alias },
     ];
     for (const options of attempts) {
       const r = source.install(options);
@@ -64,11 +65,28 @@ posix(
   },
 );
 
+posix("an intact historical consumer home is not mistaken for source, even with a source marker", () => {
+  const source = setup();
+  const base = join(source.home, ".dori");
+  const release = join(base, "releases/releases/active");
+  mkdirSync(release, { recursive: true });
+  symlinkSync("releases/releases/active", join(base, "src"));
+  writeFileSync(join(base, ".omp-dori"), "primary\n");
+  writeFileSync(join(base, "config.json"), '{"owner":"consumer"}\n');
+  const before = snapshot(source.home);
+
+  const result = source.install({ CATALY_INSTALL_MODE: "primary" });
+  expect(result.code).toBe(1);
+  expect(result.err).toContain(`${base} is managed by the consumer release installer`);
+  expect(snapshot(source.home)).toBe(before);
+  expect(existsSync(join(source.root, "bun.log"))).toBe(false);
+});
+
 posix.each(["existing", "missing", "not-directory"])(
   "ordinary source pointers with %s parents remain compatible with primary source installation",
   (parent) => {
     const source = setup();
-    const base = join(source.home, ".dori");
+    const base = join(source.home, ".cataly");
     mkdirSync(base);
     let target = parent === "existing" ? source.src : join(source.root, parent, "checkout");
     if (parent === "not-directory") {
@@ -76,9 +94,9 @@ posix.each(["existing", "missing", "not-directory"])(
       target = join(source.root, parent, "nested", "checkout");
     }
     symlinkSync(target, join(base, "src"));
-    expect(source.install({ DORI_INSTALL_MODE: "primary", DORI_NO_PULL: "1" }).code).toBe(0);
+    expect(source.install({ CATALY_INSTALL_MODE: "primary", CATALY_NO_PULL: "1" }).code).toBe(0);
     expect(readlinkSync(join(base, "src"))).toBe(target);
-    expect(readlinkSync(join(source.home, "global-bin/dori"))).toBe(join(source.src, source.cli));
+    expect(readlinkSync(join(source.home, "global-bin/cataly"))).toBe(join(source.src, source.cli));
     expect(JSON.parse(readFileSync(join(base, "config.json"), "utf8")).ompUlwPath).toBe("");
   },
 );
@@ -87,12 +105,12 @@ posix("a source pointer parent resolution error holds before checkout or install
   const source = setup();
   const loop = join(source.root, "loop");
   symlinkSync(loop, loop);
-  const base = join(source.home, ".dori");
+  const base = join(source.home, ".cataly");
   mkdirSync(base);
   symlinkSync(join(loop, "checkout"), join(base, "src"));
   const before = snapshot(source.home);
   const checkout = snapshot(source.src);
-  const r = source.install({ DORI_INSTALL_MODE: "primary" });
+  const r = source.install({ CATALY_INSTALL_MODE: "primary" });
   expect(r.code).toBe(1);
   expect(snapshot(source.home)).toBe(before);
   expect(snapshot(source.src)).toBe(checkout);

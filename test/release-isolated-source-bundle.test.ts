@@ -25,7 +25,7 @@ posix(
       [process.execPath, "test", join(import.meta.dir, "fixtures/release-isolated-source-bundle.test.ts")],
       {
         cwd: f.root,
-        env: { HOME: f.paths.home, PATH: tools, DORI_TEST_ISOLATED_SOURCE_BUNDLE: tools },
+        env: { HOME: f.paths.home, PATH: tools, CATALY_TEST_ISOLATED_SOURCE_BUNDLE: tools },
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",

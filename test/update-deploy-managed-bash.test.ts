@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { procCmdline } from "../src/update/proc.ts";
 import { once } from "node:events";
-import { appendFileSync, existsSync, readFileSync, watch, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readActiveDeployment } from "../src/update/deployment-active.ts";
 import { captureStartedMonitors } from "../src/update/deployment-handoff.ts";
@@ -11,6 +11,7 @@ import { nativeCli, requireShell } from "../src/update/deployment-native.ts";
 import { DeploymentHeld, processIdentity, sameProcess } from "../src/update/deployment-process.ts";
 import { restartDeployment } from "../src/update/deployment-restart.ts";
 import { waitLaunchedProcess } from "../src/update/deployment-rollback.ts";
+import { sourceManifest } from "../src/update/source.ts";
 import { foregroundCli } from "./update-deploy-foreground-cli.ts";
 import { managedBashFixture } from "./update-deploy-managed-setup.ts";
 
@@ -81,26 +82,42 @@ posix("a failed managed Bash health check still permits an owned idle startup to
   await requireShell(f.config, f.cli);
 });
 
-posix("launchRuntime executes once through a positively bare root Bash prompt", async () => {
-  const f = await managedBashFixture();
-  const expected = await launchedProcess(f.config, f.cli, f.record, f.launchRequestedAt);
-  await stopLaunchedProcess(f.config, f.cli, f.record, f.launchRequestedAt, expected!);
-  const starts = join(f.root, "starts");
-  const before = readFileSync(starts, "utf8").trim().split("\n");
-  const cli = foregroundCli(f.config, f.observe, f.sendLine);
-  const watcher = watch(starts);
-  try {
-    const changed = once(watcher, "change");
-    await launchRuntime(f.config, cli, f.record);
-    await changed;
-    const after = readFileSync(starts, "utf8").trim().split("\n");
-    expect(after).toHaveLength(before.length + 1);
-    expect(processIdentity(Number(after.at(-1)))).toBeDefined();
-    await expect(requireShell(f.config, cli)).rejects.toThrow(DeploymentHeld);
-  } finally {
-    watcher.close();
-  }
-});
+posix.each(["current", "v0.1.3"])(
+  "launchRuntime runs its exact %s source through the bare Bash prompt",
+  async (generation) => {
+    const f = await managedBashFixture();
+    const expected = await launchedProcess(f.config, f.cli, f.record, f.launchRequestedAt);
+    await stopLaunchedProcess(f.config, f.cli, f.record, f.launchRequestedAt, expected!);
+    const prior = generation === "v0.1.3";
+    if (prior) {
+      const source = f.record.oldSource!;
+      const skill = join(source, "skills/dori-mode/scripts/src");
+      mkdirSync(skill, { recursive: true });
+      writeFileSync(join(skill, "cli.ts"), "export {};\n");
+      writeFileSync(join(source, "package.json"), '{"name":"dori-superagent","version":"0.1.3"}');
+      f.record.oldSourceHash = sourceManifest(source).hash;
+    }
+    const starts = join(f.root, "starts");
+    const before = readFileSync(starts, "utf8").trim().split("\n");
+    const cli = foregroundCli(f.config, f.observe, f.sendLine);
+    const watcher = watch(starts);
+    try {
+      const changed = once(watcher, "change");
+      await launchRuntime(f.config, cli, f.record, false, prior);
+      await changed;
+      const after = readFileSync(starts, "utf8").trim().split("\n");
+      expect(after).toHaveLength(before.length + 1);
+      const pid = Number(after.at(-1));
+      expect(processIdentity(pid)).toBeDefined();
+      const argv = procCmdline(pid).split("\0");
+      const flag = prior ? "--dori-role" : "--cataly-role";
+      expect(argv.slice(argv.indexOf(flag), argv.indexOf(flag) + 2)).toEqual([flag, prior ? "dori" : "cataly"]);
+      await expect(requireShell(f.config, cli)).rejects.toThrow(DeploymentHeld);
+    } finally {
+      watcher.close();
+    }
+  },
+);
 
 posix.each([
   "unknown",

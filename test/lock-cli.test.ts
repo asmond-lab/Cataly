@@ -57,10 +57,10 @@ describe("the command line", () => {
   });
 
   test("USAGE names lock, lock --list, start --priority and priority", () => {
-    expect(USAGE).toContain("dori harness lock <name> --lane K [--priority 1-9] -- CMD [ARG ...]");
-    expect(USAGE).toContain("dori harness lock <name> --list");
+    expect(USAGE).toContain("cataly harness lock <name> --lane K [--priority 1-9] -- CMD [ARG ...]");
+    expect(USAGE).toContain("cataly harness lock <name> --list");
     expect(USAGE).toContain("[--priority 1-9]");
-    expect(USAGE).toContain("dori harness priority <key> <1-9>");
+    expect(USAGE).toContain("cataly harness priority <key> <1-9>");
   });
 
   test("start --priority and priority set the lane's priority; out of 1-9 is refused", async () => {

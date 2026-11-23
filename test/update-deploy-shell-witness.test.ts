@@ -35,7 +35,7 @@ linux.each(["stopped", "owner", "foreground", "nonbare"] as const)(
       rootPid: f.front.shell_pid,
       pgid: f.front.foreground_process_group_id,
       pids: f.front.foreground_processes.map(({ pid }) => pid),
-      ...(mode === "owner" ? { owner: { pid: f.runtime.pid, sessionId: f.runtime.sessionId, role: "dori" } } : {}),
+      ...(mode === "owner" ? { owner: { pid: f.runtime.pid, sessionId: f.runtime.sessionId, role: "cataly" } } : {}),
     });
     expect(message).not.toContain("private-shell-witness-token");
     expect(message).not.toContain(f.runtime.sessionFile);

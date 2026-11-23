@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { chmodSync, mkdirSync, readFileSync, symlinkSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { runUpdate } from "../src/update/cli.ts";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { loadUpdateConfig } from "../src/update/load.ts";
 import { publicSource } from "../src/update/publish-export.ts";
 import { candidateReport } from "../src/update/report.ts";
@@ -46,8 +46,8 @@ it("public export uses only the checked manifest, preserves modes and independen
   expect(git(f.target, "ls-tree", commit, "scripts/run.sh")).toStartWith("100755 blob ");
   expect(git(f.target, "ls-tree", commit, "src/behavior.ts")).toStartWith("100644 blob ");
   const message = git(f.target, "show", "--format=%B", "--no-patch", commit);
-  expect(message).toContain(`Dori-Source-SHA256: ${job.sourceHash}`);
-  expect(message).toContain(`Dori-Export-SHA256: ${manifest.hash}`);
+  expect(message).toContain(`Cataly-Source-SHA256: ${job.sourceHash}`);
+  expect(message).toContain(`Cataly-Export-SHA256: ${manifest.hash}`);
   expect(message).toContain(`Upstream-Commit: ${job.upstream}`);
   expect(message).not.toContain(f.directory);
   expect(JSON.parse(readFileSync(join(job.directory, "publication/public-source.json"), "utf8"))).toEqual(manifest);
@@ -66,7 +66,7 @@ it("public export uses only the checked manifest, preserves modes and independen
     activationRequiresNewOwnerApproval: false,
   });
   try {
-    expect((await new DoriUpdater(f.config, () => {}).once()).outcome).toBe("duplicate");
+    expect((await new CatalyUpdater(f.config, () => {}).once()).outcome).toBe("duplicate");
   } catch (error) {
     try {
       const receipt = detectionReceipt(f.config.root);
@@ -97,7 +97,7 @@ it("the next detected candidate uses the persisted successful baseline while con
   f.write(f.remote, "src/behavior.ts", "export const behavior = 3;\n");
   git(f.remote, "add", ".");
   git(f.remote, "commit", "-m", "Next real upstream change");
-  const next = await new DoriUpdater(f.config, () => {}).once();
+  const next = await new CatalyUpdater(f.config, () => {}).once();
   expect(next.job?.baseUpstream).toBe(f.job.upstream);
   expect(next.job?.inputs?.baseUpstream).toBe(f.job.upstream);
   expect(readFileSync(join(next.job!.directory, "inputs/base/src/behavior.ts"), "utf8")).toBe(
@@ -125,7 +125,7 @@ it.each(["bytes", "mode"] as const)(
     expect(result.job?.promotion?.status).toBe("held");
     expect(readState(f.updater.context).baseline).toBeUndefined();
     expect(git(f.target, "rev-parse", "main")).toBe(f.expectedMain);
-    expect(git(f.target, "for-each-ref", "--format=%(refname)", "refs/heads/dori-update/")).toBe("");
+    expect(git(f.target, "for-each-ref", "--format=%(refname)", "refs/heads/cataly-update/")).toBe("");
     expect(candidateReport(f.updater.context, result.job!)).toMatchObject({
       ready: false,
       published: false,
@@ -143,12 +143,12 @@ test("promotion is optional and lexical source identity survives a legitimate re
   const first = loadUpdateConfig(file);
   expect(first.promotion).toBeUndefined();
   expect(first.localSource).toBe(alias);
-  const hash = new DoriUpdater(first).context.configHash;
+  const hash = new CatalyUpdater(first).context.configHash;
   const release = join(f.directory, "next-release");
   mkdirSync(release);
   unlinkSync(alias);
   symlinkSync(release, alias);
-  expect(new DoriUpdater(loadUpdateConfig(file)).context.configHash).toBe(hash);
+  expect(new CatalyUpdater(loadUpdateConfig(file)).context.configHash).toBe(hash);
   expect(loadUpdateConfig(file).localSource).toBe(alias);
 });
 

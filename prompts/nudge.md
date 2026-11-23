@@ -4,7 +4,7 @@ Provider quota or credit exhaustion overrides this nudge: STOP model work and re
 Reset coupons, credits (including existing paid or promotional balances), top-ups and paid overage
 require the user's explicit permission for the specific use and amount.
 Never redeem automatically or switch accounts/providers/models to evade the limit.
-- Done: `{{dori}} ready {{key}} --text '<final answer>' --evidence <link>`
-- Progress: `{{dori}} report {{key}} --text '<milestone>' --evidence <changed file | new PR link>`
-- Blocked outside this pane: `{{dori}} report {{key}} --status waiting --for '<what you wait on>' --text 'WAITING: <blocker>'`
+- Done: `{{cataly}} ready {{key}} --text '<final answer>' --evidence <link>`
+- Progress: `{{cataly}} report {{key}} --text '<milestone>' --evidence <changed file | new PR link>`
+- Blocked outside this session: `{{cataly}} report {{key}} --status waiting --for '<what you wait on>' --text 'WAITING: <blocker>'`
 - Otherwise continue the work now.

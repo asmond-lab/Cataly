@@ -37,9 +37,9 @@ describe("enforced native reviewer scope", () => {
     const f = fixture();
     const path = join(f.directory, "worker-scope.json");
     const values = {
-      DORI_UPDATE_WORKER_SCOPE: path,
-      DORI_UPDATE_WORKER_NONCE: "worker-nonce",
-      DORI_UPDATE_WORKER_JOB: "a".repeat(64),
+      CATALY_UPDATE_WORKER_SCOPE: path,
+      CATALY_UPDATE_WORKER_NONCE: "worker-nonce",
+      CATALY_UPDATE_WORKER_JOB: "a".repeat(64),
     };
     const previous = Object.fromEntries(Object.keys(values).map((name) => [name, process.env[name]]));
     type Context = { sessionManager: { getSessionId(): string } };
@@ -76,7 +76,7 @@ describe("enforced native reviewer scope", () => {
       expect(handlers["tool_call"]!({ toolName: "edit" }, ctx)).toBeUndefined();
       expect(handlers["tool_call"]!({ toolName: "mcp__owner_tool" }, ctx)).toMatchObject({ block: true });
       expect(handlers["tool_call"]!({ toolName: "task" }, ctx)).toMatchObject({ block: true });
-      const expected = { nonce: "worker-nonce", job: values.DORI_UPDATE_WORKER_JOB, pid: process.pid };
+      const expected = { nonce: "worker-nonce", job: values.CATALY_UPDATE_WORKER_JOB, pid: process.pid };
       const scope = readWorkerScope(path, expected);
       expect(scope.blocked.toSorted()).toEqual(["mcp__owner_tool", "task"]);
       expect(() => readWorkerScope(path, { ...expected, nonce: "old" })).toThrow("matching runtime tool-scope");
@@ -105,10 +105,10 @@ describe("enforced native reviewer scope", () => {
     const f = fixture();
     const path = join(f.directory, "late-review-scope.json");
     const values = {
-      DORI_UPDATE_REVIEW_SCOPE: path,
-      DORI_UPDATE_REVIEW_NONCE: "late-review",
-      DORI_UPDATE_REVIEW_JOB: "a".repeat(64),
-      DORI_UPDATE_REVIEW_SOURCE: "b".repeat(64),
+      CATALY_UPDATE_REVIEW_SCOPE: path,
+      CATALY_UPDATE_REVIEW_NONCE: "late-review",
+      CATALY_UPDATE_REVIEW_JOB: "a".repeat(64),
+      CATALY_UPDATE_REVIEW_SOURCE: "b".repeat(64),
     };
     const previous = Object.fromEntries(Object.keys(values).map((name) => [name, process.env[name]]));
     type Context = { sessionManager: { getSessionId(): string } };
@@ -129,9 +129,9 @@ describe("enforced native reviewer scope", () => {
       await handlers["before_agent_start"]!({}, ctx);
       await handlers["before_provider_request"]!({}, ctx);
       const expected = {
-        nonce: values.DORI_UPDATE_REVIEW_NONCE,
-        job: values.DORI_UPDATE_REVIEW_JOB,
-        sourceHash: values.DORI_UPDATE_REVIEW_SOURCE,
+        nonce: values.CATALY_UPDATE_REVIEW_NONCE,
+        job: values.CATALY_UPDATE_REVIEW_JOB,
+        sourceHash: values.CATALY_UPDATE_REVIEW_SOURCE,
         pid: process.pid,
       };
       expect(readReviewScope(path, expected).active.toSorted()).toEqual(["glob", "grep", "read"]);

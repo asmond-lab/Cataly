@@ -89,7 +89,7 @@ export async function foreground(cli: HerdrCli, paneId: string, onFail: string =
       ...(processes ? { processes } : {}),
     };
   } catch (e) {
-    process.stderr.write(`dori: herdr pane process-info failed for ${paneId} (${reasonOf(e)}); ${onFail}\n`);
+    process.stderr.write(`cataly: herdr pane process-info failed for ${paneId} (${reasonOf(e)}); ${onFail}\n`);
     return { shell: true };
   }
 }

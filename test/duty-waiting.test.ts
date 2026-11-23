@@ -127,7 +127,7 @@ describe("a waiting lane", () => {
     expect(Bun.stringWidth(long!)).toBeLessThanOrEqual(120);
   });
 
-  test("dori report takes --for only with --status waiting", async () => {
+  test("cataly report takes --for only with --status waiting", async () => {
     const { d } = await waitingLane();
     const ok = await captureIo(() =>
       main(["report", "blocked", "--status", "waiting", "--for", "deploy 7", "--text", "WAITING: deploy"], d),
@@ -159,8 +159,8 @@ describe("a waiting lane", () => {
         join(dir, "nudge-waiting.md"),
         "[custom {{key}}] Waiting on {{target}} since {{waitingSince}}\nCheck {{target}}.",
       );
-      const previous = process.env["DORI_PROMPTS_DIR"];
-      process.env["DORI_PROMPTS_DIR"] = dir;
+      const previous = process.env["CATALY_PROMPTS_DIR"];
+      process.env["CATALY_PROMPTS_DIR"] = dir;
       try {
         expect(await at(10)).toContainEqual({ lane: "blocked", action: "nudge-1" });
         const lines = pane.received.at(-1)!.split("\n");
@@ -177,8 +177,8 @@ describe("a waiting lane", () => {
           waitingFor: target,
         });
       } finally {
-        if (previous === undefined) delete process.env["DORI_PROMPTS_DIR"];
-        else process.env["DORI_PROMPTS_DIR"] = previous;
+        if (previous === undefined) delete process.env["CATALY_PROMPTS_DIR"];
+        else process.env["CATALY_PROMPTS_DIR"] = previous;
       }
     },
   );
@@ -192,8 +192,8 @@ describe("a waiting lane", () => {
       mkdirSync(dir);
       if (kind === "directory") mkdirSync(path);
       const before = d.store.lane("blocked");
-      const previous = process.env["DORI_PROMPTS_DIR"];
-      process.env["DORI_PROMPTS_DIR"] = dir;
+      const previous = process.env["CATALY_PROMPTS_DIR"];
+      process.env["CATALY_PROMPTS_DIR"] = dir;
       try {
         if (kind === "missing") {
           expect(await at(10)).toContainEqual({ lane: "blocked", action: "nudge-1" });
@@ -214,8 +214,8 @@ describe("a waiting lane", () => {
         expect(d.store.lane("blocked")!.nudges).toBe(1);
         expect(d.store.lane("blocked")!.log.filter((entry) => entry.kind === "nudge")).toHaveLength(1);
       } finally {
-        if (previous === undefined) delete process.env["DORI_PROMPTS_DIR"];
-        else process.env["DORI_PROMPTS_DIR"] = previous;
+        if (previous === undefined) delete process.env["CATALY_PROMPTS_DIR"];
+        else process.env["CATALY_PROMPTS_DIR"] = previous;
       }
     },
   );

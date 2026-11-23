@@ -1,7 +1,9 @@
 import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readActiveDeployment } from "./deployment-active.ts";
+import { legacyDeploymentConfig, matchesDeploymentConfigHash } from "./deployment-config.ts";
 import { capturePointer, saveDeploymentJson } from "./deployment-files.ts";
+import { deploymentEnvArgs, legacyDeploymentSource } from "./deployment-legacy-brand.ts";
 import { legacyMonitorReceipts } from "./deployment-legacy-monitors.ts";
 import { monitorProcessReceipts, readRuntimeHealth } from "./deployment-monitor-receipts.ts";
 import { readMonitorSet } from "./deployment-monitors.ts";
@@ -34,13 +36,12 @@ export function prepareLauncher(config: DeploymentConfig, record: DeploymentReco
       throw new DeploymentHeld("configured shim target is outside admitted release source");
   }
   const configPath = join(record.directory, "config.json");
-  saveDeploymentJson(configPath, config);
+  const legacy = legacyDeploymentSource(record.releasePath, record.sourceHash);
+  saveDeploymentJson(configPath, legacy ? legacyDeploymentConfig(config) : config);
   const path = join(record.directory, "managed-restart.sh");
   const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
   // Fixed controller code remains available even if the stable source pointer rolls back to a legacy checkout.
-  const environment = Object.entries(actorEnv(config))
-    .map(([key, value]) => quote(`${key}=${value}`))
-    .join(" ");
+  const environment = deploymentEnvArgs(actorEnv(config), legacy).map(quote).join(" ");
   const launcher = `#!/bin/sh\ncd ${quote(record.directory)} || exit 2\nexec /usr/bin/env -i ${environment} ${quote(config.bun)} ${quote(join(record.releasePath, "src/update/deployment-launcher.ts"))} ${quote(configPath)} "$@"\n`;
   writeFileSync(path, launcher, { mode: 0o755 });
   return path;
@@ -52,7 +53,7 @@ export async function captureHandoff(
   launcher?: string,
 ): Promise<RuntimeIdentity> {
   const runtime = await captureRuntime(config, nativeCli(config), true);
-  if (runtime.approvalPending) throw new DeploymentHeld("native Dori has an approval; deployment is held");
+  if (runtime.approvalPending) throw new DeploymentHeld("native Cataly has an approval; deployment is held");
   if (!launcher && runtime.busy) throw new DeploymentBusy("managed restart waits for the native idle boundary");
   const health = readRuntimeHealth(config);
   const bootstrap = !health || health.pid !== runtime.pid || health.startedAt !== runtime.startedAt;
@@ -78,7 +79,8 @@ export async function captureHandoff(
   const priorRuntime = await admitRuntimeToolchains(config, record, runtime, active, launcher !== undefined);
   record.oldMonitors =
     bootstrap &&
-    active?.configHash === record.configHash &&
+    active !== undefined &&
+    matchesDeploymentConfigHash(config, active.configHash) &&
     active.sourceHash === record.oldSourceHash &&
     active.runtime.sessionId === runtime.sessionId &&
     active.runtime.sessionFile === runtime.sessionFile &&

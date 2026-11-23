@@ -28,7 +28,7 @@ export async function audit(d: Deps, run: LoopRun): Promise<void> {
     } else if (lane.status === "ready") {
       const age = now - (lane.final?.at ?? lane.lastActivityAt);
       if (age >= READY_HOURS * HOUR)
-        run.findings.push(`${lane.key} READY ${hours(age)}h ago, not closed: dori harness done ${lane.key}`);
+        run.findings.push(`${lane.key} READY ${hours(age)}h ago, not closed: cataly harness done ${lane.key}`);
     } else if (now - progressOf(lane) >= STALE_HOURS * HOUR) {
       // Progress, not talk: a lane that keeps reporting without new evidence is as stale as a silent one.
       const age = hours(now - progressOf(lane));

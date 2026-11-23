@@ -22,9 +22,9 @@ for (const mode of ["primary", "side"]) {
       );
       const nativeBytes = readFileSync(native);
       const env = s.env({
-        DORI_INSTALL_MODE: mode,
-        DORI_NO_PULL: "1",
-        DORI_OMP: command === "absolute" ? native : command,
+        CATALY_INSTALL_MODE: mode,
+        CATALY_NO_PULL: "1",
+        CATALY_OMP: command === "absolute" ? native : command,
       });
       if (command === "omp") env.PATH = `tools:${join(s.root, "bin")}:${process.env["PATH"]}`;
       const installed = Bun.spawnSync([script], { cwd: s.root, env });
@@ -33,7 +33,7 @@ for (const mode of ["primary", "side"]) {
       const ordinary = join(s.root, "ordinary");
       mkdirSync(join(ordinary, "tools"), { recursive: true });
       writeFileSync(join(ordinary, "tools", name), "#!/bin/sh\nexit 73\n", { mode: 0o755 });
-      const base = join(s.home, mode === "side" ? ".omp-dori" : ".dori");
+      const base = join(s.home, mode === "side" ? ".omp-cataly" : ".cataly");
       const prompt = "literal ; $(touch relative-suffix-ran)";
       const child = Bun.spawnSync([join(base, "bin/omp"), "probe", prompt], { cwd: ordinary, env });
       expect(child.exitCode).toBe(0);
@@ -58,9 +58,9 @@ posix("a missing explicit override stops before installation instead of selectin
   const s = setup();
   const installed = Bun.spawnSync([script], {
     cwd: s.root,
-    env: s.env({ DORI_INSTALL_MODE: "side", DORI_NO_PULL: "1", DORI_OMP: "./missing tools/omp" }),
+    env: s.env({ CATALY_INSTALL_MODE: "side", CATALY_NO_PULL: "1", CATALY_OMP: "./missing tools/omp" }),
   });
   expect(installed.exitCode).toBe(1);
-  expect(installed.stderr.toString()).toContain("DORI_OMP does not name an executable");
-  expect(existsSync(join(s.home, ".omp-dori"))).toBe(false);
+  expect(installed.stderr.toString()).toContain("CATALY_OMP does not name an executable");
+  expect(existsSync(join(s.home, ".omp-cataly"))).toBe(false);
 });

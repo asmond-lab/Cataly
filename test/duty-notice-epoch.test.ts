@@ -27,14 +27,17 @@ async function quietLane() {
 
 /** Stop once after a notice is queued, before its nudge count or status is persisted. */
 function interruptSave(d: Deps, notice: (lane: Lane) => boolean): void {
-  const save = d.store.saveLane.bind(d.store);
-  d.store.saveLane = (lane) => {
-    if (notice(lane)) {
-      d.store.saveLane = save;
-      throw new Error("stopped before saving the notice marker");
-    }
-    save(lane);
-  };
+  const withCurrent = d.store.withCurrentLane.bind(d.store);
+  d.store.withCurrentLane = (key, fn) =>
+    withCurrent(key, (current, save) =>
+      fn(current, (lane) => {
+        if (notice(lane)) {
+          d.store.withCurrentLane = withCurrent;
+          throw new Error("stopped before saving the notice marker");
+        }
+        save(lane);
+      }),
+    );
 }
 
 describe("duty notice identities across progress epochs and lane incarnations", () => {

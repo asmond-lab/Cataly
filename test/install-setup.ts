@@ -14,14 +14,14 @@ import { join, resolve } from "node:path";
 import { digest } from "../src/update/source.ts";
 
 // The miniature checkout exposes the real reader without copying the full application into every fixture.
-const fixtureReader = resolve(import.meta.dir, "../skills/dori-mode/scripts/src/config.ts");
+const fixtureReader = resolve(import.meta.dir, "../skills/cataly-mode/scripts/src/config.ts");
 
 // POSIX-only: this installer fixture runs shell scripts, links and mode checks the Windows host cannot exercise.
 export const posix = test.skipIf(process.platform === "win32");
 
 // The real source installer over a local upstream; package installs and toolchain probes stay isolated.
 export const script = resolve(import.meta.dir, "../scripts/install-source.sh");
-const gitEnv = {
+const gitEnv: Record<string, string | undefined> = {
   ...process.env,
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_NOSYSTEM: "1",
@@ -30,6 +30,9 @@ const gitEnv = {
   GIT_COMMITTER_NAME: "t",
   GIT_COMMITTER_EMAIL: "t@example.com",
 };
+for (const key of Object.keys(gitEnv)) {
+  if (/^(?:OMP_)?(?:CATALY|DORI)_/.test(key)) delete gitEnv[key];
+}
 const roots: string[] = [];
 afterEach(() => {
   for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true });
@@ -41,19 +44,19 @@ export const git = (cwd: string, ...argv: string[]): string => {
   return r.stdout.toString().trim();
 };
 
-const skillFixture = "---\nname: dori-mode\ndescription: Turns a coding agent into a Dori.\n---\n\n# Dori mode\n";
+const skillFixture = "---\nname: cataly-mode\ndescription: Turns a coding agent into a Cataly.\n---\n\n# Cataly mode\n";
 
 export function setup() {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "dori-install-")));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "cataly-install-")));
   roots.push(root);
   const upstream = join(root, "upstream");
   const src = join(root, "src");
   const home = join(root, "home");
   const bin = join(root, "bin");
   const ulw = join(root, "omp-ulw");
-  const cli = "skills/dori-mode/scripts/src/cli.ts";
-  mkdirSync(join(upstream, "skills/dori-mode/scripts/src"), { recursive: true });
-  mkdirSync(join(upstream, "skills/dori-mode/references"), { recursive: true });
+  const cli = "skills/cataly-mode/scripts/src/cli.ts";
+  mkdirSync(join(upstream, "skills/cataly-mode/scripts/src"), { recursive: true });
+  mkdirSync(join(upstream, "skills/cataly-mode/references"), { recursive: true });
   mkdirSync(join(upstream, "extension"));
   mkdirSync(join(upstream, "scripts"));
   symlinkSync(
@@ -66,12 +69,12 @@ export function setup() {
   writeFileSync(join(ulw, "presets.ts"), "export {};\n");
   writeFileSync(join(upstream, cli), "v1\n");
   writeFileSync(
-    join(upstream, "skills/dori-mode/scripts/src/config.ts"),
+    join(upstream, "skills/cataly-mode/scripts/src/config.ts"),
     `export * from ${JSON.stringify(fixtureReader)};\n`,
   );
   writeFileSync(join(upstream, "omp-ulw.lock"), "0000000000000000000000000000000000000000\n");
-  writeFileSync(join(upstream, "skills/dori-mode/SKILL.md"), skillFixture);
-  writeFileSync(join(upstream, "skills/dori-mode/references/config.example.json"), "{}\n");
+  writeFileSync(join(upstream, "skills/cataly-mode/SKILL.md"), skillFixture);
+  writeFileSync(join(upstream, "skills/cataly-mode/references/config.example.json"), "{}\n");
   git(upstream, "init", "-q", "-b", "main");
   git(upstream, "add", ".");
   git(upstream, "commit", "-qm", "v1");
@@ -81,7 +84,7 @@ export function setup() {
   // Record package-manager mutations without installing or linking anything on the host.
   writeFileSync(
     join(bin, "bun"),
-    `#!/bin/sh\ncase "$1" in\n--version) echo "\${INSTALL_TEST_BUN_VERSION:-1.4.4}" ;;\n-e|*/source-dependencies.ts|*/source-configuration.ts) exec ${JSON.stringify(process.execPath)} "$@" ;;\n*) echo "$*" >> ${JSON.stringify(join(root, "bun.log"))} ;;\nesac\n`,
+    `#!/bin/sh\ncase "$1" in\n--version) echo "\${INSTALL_TEST_BUN_VERSION:-1.4.4}" ;;\n-e|*/source-dependencies.ts|*/source-configuration.ts|*/skills/cataly-mode/scripts/src/cli.ts) exec ${JSON.stringify(process.execPath)} "$@" ;;\n*) echo "$*" >> ${JSON.stringify(join(root, "bun.log"))} ;;\nesac\n`,
   );
   chmodSync(join(bin, "bun"), 0o755);
   writeFileSync(
@@ -93,43 +96,45 @@ export function setup() {
     writeFileSync(join(upstream, cli), text);
     git(upstream, "commit", "-qam", text.trim());
   };
-  const env = (extra: Record<string, string> = {}) => ({
+  const env = (extra: Record<string, string | undefined> = {}) => ({
     ...gitEnv,
     HOME: home,
     BUN_INSTALL: join(home, ".bun"),
-    DORI_HOME: join(home, ".dori"),
-    DORI_CONFIG: join(home, ".dori/config.json"),
-    DORI_STATE_DIR: undefined,
-    DORI_LEAD_PANE: undefined,
-    DORI_AGENT_ARGV: undefined,
-    DORI_AGENT_CMD: undefined,
-    DORI_AGENT_EXECUTABLE: undefined,
-    DORI_OMP_ULW_PATH: undefined,
-    DORI_INSTALL_MODE: "",
-    DORI_NO_PULL: "",
-    DORI_SRC: src,
-    DORI_OMP: join(bin, "omp"),
+    CATALY_HOME: undefined,
+    CATALY_CONFIG: undefined,
+    CATALY_STATE_DIR: undefined,
+    CATALY_LEAD_PANE: undefined,
+    CATALY_RUNTIME: undefined,
+    CATALY_HC_SPACE: undefined,
+    CATALY_AGENT_ARGV: undefined,
+    CATALY_AGENT_CMD: undefined,
+    CATALY_AGENT_EXECUTABLE: undefined,
+    CATALY_OMP_ULW_PATH: undefined,
+    CATALY_INSTALL_MODE: "",
+    CATALY_NO_PULL: "",
+    CATALY_SRC: src,
+    CATALY_OMP: join(bin, "omp"),
     SKILLS_DIR: join(home, "skills"),
     OMP_EXTENSIONS_DIR: join(home, "extensions"),
     OMP_ULW_SRC: ulw,
     OMP_ULW_REPO: "",
     OMP_ULW_REF: "",
     INSTALL_TEST_OMP_VERSION: "",
-    OMP_DORI_HOME: join(home, ".omp-dori"),
-    OMP_DORI_HC_SESSION: "",
-    OMP_DORI_HC_SPACE: "",
-    OMP_DORI_BIN_DIR: join(home, "global-bin"),
+    OMP_CATALY_HOME: join(home, ".omp-cataly"),
+    OMP_CATALY_HC_SESSION: "",
+    OMP_CATALY_HC_SPACE: "",
+    OMP_CATALY_BIN_DIR: join(home, "global-bin"),
     PATH: `${bin}:${process.env["PATH"]}`,
     ...extra,
   });
-  const install = (extra: Record<string, string> = {}, argv: readonly string[] = []) => {
+  const install = (extra: Record<string, string | undefined> = {}, argv: readonly string[] = []) => {
     const r = Bun.spawnSync([script, ...argv], { env: env(extra), stdin: "ignore" });
     return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
   };
   return { root, upstream, src, home, ulw, cli, upstreamCommit, env, install };
 }
 
-// A local omp-ulw remote with one commit per call, and omp-dori's lock pointing at its first commit.
+// A local omp-ulw remote with one commit per call, and omp-cataly's lock pointing at its first commit.
 export function withUlwRemote() {
   const s = setup();
   const remote = join(s.root, "ulw-remote");
@@ -161,7 +166,7 @@ export function withUlwRemote() {
   git(remote, "restore", "--source=HEAD", "--staged", "--worktree", "index.ts");
   git(s.upstream, "add", "omp-ulw.lock", "omp-ulw.overlay.lock", "omp-ulw.patch");
   git(s.upstream, "commit", "-qm", "lock");
-  const config = () => JSON.parse(readFileSync(join(s.home, ".dori/config.json"), "utf8"));
+  const config = () => JSON.parse(readFileSync(join(s.home, ".cataly/config.json"), "utf8"));
   const ulwHead = () => git(join(s.home, "extensions/omp-ulw"), "rev-parse", "HEAD");
   const install = (extra: Record<string, string> = {}) =>
     s.install({ OMP_ULW_SRC: "", OMP_ULW_REPO: remote, ...extra });

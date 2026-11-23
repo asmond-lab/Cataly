@@ -21,13 +21,13 @@ describe("create / start / createGroup", () => {
         "--cwd",
         "/w",
         "--label",
-        "dori.group=g1",
+        "cataly.group=g1",
         "--label",
-        "dori.role=lane",
+        "cataly.role=lane",
         "--label",
-        "dori.name=Lane K",
+        "cataly.name=Lane K",
         "--label",
-        "dori.lane=Lane K",
+        "cataly.lane=Lane K",
         "--name",
         "lane-k",
         "--",
@@ -39,10 +39,10 @@ describe("create / start / createGroup", () => {
     ]);
   });
 
-  test("no group labels dori.group=dori; a non-lane role has no dori.lane label; no SHELL runs sh", async () => {
+  test("no group labels cataly.group=cataly; a non-lane role has no cataly.lane label; no SHELL runs sh", async () => {
     const { fake, rt } = rig();
     const ref = await rt.create({ name: "lead", cwd: "/r", env: {}, role: "lead", container: "workspace-root" });
-    expect(ref).toEqual({ runtime: "hc", id: "t1", group: "dori" });
+    expect(ref).toEqual({ runtime: "hc", id: "t1", group: "cataly" });
     expect(fake.calls[1]).toEqual([
       "run",
       "--bg",
@@ -51,11 +51,11 @@ describe("create / start / createGroup", () => {
       "--cwd",
       "/r",
       "--label",
-      "dori.group=dori",
+      "cataly.group=cataly",
       "--label",
-      "dori.role=lead",
+      "cataly.role=lead",
       "--label",
-      "dori.name=lead",
+      "cataly.name=lead",
       "--name",
       "lead",
       "--",
@@ -64,18 +64,18 @@ describe("create / start / createGroup", () => {
     ]);
   });
 
-  test("DORI_HC_SPACE adds the herdr.space label that opts the terminal into that Herdr app space", async () => {
-    const { fake, rt } = rig({}, { ...SH, DORI_HC_SPACE: "sp0a1b" });
+  test("CATALY_HC_SPACE adds the herdr.space label that opts the terminal into that Herdr app space", async () => {
+    const { fake, rt } = rig({}, { ...SH, CATALY_HC_SPACE: "sp0a1b" });
     await rt.create(lane);
     const run = fake.calls[1]!;
-    expect(run.slice(run.indexOf("dori.lane=Lane K") + 1, run.indexOf("--name"))).toEqual([
+    expect(run.slice(run.indexOf("cataly.lane=Lane K") + 1, run.indexOf("--name"))).toEqual([
       "--label",
       "herdr.space=sp0a1b",
     ]);
   });
 
-  test("an invalid DORI_HC_SPACE runs nothing", async () => {
-    const { fake, rt } = rig({}, { ...SH, DORI_HC_SPACE: "sp x" });
+  test("an invalid CATALY_HC_SPACE runs nothing", async () => {
+    const { fake, rt } = rig({}, { ...SH, CATALY_HC_SPACE: "sp x" });
     await expect(rt.create(lane)).rejects.toThrow("Herdr space id");
     expect(fake.calls.filter((c) => c[0] === "run")).toEqual([]);
   });

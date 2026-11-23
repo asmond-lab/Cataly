@@ -15,17 +15,24 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, join } from "node:path";
-import { type ConsumerPaths, owned, realDirectory, syncDirectory } from "./files.ts";
+import { type ConsumerPaths, isPrimaryConsumer, owned, realDirectory, regularFile, syncDirectory } from "./files.ts";
 
 const parts = ["references", "scripts", "assets"] as const;
 
 export function prepareConsumerDiscovery(paths: ConsumerPaths, source: string): void {
-  if (paths.dori === join(paths.home, ".dori")) return;
+  if (isPrimaryConsumer(paths)) return;
+  // The retained target release always renders its own discovery overlay, including after rollback.
+  const skillName = regularFile(join(source, "skills/cataly-mode/SKILL.md")) ? "cataly-mode" : "dori-mode";
+  const isolatedName = `omp-${skillName}`;
+  const sourceSkill = join(source, "skills", skillName);
   const parent = join(paths.root, "consumer-discovery");
   const destination = join(parent, basename(source));
-  const skill = readFileSync(join(source, "skills/dori-mode/SKILL.md"), "utf8")
-    .replace(/^name: dori-mode$/m, "name: omp-dori-mode")
-    .replace(/^description: /m, "description: For this isolated OMP-Dori consumer installation. ");
+  const skill = readFileSync(join(sourceSkill, "SKILL.md"), "utf8")
+    .replace(/^name: (?:cataly|dori)-mode$/m, `name: ${isolatedName}`)
+    .replace(
+      /^description: /m,
+      `description: For this isolated ${skillName === "cataly-mode" ? "Cataly" : "OMP-Dori"} consumer installation. `,
+    );
   const overlay = `skills:\n  customDirectories:\n    - ${JSON.stringify(join(destination, "skills"))}\n`;
   realDirectory(parent, true);
   owned(parent);
@@ -33,8 +40,8 @@ export function prepareConsumerDiscovery(paths: ConsumerPaths, source: string): 
   const validate = (): void => {
     for (const [path, names] of [
       [destination, ["docs", "omp.yml", "skills"]],
-      [join(destination, "skills"), ["omp-dori-mode"]],
-      [join(destination, "skills/omp-dori-mode"), ["SKILL.md", ...parts]],
+      [join(destination, "skills"), [isolatedName]],
+      [join(destination, "skills", isolatedName), ["SKILL.md", ...parts]],
     ] as const) {
       realDirectory(path);
       owned(path);
@@ -44,7 +51,7 @@ export function prepareConsumerDiscovery(paths: ConsumerPaths, source: string): 
     }
     for (const [path, bytes] of [
       [join(destination, "omp.yml"), overlay],
-      [join(destination, "skills/omp-dori-mode/SKILL.md"), skill],
+      [join(destination, "skills", isolatedName, "SKILL.md"), skill],
     ] as const) {
       const stat = lstatSync(path);
       owned(path);
@@ -57,10 +64,10 @@ export function prepareConsumerDiscovery(paths: ConsumerPaths, source: string): 
         throw new Error(`Modified consumer discovery file: ${path}`);
     }
     for (const part of parts) {
-      const path = join(destination, "skills/omp-dori-mode", part);
+      const path = join(destination, "skills", isolatedName, part);
       const stat = lstatSync(path);
       owned(path);
-      if (!stat.isSymbolicLink() || readlinkSync(path) !== join(source, "skills/dori-mode", part))
+      if (!stat.isSymbolicLink() || readlinkSync(path) !== join(sourceSkill, part))
         throw new Error(`Modified consumer discovery link: ${path}`);
     }
     const docs = join(destination, "docs");
@@ -77,7 +84,7 @@ export function prepareConsumerDiscovery(paths: ConsumerPaths, source: string): 
   const stage = mkdtempSync(join(paths.staging, "discovery-"));
   try {
     const skills = join(stage, "skills");
-    const skillDir = join(skills, "omp-dori-mode");
+    const skillDir = join(skills, isolatedName);
     mkdirSync(skills, { mode: 0o700 });
     mkdirSync(skillDir, { mode: 0o700 });
     for (const [path, bytes] of [
@@ -93,7 +100,7 @@ export function prepareConsumerDiscovery(paths: ConsumerPaths, source: string): 
         closeSync(fd);
       }
     }
-    for (const part of parts) symlinkSync(join(source, "skills/dori-mode", part), join(skillDir, part));
+    for (const part of parts) symlinkSync(join(sourceSkill, part), join(skillDir, part));
     symlinkSync(join(source, "docs"), join(stage, "docs"));
     syncDirectory(skillDir);
     syncDirectory(skills);

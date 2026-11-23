@@ -1,7 +1,7 @@
 import { chmodSync, copyFileSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { alive } from "../../skills/dori-mode/scripts/src/checkpoint-lock.ts";
+import { alive } from "../../skills/cataly-mode/scripts/src/checkpoint-lock.ts";
 import { applicationInput, applicationManifest, freezeApplicationState, restoreApplicationState } from "./app-state.ts";
 import { canonical, contains, object, UpdateError } from "./config.ts";
 import { candidateReport } from "./report.ts";
@@ -11,7 +11,7 @@ import type { SourceManifest, UpdateContext, UpdateJob } from "./types.ts";
 
 type RecoveryManifest = {
   readonly version: 1;
-  readonly target: "dori";
+  readonly target: "cataly";
   readonly job: string;
   readonly source: SourceManifest;
   readonly inputs: Readonly<Record<string, SourceManifest>>;
@@ -40,7 +40,7 @@ export function acknowledgeStopped(ctx: UpdateContext, id: string): UpdateJob | 
       activeJob: null,
     });
     release();
-    ctx.emit({ type: "DORI_UPDATE", target: "dori", event: "recovered-idle-controller" });
+    ctx.emit({ type: "CATALY_UPDATE", target: "cataly", event: "recovered-idle-controller" });
     return undefined;
   }
   if (state.active !== id) throw new UpdateError("acknowledgement must name the exact active job");
@@ -139,7 +139,7 @@ export function snapshotUpdate(ctx: UpdateContext, id: string, output: string, a
     }
     const manifest: RecoveryManifest = {
       version: 1,
-      target: "dori",
+      target: "cataly",
       job: id,
       source,
       inputs,
@@ -163,14 +163,14 @@ function readSnapshot(input: string): RecoveryManifest {
   if (
     !object(raw) ||
     raw["version"] !== 1 ||
-    raw["target"] !== "dori" ||
+    (raw["target"] !== "cataly" && raw["target"] !== "dori") ||
     typeof raw["job"] !== "string" ||
     !object(raw["source"]) ||
     !object(raw["inputs"]) ||
     !Array.isArray(raw["files"]) ||
     !(raw["applicationState"] === null || object(raw["applicationState"]))
   ) {
-    throw new UpdateError("invalid Dori recovery snapshot");
+    throw new UpdateError("invalid Cataly recovery snapshot");
   }
   return raw as unknown as RecoveryManifest;
 }
@@ -236,7 +236,7 @@ export function restoreUpdate(ctx: UpdateContext, snapshot: string, output: stri
   });
   saveJson(join(directory, "recovery.json"), {
     version: 1,
-    target: "dori",
+    target: "cataly",
     phase: "interrupted",
     sourceHash: manifest.source.hash,
     applicationStateHash: manifest.applicationState?.hash ?? null,

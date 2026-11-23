@@ -106,12 +106,12 @@ export interface PlatformAdapter {
   /** Flush a directory's own entries after a rename or link; a no-op where directoryFsync is false. */
   syncDirectory(path: string): void;
 
-  /** The runtime a fresh installation selects with none configured: hc on macOS, herdr elsewhere. */
-  defaultRuntime(): "herdr" | "hc";
+  /** The historical terminal profile, used only for releases without native-session capability. */
+  legacyReleaseRuntime(): "herdr" | "hc";
 
   /**
    * Whether this host admits a release built for `platform`, `arch` and `runtime`, exactly as
-   * src/release/provision.ts prerequisites do: linux/x64/herdr or darwin/arm64/hc, never another host's profile.
+   * src/release/provision.ts prerequisites do: headless on Linux x64 and Darwin arm64, or each host's legacy profile.
    */
   supportsReleaseProfile(platform: string, arch: string, runtime: string): boolean;
 

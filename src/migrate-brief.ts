@@ -2,8 +2,8 @@ import { refText } from "./refs.ts";
 import type { SessionRef } from "./runtime/types.ts";
 import type { QueuedMessage } from "./store-types.ts";
 
-const FOOTER_MARK = "## Lane rules (added by dori";
-const MAYBE_ARRIVED = "may already have reached the previous session; see dori harness inbox list";
+const FOOTER_MARK = /^## Lane rules \(added by (?:cataly|dori) for lane `/m;
+const MAYBE_ARRIVED = "may already have reached the previous session; see cataly harness inbox list";
 
 export type HandoffInput = {
   readonly brief: string;
@@ -26,13 +26,13 @@ const inboxLine = (m: QueuedMessage, i: number): string => {
  * lane footer once. Held and typed entries get one line each saying they may already have reached the old session.
  */
 export function renderHandoff(h: HandoffInput): string {
-  const cut = h.brief.indexOf(FOOTER_MARK);
+  const cut = h.brief.search(FOOTER_MARK);
   const original = (cut < 0 ? h.brief : h.brief.slice(0, cut)).trimEnd();
   const tail = h.screen.split("\n").slice(-80).join("\n").trimEnd();
   const sections = [
     original,
     "## Handoff",
-    `You replace the session ${refText(h.from)}, which ran this brief before a \`dori harness migrate\`. Continue from the state below; do not redo finished work.`,
+    `You replace the session ${refText(h.from)}, which ran this brief before a \`cataly harness migrate\`. Continue from the state below; do not redo finished work.`,
     `Last state: ${h.lastState ?? (h.checkpoint === undefined ? "(no checkpoint written)" : "see the checkpoint below")}`,
     ...(h.checkpoint === undefined ? [] : ["### Checkpoint", h.checkpoint.trimEnd()]),
     "### Lane log (last 20)",

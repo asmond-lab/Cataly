@@ -107,8 +107,8 @@ di quel segnale, non una garanzia su ogni risultato. I rapporti dovrebbero
 distinguere i risultati osservati, l'incertezza residua e il lavoro non svolto.
 
 Tieni credenziali, conversazioni private e dati degli account fuori da patch
-e rapporti pubblici. La telemetria facoltativa può essere disabilitata con
-`DORI_TELEMETRY=0` o `DO_NOT_TRACK=1`.
+e rapporti pubblici. La telemetria è disattivata per impostazione predefinita.
+`CATALY_TELEMETRY=1` la attiva; `DO_NOT_TRACK=1` ha la precedenza.
 
 ## Per iniziare
 
@@ -116,8 +116,13 @@ e rapporti pubblici. La telemetria facoltativa può essere disabilitata con
 
 **Nota**
 
-Cataly è il nome del progetto. I comandi esistenti `dori`, `omp-dori` e `omp`,
-le directory di installazione e i nomi degli asset pubblicati non sono stati rinominati.
+I comandi attuali sono `cataly`, `cataly-harness` e `omp-cataly` (installazione
+separata). Le nuove installazioni usano `~/.cataly` oppure `~/.omp-cataly`.
+Il runtime predefinito non richiede un backend terminale.
+
+[Installa una release corrente verificata](docs/releases.md#install-a-current-release)
+o [aggiorna da v0.1.3 senza un backend terminale](docs/releases.md#upgrade-a-v013-installation).
+L’aggiornamento mantiene la directory di installazione e la configurazione esistenti.
 
 </td></tr></table>
 
@@ -134,21 +139,22 @@ Non sostituire una release esatta con un installer arbitrario di `main`.
 
 ### Lavorare dai sorgenti
 
-Installa prima git, Bun 1.4.4+ e herdr o hc; consulta i
+Installa prima git e Bun 1.4.4+. Su Linux e macOS la configurazione predefinita non richiede herdr né hc; consulta i
 [prerequisiti della versione sorgente](docs/releases.md#current-source-bundle).
+Tern è un terzo runtime di sessione nel sorgente di `main`; consulta [Tern](docs/runtime.md#tern).
 
 Usa un checkout separato, non un'installazione in esecuzione o una release utente congelata:
 
 ```bash
 git clone https://github.com/vntrevx/Cataly.git "$HOME/src/Cataly" || exit 1
 cd "$HOME/src/Cataly" || exit 1
-DORI_INSTALL_MODE=side DORI_NO_PULL=1 DORI_SRC="$PWD" bash scripts/install-source.sh
+CATALY_INSTALL_MODE=side CATALY_NO_PULL=1 CATALY_SRC="$PWD" bash scripts/install-source.sh
 ```
 
-L'installer da sorgente prepara OMP 18.20.0 con le modifiche e i vincoli del progetto
+L'installer da sorgente prepara OMP 19.0.1 con le modifiche e i vincoli del progetto
 e l'overlay ULW; un `omp` standard nel `PATH` non può sostituirli. La modalità side
-usa per impostazione predefinita `~/.omp-dori`, mantiene wrapper e configurazione
-propri e lascia intatta l'installazione primaria `~/.dori`.
+usa per impostazione predefinita `~/.omp-cataly`, mantiene wrapper e configurazione
+propri e lascia intatta l'installazione primaria `~/.cataly`.
 L'installazione non avvia agenti, ricevitori di messaggi o servizi.
 
 Leggi la [guida all'installazione da sorgente](docs/releases.md#source-checkouts-for-maintainers)
@@ -168,8 +174,8 @@ stata pubblicata una release macOS. Slack e Telegram restano funzionalità della
 ## Documentazione
 
 - [Installazione, supporto, aggiornamenti e rollback](docs/releases.md)
-- [Skill e regole operative](skills/dori-mode/SKILL.md)
-- [Configurazione della messaggistica](skills/dori-mode/references/setup.md)
+- [Skill e regole operative](skills/cataly-mode/SKILL.md)
+- [Configurazione della messaggistica](skills/cataly-mode/references/setup.md)
 - [Adattatori runtime e contratti delle sessioni](docs/runtime.md)
 - [Configurazione dei container](docs/container.md)
 - [Pianificazione e backlog](docs/hourly-loop.md)
@@ -191,7 +197,7 @@ che ha reso necessaria la modifica.
 Le licenze seguono la provenienza di ogni componente. Il materiale derivato da
 dori-superagent conserva la [Sustainable Use License 1.0](LICENSE);
 l'integrazione OMP preesistente conserva la propria
-[licenza MIT e gli avvisi di copyright](LICENSE.omp-dori).
+[licenza MIT e gli avvisi di copyright](LICENSE.integration).
 Gli altri componenti mantengono le rispettive condizioni. L'avviso MIT non
 attribuisce una nuova licenza all'intero repository. [NOTICE](NOTICE) registra
 le revisioni importate e l'attribuzione della copia modificata.

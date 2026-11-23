@@ -2,7 +2,7 @@ import { expect } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { runUpdate } from "../src/update/cli.ts";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { parseDeploymentConfig } from "../src/update/deployment.ts";
 import { candidateReport } from "../src/update/report.ts";
 import { readState, saveJson } from "../src/update/state.ts";
@@ -11,18 +11,18 @@ import { git, it, publicationFixture } from "./update-setup.ts";
 it("real publication followed by an admitted deployment preparation failure retains the effective baseline", async () => {
   const f = await publicationFixture((paths) => {
     const home = join(paths.directory, "operator-home");
-    const doriHome = join(home, ".dori");
-    const stateDir = join(doriHome, "state");
-    const doriConfig = join(doriHome, "config.json");
+    const catalyHome = join(home, ".cataly");
+    const stateDir = join(catalyHome, "state");
+    const catalyConfig = join(catalyHome, "config.json");
     mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-    saveJson(doriConfig, { runtime: "herdr", stateDir, defaultCwd: paths.localSource });
+    saveJson(catalyConfig, { runtime: "herdr", stateDir, defaultCwd: paths.localSource });
     const deployment = parseDeploymentConfig(
       {
         releaseRoot: join(paths.directory, "releases"),
         liveSource: paths.localSource,
         home,
-        doriHome,
-        doriConfig,
+        catalyHome,
+        catalyConfig,
         stateDir,
         bun: process.execPath,
         omp: process.execPath,
@@ -30,7 +30,7 @@ it("real publication followed by an admitted deployment preparation failure reta
         pane: "fixture:p1",
         sessionId: "00000000-0000-4000-8000-000000000001",
         model: "openai-codex/gpt-6.1-sol",
-        restartLock: join(doriHome, "deployment.lock"),
+        restartLock: join(catalyHome, "deployment.lock"),
         launcherPath: join(paths.directory, "bin", "managed-restart"),
         healthTimeoutMs: 100,
         stopTimeoutMs: 100,
@@ -42,7 +42,7 @@ it("real publication followed by an admitted deployment preparation failure reta
         publish: {
           remote: join(paths.directory, "publication.git"),
           ref: "refs/heads/main",
-          author: { name: "Dori publication fixture", email: "publication@example.invalid" },
+          author: { name: "Cataly publication fixture", email: "publication@example.invalid" },
         },
         deployment,
       },
@@ -71,7 +71,7 @@ it("real publication followed by an admitted deployment preparation failure reta
     deployed: false,
     activationRequiresNewOwnerApproval: false,
   });
-  const retried = await new DoriUpdater(f.config, () => {}).once();
+  const retried = await new CatalyUpdater(f.config, () => {}).once();
   expect(retried.outcome).toBe("duplicate");
   expect(retried.job?.commands).toEqual(commands);
   expect(git(f.target, "rev-list", "--count", "main")).toBe("3");

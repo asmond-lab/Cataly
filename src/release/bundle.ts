@@ -26,7 +26,7 @@ async function download(url: string, max: number, signal?: AbortSignal): Promise
   });
   if (!response.ok) {
     if (url === `${API}/releases/latest` && response.status === 404)
-      throw new Error("No stable OMP-Dori release exists yet; select an explicit preview with --version vX.Y.Z");
+      throw new Error("No stable Cataly release exists yet; select an explicit preview with --version vX.Y.Z");
     throw new Error(`Anonymous release download failed (${response.status}): ${url}`);
   }
   const chunks: Uint8Array[] = [];

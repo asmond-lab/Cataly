@@ -5,7 +5,7 @@ import { UpdateDetectionUnavailable, UpdateError, UpdateInterrupted } from "./co
 import { type DetectionReceipt, runDetectorProcess } from "./detection-process.ts";
 import { isolatedEnv } from "./environment.ts";
 import { runCommand } from "./process.ts";
-import { carryDoriPin, changedPaths, digest, freezeSource, sourceManifest } from "./source.ts";
+import { carryCatalyPin, changedPaths, digest, freezeSource, sourceManifest } from "./source.ts";
 import { persistJob, saveJson } from "./state.ts";
 import type { UpdateContext, UpdateJob } from "./types.ts";
 
@@ -78,7 +78,7 @@ export async function detectHead(ctx: UpdateContext, timeoutMs = 60_000): Promis
     localCommandReceipt.exitCode !== 0 ||
     localCommandReceipt.signal !== undefined
   ) {
-    throw new UpdateDetectionUnavailable("Dori ref detection unavailable; inspect detector/last-detection.json");
+    throw new UpdateDetectionUnavailable("Cataly ref detection unavailable; inspect detector/last-detection.json");
   }
   const stdout = readFileSync(localCommandReceipt.stdout, "utf8");
   const rows = stdout
@@ -87,7 +87,7 @@ export async function detectHead(ctx: UpdateContext, timeoutMs = 60_000): Promis
     .map((line) => line.split(/\s+/));
   const [sha, ref] = rows[0] ?? [];
   if (rows.length !== 1 || ref !== ctx.config.ref || !sha || !SHA.test(sha)) {
-    throw new UpdateError("configured Dori ref did not resolve to exactly one pinned SHA");
+    throw new UpdateError("configured Cataly ref did not resolve to exactly one pinned SHA");
   }
   return sha;
 }
@@ -109,7 +109,7 @@ export async function prepareCandidate(ctx: UpdateContext, job: UpdateJob): Prom
     (
       await runCommand(ctx, job, { name: `prepare:${step}`, argv: ["git", ...safe, ...argv], timeoutMs: 300_000 })
     ).stdout.trim();
-  // Only the opaque local ULW pin is carried below; all Dori code starts from exact new upstream.
+  // Only the opaque local ULW pin is carried below; all Cataly code starts from exact new upstream.
   await git("clone-upstream", ["clone", "--no-local", "--no-hardlinks", "--no-checkout", "--", ctx.config.remote, "."]);
   await git("fetch-pinned-upstream", ["fetch", "--no-auto-maintenance", "--no-tags", "origin", job.upstream]);
   await git("materialize-pinned-upstream", ["checkout", "--detach", job.upstream]);
@@ -117,9 +117,10 @@ export async function prepareCandidate(ctx: UpdateContext, job: UpdateJob): Prom
     throw new UpdateError("candidate clone did not materialize the pinned SHA");
   }
   const pkg: unknown = JSON.parse(readFileSync(join(job.candidate, "package.json"), "utf8"));
-  const dori = existsSync(join(job.candidate, "skills", "dori-mode", "scripts", "src", "cli.ts"));
-  if (typeof pkg !== "object" || pkg === null || Reflect.get(pkg, "name") !== "dori-superagent" || !dori) {
-    throw new UpdateError("configured remote is not the Dori source distribution");
+  const name = pkg && typeof pkg === "object" && "name" in pkg ? pkg.name : undefined;
+  const skill = name === "dori-superagent" ? "dori-mode" : name === "cataly" ? "cataly-mode" : undefined;
+  if (!skill || !existsSync(join(job.candidate, "skills", skill, "scripts", "src", "cli.ts"))) {
+    throw new UpdateError("configured remote is not the Cataly source distribution");
   }
   const baseRepo = join(job.directory, "base-upstream");
   await git("clone-base", [
@@ -158,7 +159,7 @@ export async function prepareCandidate(ctx: UpdateContext, job: UpdateJob): Prom
     changedPaths: changedPaths(base, local, incoming),
   };
   saveJson(join(inputs, "manifest.json"), job.inputs);
-  carryDoriPin(join(inputs, "local"), job.candidate, local);
+  carryCatalyPin(join(inputs, "local"), job.candidate, local);
   saveJson(join(job.directory, "prepared-source.json"), sourceManifest(job.candidate));
   persistJob(job);
 }

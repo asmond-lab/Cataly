@@ -17,7 +17,7 @@ type Agent = { kind: "main" | "sub"; id: string; parentId?: string };
 const roleSession = async (role: string | undefined, model = SOL, agent?: Agent) => {
   const pi = await load({
     session: { id: `s-${role}-${model.id}`, entries: [] },
-    flags: role ? { "dori-role": role } : {},
+    flags: role ? { "cataly-role": role } : {},
     model,
     ...(agent ? { agent } : {}),
   });
@@ -33,7 +33,7 @@ describe("lane bookkeeping", () => {
 
   test("other roles and models get only their root core, while plain sessions stay unchanged", async () => {
     for (const [role, model] of [
-      ["dori", SOL],
+      ["cataly", SOL],
       ["lane", { id: "claude-opus-5-5", name: "Claude Opus 5.5" }],
       ["lane", { id: "gpt-6.1-terra", name: "GPT-6.1 Terra" }],
     ] as const) {

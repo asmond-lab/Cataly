@@ -75,7 +75,7 @@ posix.each(["wait", "acquire-race"])(
       const deadline = held.retryDeadlineAt!;
       const oldRuntime = {
         ...processIdentity(process.pid)!,
-        role: "dori" as const,
+        role: "cataly" as const,
         pane: config.pane,
         sessionId: config.sessionId,
         sessionFile: join(root, "session.jsonl"),

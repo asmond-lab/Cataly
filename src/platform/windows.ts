@@ -64,7 +64,7 @@ export const windows: PlatformAdapter = {
     // Windows cannot open a directory for fsync; src/update/deployment-files.ts skipped the flush here.
   },
 
-  defaultRuntime: () => "herdr",
+  legacyReleaseRuntime: () => "herdr",
 
   // No release is built for Windows: provision.ts admitted only linux/x64/herdr and darwin/arm64/hc.
   supportsReleaseProfile: () => false,

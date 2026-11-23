@@ -16,7 +16,7 @@ posix.each([false, true])(
       id: 443,
       tag_name: f.manifest.tag,
       target_commitish: f.manifest.commit,
-      name: `OMP-Dori ${f.manifest.tag}`,
+      name: `Cataly ${f.manifest.tag}`,
       prerelease: true,
       draft: false,
       body: notes(f.manifest),

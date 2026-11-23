@@ -21,16 +21,16 @@ posix.each(["tools", "./tools", ".", "tools with 'quote'; literal", "absolute"])
       { mode: 0o755 },
     );
     const env = s.env({
-      DORI_INSTALL_MODE: "primary",
-      DORI_OMP: native,
+      CATALY_INSTALL_MODE: "primary",
+      CATALY_OMP: native,
       OMP_ULW_SRC: "",
       OMP_ULW_REPO: s.remote,
       PATH: `${entry === "absolute" ? tools : entry}:${join(s.root, "bin")}:${process.env["PATH"]}`,
     });
     const installed = Bun.spawnSync([script], { cwd: s.root, env });
     expect(installed.exitCode, installed.stderr.toString()).toBe(0);
-    const wrapper = join(s.home, ".dori/bin/omp");
-    const config = readFileSync(join(s.home, ".dori/config.json"));
+    const wrapper = join(s.home, ".cataly/bin/omp");
+    const config = readFileSync(join(s.home, ".cataly/config.json"));
     const ordinary = join(s.root, "ordinary");
     mkdirSync(ordinary);
     const prompt = "literal ; $(touch relative-bun-suffix)";
@@ -41,8 +41,8 @@ posix.each(["tools", "./tools", ".", "tools with 'quote'; literal", "absolute"])
       expect(launched.stdout.toString().split("\0").slice(0, -1)).toEqual([native, "probe", prompt]);
       expect(existsSync(join(cwd, "relative-bun-suffix"))).toBe(false);
     }
-    expect(readFileSync(join(s.home, ".dori/config.json"))).toEqual(config);
-    writeFileSync(join(s.home, ".dori/omp-ulw/index.ts"), "export default () => {}; // changed\n");
+    expect(readFileSync(join(s.home, ".cataly/config.json"))).toEqual(config);
+    writeFileSync(join(s.home, ".cataly/omp-ulw/index.ts"), "export default () => {}; // changed\n");
     const held = Bun.spawnSync([wrapper, "probe"], { cwd: ordinary, env });
     expect(held.exitCode).not.toBe(0);
     expect(held.stdout.toString()).toBe("");

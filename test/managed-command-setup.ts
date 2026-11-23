@@ -33,11 +33,11 @@ export const executable = (path: string): void => {
 };
 
 export function managedCommand() {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "dori-managed-command-")));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "cataly-managed-command-")));
   const omp = join(root, "selected space 'quote' $(touch substitution-ran); touch suffix-ran; #", "bin/omp");
   executable(omp);
   const config = { ...deploymentConfig(root), bun: process.execPath, omp };
-  mkdirSync(config.doriHome, { recursive: true, mode: 0o700 });
+  mkdirSync(config.catalyHome, { recursive: true, mode: 0o700 });
   const nativeConfig = join(root, "native-config.json");
   writeFileSync(nativeConfig, "{}");
   const toolchain: ToolchainReceipt = {
@@ -57,7 +57,7 @@ export function managedCommand() {
     nativeOverride: true,
   };
   const env = actorEnv(config, toolchain);
-  environment({ ...env, DORI_AGENT_CMD: undefined });
+  environment({ ...env, CATALY_AGENT_CMD: undefined });
   const argv = [omp, "--config", nativeConfig, "--no-extensions", "-e", join(toolchain.ompUlw!.source, "extension")];
   return { root, omp, config, toolchain, env, argv };
 }

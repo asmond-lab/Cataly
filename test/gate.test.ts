@@ -43,9 +43,9 @@ describe("review + merge gate", () => {
     expect(await mergeGate(d, "o/r#7")).toBe(`MERGED o/r#7 head=${head}`);
     expect(w.calls.at(-1)!.argv).toContain("--match-head-commit");
     expect(
-      w.usage.filter((e) => e.name === "dori.merge_decided").map((e) => (e as { outcome: string }).outcome),
+      w.usage.filter((e) => e.name === "cataly.merge_decided").map((e) => (e as { outcome: string }).outcome),
     ).toEqual(["no_receipt", "review_block", "no_checks", "checks_red", "checks_all_skipped", "merged"]);
-    expect(w.usage.filter((e) => e.name === "dori.review_completed")).toHaveLength(2);
+    expect(w.usage.filter((e) => e.name === "cataly.review_completed")).toHaveLength(2);
   });
 
   posix("exit 0 without a VERDICT line: bounded stdout tail kept privately, no receipt", async () => {

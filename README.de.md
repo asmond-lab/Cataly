@@ -107,8 +107,8 @@ Signal, keine Garantie für sämtliche Ergebnisse. Berichte sollten beobachtete
 Ergebnisse, verbleibende Unsicherheit und nicht ausgeführte Arbeiten unterscheiden.
 
 Halte Zugangsdaten, private Unterhaltungen und Kontodaten aus öffentlichen Patches
-und Berichten heraus. Die optionale Telemetrie lässt sich mit `DORI_TELEMETRY=0`
-oder `DO_NOT_TRACK=1` deaktivieren.
+und Berichten heraus. Telemetrie ist standardmäßig aus. `CATALY_TELEMETRY=1`
+aktiviert sie; `DO_NOT_TRACK=1` hat Vorrang.
 
 ## Erste Schritte
 
@@ -116,8 +116,13 @@ oder `DO_NOT_TRACK=1` deaktivieren.
 
 **Hinweis**
 
-Cataly ist der Projektname. Die bestehenden Befehle `dori`, `omp-dori` und `omp`,
-Installationsverzeichnisse und Namen veröffentlichter Assets wurden nicht umbenannt.
+Die aktuellen Befehle heißen `cataly`, `cataly-harness` und `omp-cataly` (separate
+Installation). Neue Installationen verwenden `~/.cataly` beziehungsweise
+`~/.omp-cataly`. Standardmäßig ist kein Terminal-Backend nötig.
+
+[Aktuelles, geprüftes Release installieren](docs/releases.md#install-a-current-release)
+oder [von v0.1.3 ohne Terminal-Backend aktualisieren](docs/releases.md#upgrade-a-v013-installation).
+Dabei bleiben das bisherige Installationsverzeichnis und die Konfiguration erhalten.
 
 </td></tr></table>
 
@@ -134,21 +139,22 @@ Ersetze ein exaktes Release nicht durch einen beliebigen Installer von `main`.
 
 ### Mit dem Quellcode arbeiten
 
-Installiere zuerst git, Bun 1.4.4+ und herdr oder hc; siehe die
+Installiere zuerst git und Bun 1.4.4+. Unter Linux und macOS benötigt die Standardkonfiguration weder herdr noch hc; siehe die
 [Voraussetzungen für die Quellcode-Version](docs/releases.md#current-source-bundle).
+Tern ist eine dritte Session-Laufzeit im Quellcode von `main`; siehe [Tern](docs/runtime.md#tern).
 
 Verwende einen separaten Checkout, keine laufende Installation und kein eingefrorenes Endnutzer-Release:
 
 ```bash
 git clone https://github.com/vntrevx/Cataly.git "$HOME/src/Cataly" || exit 1
 cd "$HOME/src/Cataly" || exit 1
-DORI_INSTALL_MODE=side DORI_NO_PULL=1 DORI_SRC="$PWD" bash scripts/install-source.sh
+CATALY_INSTALL_MODE=side CATALY_NO_PULL=1 CATALY_SRC="$PWD" bash scripts/install-source.sh
 ```
 
-Der Source-Installer richtet das fest zugeordnete, gepatchte OMP 18.20.0 und das
+Der Source-Installer richtet das fest zugeordnete, gepatchte OMP 19.0.1 und das
 ULW-Overlay ein; ein unverändertes `omp` auf `PATH` ist kein Ersatz. Der Side-Modus
-verwendet standardmäßig `~/.omp-dori`, hat eigene Wrapper und eine eigene
-Konfiguration und lässt die primäre Installation unter `~/.dori` unberührt.
+verwendet standardmäßig `~/.omp-cataly`, hat eigene Wrapper und eine eigene
+Konfiguration und lässt die primäre Installation unter `~/.cataly` unberührt.
 Die Installation startet weder Agenten noch Messenger-Empfänger oder Dienste.
 
 Lies die [Anleitung zur Source-Installation](docs/releases.md#source-checkouts-for-maintainers)
@@ -168,8 +174,8 @@ macOS-Release veröffentlicht wurde. Slack und Telegram bleiben Funktionen der Q
 ## Dokumentation
 
 - [Installation, Support, Updates und Rollback](docs/releases.md)
-- [Skill und Betriebsregeln](skills/dori-mode/SKILL.md)
-- [Messenger-Einrichtung](skills/dori-mode/references/setup.md)
+- [Skill und Betriebsregeln](skills/cataly-mode/SKILL.md)
+- [Messenger-Einrichtung](skills/cataly-mode/references/setup.md)
 - [Laufzeitadapter und Session-Verträge](docs/runtime.md)
 - [Container-Einrichtung](docs/container.md)
 - [Zeitplanung und Backlog](docs/hourly-loop.md)
@@ -191,7 +197,7 @@ der die Änderung nötig gemacht hat.
 Die Lizenzierung richtet sich nach der Herkunft der einzelnen Komponenten.
 Von dori-superagent abgeleitetes Material behält die
 [Sustainable Use License 1.0](LICENSE); die bereits bestehende OMP-Integration
-behält ihre [MIT-Lizenz und Urheberrechtshinweise](LICENSE.omp-dori).
+behält ihre [MIT-Lizenz und Urheberrechtshinweise](LICENSE.integration).
 Andere Komponenten behalten ihre eigenen Bedingungen. Der MIT-Hinweis lizenziert
 nicht das gesamte Repository neu. [NOTICE](NOTICE) dokumentiert die importierten
 Revisionen und die Urheber- und Herkunftsangaben zur modifizierten Kopie.

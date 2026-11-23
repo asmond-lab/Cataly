@@ -1,19 +1,18 @@
 import { hasControl, object } from "../update/config.ts";
 import { digest } from "../update/source.ts";
 import type { SourceEntry, SourceManifest } from "../update/types.ts";
-import type { ReleaseManifest, ReleaseProfile } from "./types.ts";
+import type { ReleaseManifest } from "./types.ts";
 import { isReleaseVersion } from "./version.ts";
 
 const HASH = /^[a-f0-9]{64}$/;
 const COMMIT = /^[a-f0-9]{40}$/;
-const PROFILES: readonly ReleaseProfile[] = [
-  { platform: "linux", arch: "x64", runtime: "herdr" },
-  { platform: "darwin", arch: "arm64", runtime: "hc" },
-];
 const PRIVATE: Readonly<Record<string, true>> = {
   ".git": true,
   node_modules: true,
+  ".cataly": true,
+  ".omp-cataly": true,
   ".dori": true,
+  ".omp-dori": true,
   ".omp": true,
   ".omo": true,
   ".cache": true,
@@ -148,11 +147,14 @@ export function validateReleaseManifest(value: unknown): ReleaseManifest {
     ["platform", "arch", "bun", "omp", "runtime", "messenger"],
     "requirements",
   );
+  const omp = requirements["omp"];
+  if (omp !== "18.18.8" && omp !== "18.20.0" && !matches(omp, /^19\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/))
+    throw new Error("Release requirements do not match the supported runtime");
   const supported = {
     platform: "linux",
     arch: "x64",
     bun: "1.4.4",
-    omp: requirements["omp"] === "18.18.8" ? "18.18.8" : "18.20.0",
+    omp,
     runtime: "herdr",
     messenger: "discord",
   } as const;
@@ -171,7 +173,7 @@ export function validateReleaseManifest(value: unknown): ReleaseManifest {
     )
   )
     throw new Error("New source-bundle payloads cannot use the older no-lock release protocol");
-  if (supported.omp === "18.20.0") {
+  if (supported.omp !== "18.18.8") {
     for (const path of [
       "omp-ulw.lock",
       "omp-ulw.overlay.lock",
@@ -206,38 +208,4 @@ export function validateReleaseManifest(value: unknown): ReleaseManifest {
     requirements: supported,
     ompUlw: { repository: "https://github.com/dbc-hbin/omp-ulw.git", commit: ompUlw["commit"] },
   };
-}
-
-export function supportsReleaseProfile(
-  manifest: ReleaseManifest,
-  profile: { readonly platform: string; readonly arch: string; readonly runtime: string },
-  metadata?: Uint8Array,
-): boolean {
-  const source = manifest.source.files.find((entry) => entry.path === "release-capabilities.json");
-  if (!source) {
-    if (metadata !== undefined) throw new Error("Unexpected release capabilities metadata");
-    return profile.platform === "linux" && profile.arch === "x64" && profile.runtime === "herdr";
-  }
-  if (metadata === undefined || digest(metadata) !== source.sha256) {
-    throw new Error("Release capabilities metadata missing or SHA256 differs");
-  }
-  const input: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(metadata));
-  const capabilities = record(input, ["version", "profiles"], "capabilities");
-  if (capabilities["version"] !== 1 || !Array.isArray(capabilities["profiles"]) || !capabilities["profiles"].length)
-    throw new Error("Invalid release capabilities");
-  const profiles: ReleaseProfile[] = [];
-  for (const value of capabilities["profiles"]) {
-    const entry = record(value, ["platform", "arch", "runtime"], "capability");
-    const candidate = PROFILES.find(
-      (item) => item.platform === entry["platform"] && item.arch === entry["arch"] && item.runtime === entry["runtime"],
-    );
-    if (!candidate || profiles.includes(candidate)) throw new Error("Invalid or duplicate release capability");
-    profiles.push(candidate);
-  }
-  return profiles.some(
-    (candidate) =>
-      candidate.platform === profile.platform &&
-      candidate.arch === profile.arch &&
-      candidate.runtime === profile.runtime,
-  );
 }

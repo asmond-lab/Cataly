@@ -14,10 +14,10 @@ const posix = test.skipIf(process.platform === "win32");
 
 for (const runtime of ["herdr", "hc"] as const) {
   posix(
-    `${runtime}: reopened migration journals preserve context for lanes, lead, duty and both controllers`,
+    `${runtime}: reopened migration journals preserve context for lanes, agents and controller candidates`,
     async () => {
       const f = managedTerminal(runtime);
-      const deps = { ...f.deps, doriCmd: shq(f.omp) };
+      const deps = { ...f.deps, catalyCmd: shq(f.omp) };
       const from: SessionRef = runtime === "hc" ? { runtime: "herdr", id: "wold:p1" } : { runtime: "hc", id: "told" };
       const options: MigrateOpts = {
         to: runtime,
@@ -25,7 +25,7 @@ for (const runtime of ["herdr", "hc"] as const) {
         waitMinutes: 0,
         resume: false,
         sleep: async (ms) => {
-          f.world.clock += ms;
+          f.world.clock += Math.max(ms, 5_000);
         },
         log: () => {},
       };
@@ -41,7 +41,8 @@ for (const runtime of ["herdr", "hc"] as const) {
             at: 1,
             briefPath: f.brief,
           });
-          expect(await migrate(deps, { role }, options)).toBe(0);
+          // The recorder exits; unlike the agent probe, the process cannot stand in for a live controller lease.
+          expect(await migrate(deps, { role }, options)).toBe(role.endsWith("-loop") ? 3 : 0);
         }
         deps.store.saveLane({
           key: "migration-lane",
@@ -69,8 +70,12 @@ for (const runtime of ["herdr", "hc"] as const) {
         expect(f.daemon.captures).toHaveLength(5);
         for (const [at, capture] of f.daemon.captures.entries()) {
           const child = expectContext(capture, f.expected);
-          if (at < 2 || at === 4) expect(child.argv.slice(0, f.prefix.length)).toEqual(f.prefix);
-          else expect(child.argv[0]).toBe(f.omp);
+          if (at === 2 || at === 3) {
+            expect(child.argv[0]).toBe(f.omp);
+            expect(child.env["CATALY_RUNTIME"]).toBe(runtime);
+          } else {
+            expect(child.argv.slice(0, f.prefix.length)).toEqual(f.prefix);
+          }
         }
       } finally {
         await f.daemon.close();
@@ -118,7 +123,7 @@ for (const runtime of ["herdr", "hc"] as const) {
       ).toBe(0);
       expect(f.daemon.captures).toHaveLength(1);
       const child = expectContext(f.daemon.captures[0]!, f.expected);
-      expect(child.argv).toEqual([...f.prefix, "--dori-role", "lane", `--resume=${sessionPath}`]);
+      expect(child.argv).toEqual([...f.prefix, "--cataly-role", "lane", `--resume=${sessionPath}`]);
     } finally {
       await f.daemon.close();
     }

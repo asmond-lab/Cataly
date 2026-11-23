@@ -39,7 +39,7 @@ posix(
     const alias = join(c.root, "omp-alias");
     symlinkSync(x.omp, alias);
     leaseNativePath(c.home, alias);
-    const leases = join(c.home, ".cache/omp-dori/native-leases");
+    const leases = join(c.home, ".cache/omp-cataly/native-leases");
     expect(readdirSync(join(leases, x.identity))).toEqual([expect.stringMatching(new RegExp(`^${process.pid}-`))]);
     leaseNativePath(c.home, "/bin/sh");
     expect(readdirSync(leases)).toEqual([x.identity]);
@@ -47,7 +47,7 @@ posix(
   },
 );
 
-posix("an installer given DORI_OMP inside the cache holds its lease while it publishes the wrapper", async () => {
+posix("an installer given CATALY_OMP inside the cache holds its lease while it publishes the wrapper", async () => {
   const s = setup();
   const f = overlayFixture(
     join(s.root, "native-source"),
@@ -66,7 +66,7 @@ posix("an installer given DORI_OMP inside the cache holds its lease while it pub
   const gate = join(s.root, "gate");
   const stop = `if [ "$1" = install ] && [ ! -e '${gate}' ]; then touch '${gate}'; echo WRITER_GATE; read -r answer; fi\n`;
   writeFileSync(bun, readFileSync(bun, "utf8").replace('case "$1" in', `${stop}case "$1" in`));
-  const env = s.env({ DORI_INSTALL_MODE: "side", DORI_NO_PULL: "1", DORI_OMP: x.omp });
+  const env = s.env({ CATALY_INSTALL_MODE: "side", CATALY_NO_PULL: "1", CATALY_OMP: x.omp });
   const child = Bun.spawn([script], { cwd: s.root, env, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
   const reader = child.stdout.getReader();
   let stdout = "";
@@ -76,7 +76,7 @@ posix("an installer given DORI_OMP inside the cache holds its lease while it pub
       if (read.done) throw new Error(`installer exited early: ${await new Response(child.stderr).text()}`);
       stdout += new TextDecoder().decode(read.value);
     }
-    const leases = join(s.home, ".cache/omp-dori/native-leases", x.identity);
+    const leases = join(s.home, ".cache/omp-cataly/native-leases", x.identity);
     expect(readdirSync(leases).some((name) => name.startsWith(`${child.pid}-`))).toBe(true);
   } finally {
     child.stdin.write("continue\n");
@@ -99,7 +99,7 @@ posix("a relative or interpreter-run Dori writer for this cache keeps every iden
     expect(new TextDecoder().decode((await holder.stdout.getReader().read()).value)).toBe("ready\n");
     const uid = process.getuid?.() ?? 0;
     const held = (args: string) =>
-      useHolds(join(c.home, ".cache/omp-dori"), [x.identity], {
+      useHolds(join(c.home, ".cache/omp-cataly"), [x.identity], {
         table: () => `${holder.pid} ${uid} ${args}\n`,
         files: ownProcessFiles,
       }).get(x.identity);
@@ -110,7 +110,7 @@ posix("a relative or interpreter-run Dori writer for this cache keeps every iden
       "bash scripts/install-source.sh",
       "bun skills/dori-mode/scripts/src/cli.ts update install",
     ])
-      expect(held(args)).toEqual([`Dori cache writer process ${holder.pid} (${args})`]);
+      expect(held(args)).toEqual([`Cataly cache writer process ${holder.pid} (${args})`]);
     // A writer naming another existing home works on another cache.
     expect(held(`bun scripts/source-dependencies.ts native /old/source ${c.refs}`)).toBeUndefined();
   } finally {
@@ -157,7 +157,7 @@ test("a lease and a working directory outlive a thread group's leader while its 
 posix("an empty prune lock directory is not replaced: the prune refuses and removes nothing", () => {
   const c = pruneFixture();
   const x = c.native("x");
-  mkdirSync(join(c.home, ".cache/omp-dori/native-prune.lock"));
+  mkdirSync(join(c.home, ".cache/omp-cataly/native-prune.lock"));
   expect(() => c.prune()).toThrow("Another native cache prune holds");
   expect(existsSync(x.omp)).toBe(true);
 });
@@ -168,7 +168,7 @@ posix(
     // The only live holder created here is this worker's lease; the shell below has exited before any prune.
     const c = pruneFixture(() => ownProcessFiles([String(process.pid)]));
     const x = c.native("x");
-    const cache = join(c.home, ".cache/omp-dori");
+    const cache = join(c.home, ".cache/omp-cataly");
     // A preparation whose owner was killed (a pid that has exited), as nativeStagePrefix names it.
     const ended = Bun.spawnSync(["/bin/sh", "-c", "echo $$"]).stdout.toString().trim();
     const stage = join(cache, `native-stage-${x.identity}-${ended}-1-${bootId()}-AbC123`);

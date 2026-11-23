@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fill, loadConfig } from "../skills/dori-mode/scripts/src/config.ts";
+import { fill, loadConfig } from "../skills/cataly-mode/scripts/src/config.ts";
 import { up } from "../src/cli-up.ts";
 import { shq } from "../src/delivery.ts";
 import { agentCommand, defaultDeps } from "../src/harness.ts";
@@ -30,31 +30,36 @@ const runConfig = async (path: string, home: string, root: string, env: Record<s
 
 posix("managed argv overrides literal omp atomically before the legacy command", async () => {
   const f = managedCommand();
-  environment({ DORI_AGENT_CMD: "false; touch override-ran" });
-  const argv = await runConfig(f.config.doriConfig, f.config.home, f.root, f.env);
-  expect(argv).toEqual([...f.argv, "--dori-role", "lane", "--model", "{model}", "{prompt}"]);
-  expect(JSON.parse(f.env["DORI_AGENT_ARGV"]!)).toEqual(f.argv);
-  expect(f.env["DORI_AGENT_CMD"]).toBeUndefined();
+  environment({ CATALY_AGENT_CMD: "false; touch override-ran" });
+  const argv = await runConfig(f.config.catalyConfig, f.config.home, f.root, f.env);
+  expect(argv).toEqual([...f.argv, "--cataly-role", "lane", "--model", "{model}", "{prompt}"]);
+  expect(JSON.parse(f.env["CATALY_AGENT_ARGV"]!)).toEqual(f.argv);
+  expect(f.env["CATALY_AGENT_CMD"]).toBeUndefined();
 });
 
 posix.each(["primary", "side"])("%s source defaults follow the complete managed command", async (mode) => {
   const s = setup();
   const side = join(s.home, "side install ; literal");
-  const installed = s.install({ DORI_INSTALL_MODE: mode, DORI_NO_PULL: "1", OMP_DORI_HOME: side });
+  const installed = s.install({ CATALY_INSTALL_MODE: mode, CATALY_NO_PULL: "1", OMP_CATALY_HOME: side });
   expect(installed.code).toBe(0);
-  const base = mode === "side" ? side : join(s.home, ".dori");
+  const base = mode === "side" ? side : join(s.home, ".cataly");
   const path = join(base, "config.json");
   const stored = JSON.parse(readFileSync(path, "utf8"));
   expect(stored.agentCommand[0]).toBe(join(base, "bin/omp"));
-  expect(readFileSync(join(base, ".omp-dori"), "utf8")).toBe(`${mode}\n`);
+  expect(readFileSync(join(base, ".omp-cataly"), "utf8")).toBe(`${mode}\n`);
   const f = managedCommand();
   const selected = await runConfig(path, s.home, f.root, f.env);
   expect(selected).toEqual([...f.argv, ...stored.agentCommand.slice(1)]);
   if (mode === "side") {
     const result = shell(
-      `. ${shq(join(base, "env.sh"))}; printf '%s\\0' "$DORI_AGENT_ARGV" "\${DORI_AGENT_CMD-unset}" "\${DORI_OMP_ULW_PATH-unset}" "\${DORI_AGENT_EXECUTABLE-unset}" "$OMP_ULW_SCOPE_FILE"`,
+      `. ${shq(join(base, "env.sh"))}; printf '%s\\0' "$CATALY_AGENT_ARGV" "\${CATALY_AGENT_CMD-unset}" "\${CATALY_OMP_ULW_PATH-unset}" "\${CATALY_AGENT_EXECUTABLE-unset}" "$OMP_ULW_SCOPE_FILE"`,
       f.root,
-      { ...f.env, DORI_AGENT_CMD: "stale", DORI_AGENT_EXECUTABLE: "stale", OMP_ULW_SCOPE_FILE: "process-local scope" },
+      {
+        ...f.env,
+        CATALY_AGENT_CMD: "stale",
+        CATALY_AGENT_EXECUTABLE: "stale",
+        OMP_ULW_SCOPE_FILE: "process-local scope",
+      },
     );
     expect(result.exitCode).toBe(0);
     expect(argvOutput(result.stdout)).toEqual([
@@ -71,7 +76,7 @@ posix("a consumer-owned default outside consumer release directories follows the
   const f = managedCommand();
   const paths = consumerPaths(f.config.home);
   initialize(paths);
-  const installed = join(paths.dori, "bin/omp");
+  const installed = join(paths.cataly, "bin/omp");
   executable(installed);
   writeFileSync(paths.config, JSON.stringify({ agentCommand: [installed, "{prompt}"] }));
   expect(existsSync(join(paths.root, "consumer-owner.json"))).toBe(true);
@@ -81,21 +86,21 @@ posix("a consumer-owned default outside consumer release directories follows the
 posix("independent external omp commands and unmarked wrapper paths retain their actual argv", async () => {
   const f = managedCommand();
   const external = join(f.root, "owner tools/bin/omp");
-  const unmarked = join(f.config.doriHome, "bin/omp");
+  const unmarked = join(f.config.catalyHome, "bin/omp");
   for (const command of [external, unmarked]) {
     executable(command);
     const argv = [command, "--model", "{model}", "{prompt}"];
-    writeFileSync(f.config.doriConfig, JSON.stringify({ agentCommand: argv }));
-    expect(await runConfig(f.config.doriConfig, f.config.home, f.root, f.env)).toEqual(argv);
+    writeFileSync(f.config.catalyConfig, JSON.stringify({ agentCommand: argv }));
+    expect(await runConfig(f.config.catalyConfig, f.config.home, f.root, f.env)).toEqual(argv);
   }
   initialize(consumerPaths(f.config.home));
-  writeFileSync(f.config.doriConfig, JSON.stringify({ agentCommand: [external, "{prompt}"] }));
-  expect(await runConfig(f.config.doriConfig, f.config.home, f.root, f.env)).toEqual([external, "{prompt}"]);
+  writeFileSync(f.config.catalyConfig, JSON.stringify({ agentCommand: [external, "{prompt}"] }));
+  expect(await runConfig(f.config.catalyConfig, f.config.home, f.root, f.env)).toEqual([external, "{prompt}"]);
 });
 
 posix("harness lead, duty and lane consumers execute the complete managed argv with literal arguments", async () => {
   const f = managedCommand();
-  environment({ DORI_AGENT_CMD: "false; touch override-ran" });
+  environment({ CATALY_AGENT_CMD: "false; touch override-ran" });
   const world = new World();
   const original = world.exec;
   const ran: string[][] = [];
@@ -107,7 +112,7 @@ posix("harness lead, duty and lane consumers execute the complete managed argv w
     }
     return original(cmd, argv, options);
   };
-  const deps = { ...world.deps(), agentCmd: defaultDeps().agentCmd, doriCmd: ":" };
+  const deps = { ...world.deps(), agentCmd: defaultDeps().agentCmd, catalyCmd: ":" };
   await captureIo(async () => {
     await up(deps, f.root);
     return 0;
@@ -119,14 +124,14 @@ posix("harness lead, duty and lane consumers execute the complete managed argv w
   for (const [at, name] of ["lead.md", "duty.md"].entries())
     expect(ran[at]).toEqual([
       ...f.argv,
-      "--dori-role",
-      "dori",
+      "--cataly-role",
+      "cataly",
       "--append-system-prompt",
       join(deps.store.root, "prompts", name),
     ]);
   expect(ran[2]).toEqual([
     ...f.argv,
-    "--dori-role",
+    "--cataly-role",
     "lane",
     `Read your brief at ${deps.store.briefPath("managed-command")} and execute it. Your lane key is managed-command.`,
   ]);
@@ -142,10 +147,10 @@ posix.each([false, true])("a selected pathname present=%s never executes shell s
     writeFileSync(selected, "#!/bin/sh\nexit 0\n", { mode: 0o600 });
   }
   environment({
-    DORI_AGENT_ARGV: JSON.stringify([selected, "--config", "missing config 'quote'"]),
-    DORI_AGENT_CMD: "touch fallback-ran",
+    CATALY_AGENT_ARGV: JSON.stringify([selected, "--config", "missing config 'quote'"]),
+    CATALY_AGENT_CMD: "touch fallback-ran",
   });
-  for (const role of ["dori", "lane"] as const) {
+  for (const role of ["cataly", "lane"] as const) {
     const result = shell(`${agentCommand(defaultDeps(), role)} probe`, f.root, f.env);
     expect(result.exitCode).toBe(blocked ? 126 : 127);
     expect(result.stderr.toString()).toContain(selected);
@@ -156,10 +161,10 @@ posix.each([false, true])("a selected pathname present=%s never executes shell s
 
 posix("legacy shell fragments and literal-default argv overrides retain their distinct contracts", async () => {
   const f = managedCommand();
-  environment({ DORI_AGENT_ARGV: undefined, DORI_AGENT_CMD: f.omp });
-  expect((await runConfig(f.config.doriConfig, f.config.home, f.root, f.env))[0]).toBe(f.omp);
+  environment({ CATALY_AGENT_ARGV: undefined, CATALY_AGENT_CMD: f.omp });
+  expect((await runConfig(f.config.catalyConfig, f.config.home, f.root, f.env))[0]).toBe(f.omp);
   const fragment = `env MODEL='user value' sh -c 'exec "$@"' user-command ${shq(f.omp)} --model 'user model'`;
-  environment({ DORI_AGENT_CMD: fragment });
+  environment({ CATALY_AGENT_CMD: fragment });
   expect(defaultDeps().agentCmd).toBe(fragment);
   const result = shell(`${agentCommand(defaultDeps(), "lane")} ${shq(prompt)}`, f.root, f.env);
   expect(result.exitCode).toBe(0);
@@ -175,10 +180,10 @@ posix("legacy shell fragments and literal-default argv overrides retain their di
        const command = defaultDeps().agentCmd;
        const result = Bun.spawnSync(["/bin/sh", "-c", command]);
        console.log(JSON.stringify({
-         command, which: Bun.which(process.env.DORI_AGENT_CMD), code: result.exitCode, out: result.stdout.toString()
+         command, which: Bun.which(process.env.CATALY_AGENT_CMD), code: result.exitCode, out: result.stdout.toString()
        }));`,
     ],
-    { cwd: f.root, env: { ...f.env, PATH: f.root, DORI_AGENT_ARGV: undefined, DORI_AGENT_CMD: collision } },
+    { cwd: f.root, env: { ...f.env, PATH: f.root, CATALY_AGENT_ARGV: undefined, CATALY_AGENT_CMD: collision } },
   );
   expect(child.exitCode).toBe(0);
   expect(JSON.parse(child.stdout.toString())).toEqual({

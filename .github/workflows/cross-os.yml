@@ -41,7 +41,7 @@ jobs:
       - name: Extension tests
         if: ${{ !cancelled() }}
         run: bun run test:extension
-      - name: Genuine Darwin arm64 hc consumer release smoke
+      - name: Darwin arm64 headless consumer transition (hc for legacy only)
         if: ${{ !cancelled() && github.event_name != 'pull_request' }}
         run: |
           set -euo pipefail
@@ -59,7 +59,7 @@ jobs:
           env -i HOME="$runtime/home" PATH="$runtime/home/.local/bin:/usr/bin:/bin" \
             XDG_STATE_HOME="$runtime/s" XDG_RUNTIME_DIR="$runtime/r" XDG_CONFIG_HOME="$runtime/c" \
             HC_SESSION=consumer-installer hc update --version 0.1.20
-          baseline=74870017f361dad437ba5e4dd97c90698823a1f3
+          baseline=97371823c4936f7e83f656cfa6ca9d446ecf1995
           git merge-base --is-ancestor "$baseline" HEAD
           git worktree add --detach "$RUNNER_TEMP/consumer-baseline" "$baseline"
           git worktree add --detach "$RUNNER_TEMP/consumer-candidate" HEAD

@@ -5,7 +5,7 @@ import { up } from "../src/cli-up.ts";
 import { shq } from "../src/delivery.ts";
 import { review } from "../src/gate.ts";
 import { startLane } from "../src/lanes.ts";
-import { doriLaunchEnv } from "../src/release/runtime.ts";
+import { catalyLaunchEnv } from "../src/release/runtime.ts";
 import { captureIo } from "./inbox-setup.ts";
 import { recorded, recordingOmp } from "./terminal-context-setup.ts";
 import { expectContext, managedTerminal } from "./terminal-managed-setup.ts";
@@ -24,6 +24,8 @@ for (const runtime of ["herdr", "hc"] as const) {
             await up(f.deps, f.cwd);
             return 0;
           });
+          // Only the harness selection is in effect here: the daemon may still default children to headless.
+          for (const session of f.daemon.sessions.values()) expect(session.env["CATALY_RUNTIME"]).toBe(runtime);
           await startLane(f.deps, "transport-lane", f.brief, { cwd: f.cwd, group: "w1" });
           expect(f.daemon.captures).toHaveLength(5);
           const agents = f.daemon.captures.filter((capture) => capture.stdout.includes("\nENV\n"));
@@ -37,7 +39,7 @@ for (const runtime of ["herdr", "hc"] as const) {
             expect(session.env["UNRELATED_SECRET"]).toBeUndefined();
           }
           expect(recorded(agents[2]!).argv.slice(f.prefix.length, f.prefix.length + 2)).toEqual([
-            "--dori-role",
+            "--cataly-role",
             "lane",
           ]);
         } finally {
@@ -58,7 +60,7 @@ for (const runtime of ["herdr", "hc"] as const) {
       await startLane({ ...f.deps, agentCmd: command }, "external-lane", f.brief, { cwd: f.cwd, group: "w1" });
       const child = expectContext(f.daemon.captures[0]!, f.expected);
       expect(child.argv.slice(0, 3)).toEqual([external, "--literal", ""]);
-      expect(child.argv).not.toContain("--dori-role");
+      expect(child.argv).not.toContain("--cataly-role");
       expect(child.env["OWNER_VALUE"]).toBe(value);
       expect(existsSync(join(f.cwd, "assignment-ran"))).toBe(false);
     } finally {
@@ -91,13 +93,19 @@ posix("fresh reviewer receives the selected context and drops parent pane and ma
   try {
     expect((await review(deps, "fixture/repo#7", "fixture/model")).verdict).toBe("CLEAR");
     for (const [key, value] of Object.entries(f.expected)) {
-      if (key !== "DORI_MANAGED_STARTUP") expect(child!.env[key]).toBe(value);
+      if (key !== "CATALY_MANAGED_STARTUP") expect(child!.env[key]).toBe(value);
     }
-    for (const key of ["HERDR_PANE_ID", "HERDR_WORKSPACE_ID", "HC_TERMINAL_ID", "DORI_MANAGED_STARTUP", "DORI_LANE"])
+    for (const key of [
+      "HERDR_PANE_ID",
+      "HERDR_WORKSPACE_ID",
+      "HC_TERMINAL_ID",
+      "CATALY_MANAGED_STARTUP",
+      "CATALY_LANE",
+    ])
       expect(child!.env[key]).toBeUndefined();
     expect(child!.argv.slice(0, f.prefix.length)).toEqual(f.prefix);
     expect(child!.argv.slice(f.prefix.length, f.prefix.length + 6)).toEqual([
-      "--dori-role",
+      "--cataly-role",
       "lane",
       "-p",
       "--no-session",
@@ -111,26 +119,26 @@ posix("fresh reviewer receives the selected context and drops parent pane and ma
 
 test("launch context makes relative paths absolute without collapsing OS links or explicit empty scope", () => {
   const raw = `relative${sep}link${sep}..${sep}config.json`;
-  const context = doriLaunchEnv(
+  const context = catalyLaunchEnv(
     {
-      DORI_AGENT_ARGV: '["/selected omp", "--literal", ""]',
-      DORI_HOME: "relative home",
-      DORI_STATE_DIR: "relative state",
-      DORI_OMP_ULW_PATH: "relative ulw/index.ts",
+      CATALY_AGENT_ARGV: '["/selected omp", "--literal", ""]',
+      CATALY_HOME: "relative home",
+      CATALY_STATE_DIR: "relative state",
+      CATALY_OMP_ULW_PATH: "relative ulw/index.ts",
       OMP_ULW_SCOPE_FILE: "",
       HERDR_PANE_ID: "wparent:pparent",
-      DORI_MANAGED_STARTUP: "1",
+      CATALY_MANAGED_STARTUP: "1",
       SECRET: "private",
     },
     raw,
   );
   expect(context).toEqual({
-    DORI_MANAGED_STARTUP: "",
-    DORI_CONFIG: `${process.cwd()}${sep}${raw}`,
-    DORI_HOME: `${process.cwd()}${sep}relative home`,
-    DORI_STATE_DIR: `${process.cwd()}${sep}relative state`,
-    DORI_OMP_ULW_PATH: `${process.cwd()}${sep}relative ulw/index.ts`,
+    CATALY_MANAGED_STARTUP: "",
+    CATALY_CONFIG: `${process.cwd()}${sep}${raw}`,
+    CATALY_HOME: `${process.cwd()}${sep}relative home`,
+    CATALY_STATE_DIR: `${process.cwd()}${sep}relative state`,
+    CATALY_OMP_ULW_PATH: `${process.cwd()}${sep}relative ulw/index.ts`,
     OMP_ULW_SCOPE_FILE: "",
-    DORI_AGENT_ARGV: '["/selected omp", "--literal", ""]',
+    CATALY_AGENT_ARGV: '["/selected omp", "--literal", ""]',
   });
 });

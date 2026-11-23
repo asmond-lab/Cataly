@@ -3,7 +3,7 @@ import { procCmdline } from "../src/update/proc.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { deployRelease } from "../src/update/deployment.ts";
 import { capturePointer, ownReleaseRoot, saveDeploymentJson } from "../src/update/deployment-files.ts";
 import { captureRuntime } from "../src/update/deployment-native.ts";
@@ -60,7 +60,7 @@ process.stdout.write(JSON.stringify({ result }));
     shims: [],
     stopTimeoutMs: 150,
   };
-  const ctx = new DoriUpdater({ ...f.config, reporter: sink.command }, () => {}).context;
+  const ctx = new CatalyUpdater({ ...f.config, reporter: sink.command }, () => {}).context;
   const id = digest(`${ctx.configHash}\n${prepared.input.commit}`);
   const directory = join(ctx.config.root, "jobs", id);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -129,7 +129,7 @@ process.stdout.write(JSON.stringify({ result }));
       resumed.promotion!.deployment,
       (value) => {
         if (value.stopRequestedAt) {
-          expect(readJob(ctx.config.root, id).preActionNotices!["dori-replacement"]).toMatchObject({
+          expect(readJob(ctx.config.root, id).preActionNotices!["cataly-replacement"]).toMatchObject({
             state: "accepted",
             exitCode: 0,
           });
@@ -139,7 +139,7 @@ process.stdout.write(JSON.stringify({ result }));
       },
       undefined,
       async (deployment) => {
-        await reportPreAction(ctx, resumed, { action: "dori-replacement", deployment });
+        await reportPreAction(ctx, resumed, { action: "cataly-replacement", deployment });
         if (interruptAfterNotice) throw new Error("fixture interruption after accepted notice and before native stop");
       },
     );
@@ -162,20 +162,20 @@ test
       expect(sending.promotion!.deployment!.stopRequestedAt).toBeUndefined();
       expect(f.sink.attempts()).toMatchObject([
         {
-          outcome: "before-dori-replacement",
+          outcome: "before-cataly-replacement",
           job: f.id,
           deploymentIntent: sending.promotion!.deployment!.id,
           publicationCommit: sending.promotion!.deployment!.commit,
         },
       ]);
       if (mode === "accepted") {
-        expect(sending.preActionNotices!["dori-replacement"]!.state).toBe("sending");
+        expect(sending.preActionNotices!["cataly-replacement"]!.state).toBe("sending");
         expect(f.sink.delivered()).toEqual([]);
         f.sink.release();
       }
       const first = await pending;
       const retained = readJob(f.ctx.config.root, f.id);
-      expect(retained.preActionNotices!["dori-replacement"]!.state).toBe(mode);
+      expect(retained.preActionNotices!["cataly-replacement"]!.state).toBe(mode);
       if (mode === "accepted") {
         expect(first.stopRequestedAt).toBeUndefined();
         expect(sameProcess(f.native.runtime)).toBe(true);

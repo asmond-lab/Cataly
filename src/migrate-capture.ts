@@ -2,11 +2,11 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Deps } from "./harness.ts";
 import { renderHandoff } from "./migrate-brief.ts";
-import type { AgentStatus, CreateSpec, RuntimeKind, SessionRef } from "./runtime/types.ts";
+import type { AgentStatus, CreateSpec, SessionRef, TerminalRuntimeKind } from "./runtime/types.ts";
 import type { MigrateJournal } from "./store-journal.ts";
 
 export type MigrateOpts = {
-  readonly to: RuntimeKind;
+  readonly to: TerminalRuntimeKind;
   readonly dryRun: boolean;
   readonly waitMinutes: number;
   readonly resume: boolean;

@@ -1,4 +1,4 @@
-// The lane board `dori status` prints: open lanes first, the longest without progress on top, closed lanes folded into
+// The lane board `cataly status` prints: open lanes first, the longest without progress on top, closed lanes folded into
 // one line each, every line within WIDTH terminal columns except a key, ref, link or id wider than that, kept whole.
 import { ageText, fitEnd, hhmm, indented, oneLine, padCols, WIDTH, wrap } from "./fit.ts";
 import { progressOf, waitingOn, waitingSinceOf, waitingTarget } from "./progress.ts";

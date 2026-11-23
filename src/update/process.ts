@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Subprocess } from "bun";
-import { fill } from "../../skills/dori-mode/scripts/src/config.ts";
+import { fill } from "../../skills/cataly-mode/scripts/src/config.ts";
 import { recordCommandOutput } from "./command-output.ts";
 import { canonical, contains, UpdateError, UpdateInterrupted } from "./config.ts";
 import { type Capability, isolatedEnv } from "./environment.ts";
@@ -38,10 +38,12 @@ function nativeLaunch(
   const own = ompPart(argv);
   if (
     own.some((arg) =>
-      /^(?:-e|--extension|--extensions|--trusted-extension|--hook|--profile|--dori-role)(?:=|$)/.test(arg),
+      /^(?:-e|--extension|--extensions|--trusted-extension|--hook|--profile|--(?:cataly|dori)-(?:role|launch-model|monitor-bootstrap|lane-receiver))(?:=|$)/.test(
+        arg,
+      ),
     )
   ) {
-    throw new UpdateError("automated OMP uses no explicit extension/profile/Dori-role flags");
+    throw new UpdateError("automated OMP uses no explicit extension/profile/Cataly-role flags");
   }
   const mode = flagValue(own, "mode");
   if (mode !== null && mode !== "json") {
@@ -49,7 +51,7 @@ function nativeLaunch(
   }
   const kind = command === ctx.config.reviewer ? "review" : "worker";
   const guard: Guard = { kind, path: join(directory, `${kind}-scope.json`), nonce: randomUUID() };
-  const runtime = dirname(env["DORI_CONFIG"]!);
+  const runtime = dirname(env["CATALY_CONFIG"]!);
   const options = [
     ...nativePromptOptions(directory, job.candidate, kind, ompPart(argv)),
     "--no-session",
@@ -69,12 +71,12 @@ function nativeLaunch(
   ];
   if (mode === null) options.push("--mode", "json");
   const prefix = kind === "review" ? "REVIEW" : "WORKER";
-  env[`DORI_UPDATE_${prefix}_SCOPE`] = guard.path;
-  env[`DORI_UPDATE_${prefix}_NONCE`] = guard.nonce;
-  env[`DORI_UPDATE_${prefix}_JOB`] = job.id;
+  env[`CATALY_UPDATE_${prefix}_SCOPE`] = guard.path;
+  env[`CATALY_UPDATE_${prefix}_NONCE`] = guard.nonce;
+  env[`CATALY_UPDATE_${prefix}_JOB`] = job.id;
   if (kind === "review") {
     if (!job.sourceHash) throw new UpdateError("reviewer needs the exact checked source hash");
-    env["DORI_UPDATE_REVIEW_SOURCE"] = job.sourceHash;
+    env["CATALY_UPDATE_REVIEW_SOURCE"] = job.sourceHash;
     options.push("--no-lsp", "--tools", REVIEW_TOOLS.join(","));
   }
   const file = kind === "review" ? "./reviewer-guard.ts" : "./worker-guard.ts";
@@ -97,7 +99,7 @@ export async function runCommand(
   const directory = join(job.directory, "runtime", ordinal);
   // Caches are job-owned and shared by the job's commands so frozen installs are not repeated three times.
   const env = isolatedEnv(ctx, directory, capability, join(job.directory, "cache"));
-  const runtime = dirname(env["DORI_CONFIG"]!);
+  const runtime = dirname(env["CATALY_CONFIG"]!);
   const template = {
     ...vars,
     candidate: job.candidate,

@@ -25,13 +25,13 @@ posix(
     writeFileSync(join(primary, "config.json"), "primary config\n");
     const first = await installBundle(f.paths, f.release("first\n").bundle, undefined);
     // The real installed CLI needs the actual shipped entry point, not the payload-only bundle fixture.
-    const cli = resolve(import.meta.dir, "../skills/dori-mode/scripts/src/cli.ts");
+    const cli = resolve(import.meta.dir, "../skills/cataly-mode/scripts/src/cli.ts");
     const wrapper = readFileSync(join(f.paths.dori, "bin/dori"), "utf8");
     const run = Bun.spawnSync(
       [
         "bash",
         "-c",
-        wrapper.replace(join(f.paths.live, "skills/dori-mode/scripts/src/cli.ts"), cli),
+        wrapper.replaceAll(join(f.paths.live, "skills/dori-mode/scripts/src/cli.ts"), cli),
         "--",
         "update",
         "status",
@@ -48,7 +48,7 @@ posix(
         },
       },
     );
-    expect(run.exitCode).toBe(0);
+    expect(run.exitCode, run.stderr.toString()).toBe(0);
     expect(JSON.parse(run.stdout.toString()).installed.tag).toBe(first.current.tag);
     expect(readFileSync(join(primary, "config.json"), "utf8")).toBe("primary config\n");
     expect(existsSync(join(f.paths.home, ".agents"))).toBe(false);
@@ -157,7 +157,7 @@ posix("a side OMP launch bypasses foreign Dori wrappers and clears inherited har
     socket: "own-socket",
   });
   writeFileSync(f.paths.config, "{}\n");
-  expect(ompStateDir({ DORI_HOME: f.paths.dori, DORI_CONFIG: f.paths.config })).toBe(join(f.paths.dori, "state"));
+  expect(ompStateDir({ CATALY_HOME: f.paths.dori, CATALY_CONFIG: f.paths.config })).toBe(join(f.paths.dori, "state"));
 });
 
 posix(

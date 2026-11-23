@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "target": "dori",
+  "target": "cataly",
   "runtime": "herdr",
-  "root": "../../dori-update-staging",
+  "root": "../../cataly-update-staging",
   "remote": "https://github.com/sisyphuslabs/dori-superagent.git",
   "ref": "refs/heads/main",
   "baseUpstream": "97d807b9037cb050a72129659cf6306d8055010d",
@@ -31,7 +31,7 @@
     {
       "name": "install-skill",
       "argv": ["bun", "install", "--frozen-lockfile", "--ignore-scripts"],
-      "cwd": "skills/dori-mode/scripts",
+      "cwd": "skills/cataly-mode/scripts",
       "timeoutMs": 300000
     },
     {

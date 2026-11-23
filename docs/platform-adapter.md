@@ -57,7 +57,7 @@ Tests never run on another OS. `adapterFor(os)` returns the implementation for a
 
 These still decide for themselves, and each stays outside for a reason rather than by oversight:
 
-- `skills/dori-mode/scripts/src/**` and `extension/index.ts` are separate packages with their own `process.platform` checks; they do not import the product's platform module.
+- `skills/cataly-mode/scripts/src/**` and `extension/index.ts` are separate packages with their own `process.platform` checks; they do not import the product's platform module.
 - `install.sh` runs before the product exists on the host, so it cannot ask an adapter.
 - `scripts/verify-consumer-release.ts:29-36` keeps its own runtime and profile policy, and `scripts/` is outside the plan's scope.
 - `src/telemetry.ts` and `src/telemetry-otlp.ts` read `node:os` `platform()` directly for metric attributes.

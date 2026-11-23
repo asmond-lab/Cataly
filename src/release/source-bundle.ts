@@ -17,7 +17,7 @@ export type SourceBundle = {
   readonly patchSha256: string;
   readonly resultTree: string;
   readonly files: readonly SourceEntry[];
-  readonly nativeVersion?: "18.20.0";
+  readonly nativeVersion?: string;
   readonly launcher?: string;
 };
 export type BoundBundle = { readonly lock: SourceBundle; readonly patch: string; readonly identity: string };
@@ -31,37 +31,32 @@ const safe = (path: unknown): path is string =>
   }) &&
   path.split("/").every((part) => !!part && part !== "." && part !== ".." && part !== ".git");
 
-/** Bind the patch bytes as well as the upstream and postimage identities before touching a checkout. */
-export function readSourceBundle(source: string, native = false): BoundBundle {
-  const name = native ? "native-omp" : "omp-ulw.overlay";
-  const path = join(source, `${name}.lock`);
-  const value = readJson(path) as SourceBundle;
-  const keys = [
-    "version",
-    "repository",
-    "commit",
-    "patchSha256",
-    "resultTree",
-    "files",
-    ...(native ? ["nativeVersion", "launcher"] : []),
-  ].sort();
+/** Validate a decoded lock: exact key set, pinned repositories, and a strictly ordered postimage. */
+export function parseSourceBundleLock(path: string, native: boolean, value: unknown): SourceBundle {
+  const keys = ["version", "repository", "commit", "patchSha256", "resultTree", "files"];
+  if (native) keys.push("nativeVersion", "launcher");
+  keys.sort();
+  const lock = value as SourceBundle;
   if (
-    !value ||
-    typeof value !== "object" ||
-    Object.keys(value).sort().join() !== keys.join() ||
-    value.version !== 1 ||
-    !SHA.test(value.commit) ||
-    !SHA.test(value.resultTree) ||
-    !HASH.test(value.patchSha256) ||
-    value.repository !==
+    !lock ||
+    typeof lock !== "object" ||
+    Object.keys(lock).sort().join() !== keys.join() ||
+    lock.version !== 1 ||
+    !SHA.test(lock.commit) ||
+    !SHA.test(lock.resultTree) ||
+    !HASH.test(lock.patchSha256) ||
+    lock.repository !==
       (native ? "https://github.com/can1357/oh-my-pi.git" : "https://github.com/dbc-hbin/omp-ulw.git") ||
-    !Array.isArray(value.files) ||
-    !value.files.length ||
-    (native && (value.nativeVersion !== "18.20.0" || !safe(value.launcher)))
+    !Array.isArray(lock.files) ||
+    !lock.files.length ||
+    (native &&
+      (typeof lock.nativeVersion !== "string" ||
+        !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(lock.nativeVersion) ||
+        !safe(lock.launcher)))
   )
     throw new Error(`Invalid source bundle lock: ${path}`);
   let previous = "";
-  for (const file of value.files) {
+  for (const file of lock.files) {
     if (
       !file ||
       Object.keys(file).sort().join() !== "executable,path,sha256" ||
@@ -73,6 +68,13 @@ export function readSourceBundle(source: string, native = false): BoundBundle {
       throw new Error(`Invalid source bundle postimage: ${path}`);
     previous = file.path;
   }
+  return lock;
+}
+/** Bind the patch bytes as well as the upstream and postimage identities before touching a checkout. */
+export function readSourceBundle(source: string, native = false): BoundBundle {
+  const name = native ? "native-omp" : "omp-ulw.overlay";
+  const path = join(source, `${name}.lock`);
+  const value = parseSourceBundleLock(path, native, readJson(path));
   const patch = join(source, native ? "native-omp.patch" : "omp-ulw.patch");
   if (!regularFile(patch) || digest(readFileSync(patch)) !== value.patchSha256)
     throw new Error(`Source bundle patch digest differs: ${patch}`);
@@ -96,12 +98,15 @@ export const bundleEnv = (home: string, bun = process.execPath): Record<string, 
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_TERMINAL_PROMPT: "0",
   GIT_OPTIONAL_LOCKS: "0",
-  BUN_INSTALL_CACHE_DIR: join(home, ".cache/omp-dori/bun"),
-  DORI_TELEMETRY: "0",
+  BUN_INSTALL_CACHE_DIR: join(home, ".cache/omp-cataly/bun"),
+  CATALY_TELEMETRY: "0",
   DO_NOT_TRACK: "1",
 });
-export const bundleGit = (argv: readonly string[], cwd: string, home: string): Promise<string> =>
-  command(["/bin/sh", "-c", 'umask 077; exec "$@"', "dori-source-git", ...args(argv)], cwd, bundleEnv(home), 300_000);
+export const bundleGit = (argv: readonly string[], cwd: string, home: string, output?: string): Promise<string> => {
+  const script = output === undefined ? 'umask 077; exec "$@"' : 'umask 077; output=$1; shift; exec "$@" > "$output"';
+  const shell = ["/bin/sh", "-c", script, "cataly-source-git", ...(output === undefined ? [] : [output])];
+  return command([...shell, ...args(argv)], cwd, bundleEnv(home), 300_000);
+};
 
 function hashChunks(inputs: readonly string[], checkout: string, home: string): string {
   // One synchronous Bun driver keeps admission synchronous while Git children hash in parallel.
@@ -135,8 +140,7 @@ if (!process.exitCode) process.stdout.write(outputs.join(""));
   return proc.stdout.toString().trim();
 }
 
-/**
- * Synchronous admission also runs at launch; a version or a launcher hash alone is never a receipt.
+/** Synchronous admission also runs at launch; a version or a launcher hash alone is never a receipt.
  * Every tracked regular file's content is compared to its index blob through batched attribute-aware
  * hashes, so a legitimate checkout transform is admitted and any real content change is still rejected.
  */
@@ -159,13 +163,18 @@ export function assertSourceBundle(checkout: string, bundle: BoundBundle, home: 
     return proc.stdout.toString().trim();
   };
   const head = git(["rev-parse", "HEAD"]);
-  // write-tree locks its index even with GIT_OPTIONAL_LOCKS=0. Keep that write private to this admission.
-  const temporary = mkdtempSync(join(tmpdir(), "dori-source-index-"));
+  // Keep both index locking and newly computed tree objects private to this admission.
+  const temporary = mkdtempSync(join(tmpdir(), "cataly-source-index-"));
   let tree: string;
   try {
     const index = join(temporary, "index");
     copyFileSync(join(checkout, ".git/index"), index);
-    tree = git(["write-tree"], undefined, { ...bundleEnv(home), GIT_INDEX_FILE: index });
+    tree = git(["write-tree"], undefined, {
+      ...bundleEnv(home),
+      GIT_INDEX_FILE: index,
+      GIT_OBJECT_DIRECTORY: temporary,
+      GIT_ALTERNATE_OBJECT_DIRECTORIES: JSON.stringify(join(checkout, ".git/objects")),
+    });
   } finally {
     rmSync(temporary, { recursive: true, force: true });
   }

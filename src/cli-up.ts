@@ -1,21 +1,23 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { shq } from "./delivery.ts";
-import { agentCommand, harnessLaunchEnv, promptFile, type Deps } from "./harness.ts";
+import { agentCommand, harnessLaunchEnv, rolePrompt, type Deps } from "./harness.ts";
+import { nativeHarnessStatus, nativeInventory, startNativeHarness, withHarnessLock } from "./harness-native.ts";
 import { lockEnv } from "./lock.ts";
 import { lockLines } from "./lock-list.ts";
 import { refText } from "./refs.ts";
+import { Refusal } from "./refusal.ts";
 import { groupId } from "./runtime/group.ts";
+import { HeadlessRuntime } from "./runtime/headless.ts";
 import { openSession, type SessionRef } from "./runtime/types.ts";
 import { RuntimeChoiceError } from "./runtime/select.ts";
 import { laneBoard } from "./status-view.ts";
 
-function renderPrompt(d: Deps, name: string): string {
+function renderPrompt(d: Deps, name: "lead.md" | "duty.md"): string {
   const dir = join(d.store.root, "prompts");
   mkdirSync(dir, { recursive: true });
-  const src = readFileSync(promptFile(name), "utf8").replaceAll("{{dori}}", d.doriCmd);
   const out = join(dir, name);
-  writeFileSync(out, src);
+  writeFileSync(out, rolePrompt(d, name));
   return out;
 }
 
@@ -25,13 +27,31 @@ function renderPrompt(d: Deps, name: string): string {
  * this home's group.
  */
 export async function up(d: Deps, cwd: string): Promise<void> {
-  const rt = d.runtimes.default;
-  const env = harnessLaunchEnv(d);
-  const agent = (name: string) => `${agentCommand(d, "dori")} --append-system-prompt ${shq(renderPrompt(d, name))}`;
+  await withHarnessLock(d, async () => {
+    if (nativeInventory(d))
+      throw new Refusal("a native harness is already registered or held; inspect status and use cataly harness stop");
+    if (Object.keys(d.store.roles()).length)
+      throw new Refusal(
+        "this home already has registered roles. For old terminal roles, close them in the original server context and run cataly harness stop to retire the registrations before up",
+      );
+    const rt = d.runtimes.default;
+    if (rt.kind === "headless") {
+      if (!(rt instanceof HeadlessRuntime)) throw new Refusal("native harness runtime is unavailable");
+      await startNativeHarness(d, rt, cwd);
+    } else {
+      await upTerminal(d, cwd, rt);
+    }
+  });
+}
+
+async function upTerminal(d: Deps, cwd: string, rt: import("./runtime/types.ts").TerminalRuntime): Promise<void> {
+  const env = { ...harnessLaunchEnv(d), CATALY_RUNTIME: rt.kind };
+  const agent = (name: "lead.md" | "duty.md") =>
+    `${agentCommand(d, "cataly")} --append-system-prompt ${shq(renderPrompt(d, name))}`;
   // herdr ignores the group of a workspace-root session and reports the new workspace as the lead ref's group.
   const lead = await openSession(
     rt,
-    { name: "dori", role: "lead", container: "workspace-root", cwd, env, group: groupId(d.store.root) },
+    { name: "cataly", role: "lead", container: "workspace-root", cwd, env, group: groupId(d.store.root) },
     agent("lead.md"),
   );
   d.store.setRole("lead", lead);
@@ -46,14 +66,14 @@ export async function up(d: Deps, cwd: string): Promise<void> {
   const loop = await openSession(
     rt,
     { name: "duty-loop", role: "duty-loop", container: "split-below", near: duty, cwd, env, ...inGroup },
-    `${d.doriCmd} duty --interval 60`,
+    `${d.catalyCmd} duty --interval 60`,
   );
   d.store.setRole("duty-loop", loop);
   const hourlyEnv = rt.kind === "herdr" && group !== undefined ? { ...env, HERDR_WORKSPACE_ID: group } : env;
   const hourly = await openSession(
     rt,
     { name: "hourly-loop", role: "hourly-loop", container: "split-below", near: loop, cwd, env: hourlyEnv, ...inGroup },
-    `${d.doriCmd} loop`,
+    `${d.catalyCmd} loop`,
   );
   d.store.setRole("hourly-loop", hourly);
   console.log(
@@ -78,11 +98,12 @@ function runtimeLine(d: Deps): string {
  * Wider than a line, the terminal folds them. The lane board below keeps within WIDTH, and so does the line per lock
  * held or waited for (lock-list.ts) at the end.
  */
-export function status(d: Deps): void {
+export async function status(d: Deps): Promise<void> {
   const roles = d.store.roles();
   const show = (ref: SessionRef | undefined) => (ref ? refText(ref) : "-");
   for (const line of [runtimeLine(d), `lead=${show(roles.lead)} duty=${show(roles.duty)}`, `home=${d.store.root}`])
     console.log(line);
+  for (const line of await nativeHarnessStatus(d)) console.log(line);
   for (const line of laneBoard(d.store.lanes(), d.now())) console.log(line);
   for (const line of lockLines({ ...lockEnv(d.store.root), now: d.now })) console.log(line);
 }

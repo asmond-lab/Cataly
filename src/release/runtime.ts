@@ -1,11 +1,11 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { consumerPaths, owned, realDirectory, regularFile } from "./files.ts";
+import { consumerPaths, isPrimaryConsumer, owned, realDirectory, regularFile } from "./files.ts";
 import { assertNativeSource } from "./native.ts";
 import { assertSourceBundle, readSourceBundle, SourceBundleError } from "./source-bundle.ts";
 
-/** A loaded physical release binds its home independently of the caller's inherited Dori environment. */
+/** A loaded physical release binds its home independently of the caller's inherited Cataly environment. */
 export function consumerReleaseHome(source: string): string | undefined {
   if (
     !/^[a-f0-9]{40}-[a-f0-9]{16}$/.test(basename(source)) ||
@@ -29,11 +29,11 @@ export function resolveConsumerOmpUlwPath(
     readonly useDefault?: boolean;
   } = {},
 ): string {
-  // The physical release, not inherited DORI_HOME, owns its dependency namespace.
+  // The physical release, not inherited CATALY_HOME, owns its dependency namespace.
   const source = realpathSync(sourceRoot);
-  const doriHome = consumerReleaseHome(source);
-  if (!doriHome) return configuredPath;
-  const paths = consumerPaths(home, doriHome);
+  const catalyHome = consumerReleaseHome(source);
+  if (!catalyHome) return configuredPath;
+  const paths = consumerPaths(home, catalyHome);
   const entry = relative(paths.dependencies, configuredPath);
   if (
     !useDefault &&
@@ -50,7 +50,7 @@ export function resolveConsumerOmpUlwPath(
     if (!/^[a-f0-9]{40}$/.test(commit)) throw new Error(`Invalid consumer release lock: ${lock}`);
 
     const receipt = join(paths.manifests, `${basename(source)}.json`);
-    const required = regularFile(receipt) && JSON.parse(readFileSync(receipt, "utf8")).requirements.omp === "18.20.0";
+    const required = regularFile(receipt) && JSON.parse(readFileSync(receipt, "utf8")).requirements.omp !== "18.18.8";
     const bundle = required || regularFile(join(source, "omp-ulw.overlay.lock")) ? readSourceBundle(source) : undefined;
     if (bundle && bundle.lock.commit !== commit) throw new Error("Consumer release ULW base and overlay differ");
     const dependency = join(paths.dependencies, `omp-ulw-${commit}${bundle ? `-${bundle.identity}` : ""}`);
@@ -64,7 +64,7 @@ export function resolveConsumerOmpUlwPath(
   }
 }
 
-function managedWindowsAlias(command: string, dori: string, releases: string): boolean {
+function managedWindowsAlias(command: string, cataly: string, releases: string): boolean {
   // The same Windows release root can arrive via its short, long or case-variant path.
   // Identify only the fixed launcher layout; the executable may not exist yet.
   if (process.platform !== "win32") return false;
@@ -73,7 +73,7 @@ function managedWindowsAlias(command: string, dori: string, releases: string): b
   const launcher = /^(.+\/)[a-f0-9]{40}-[a-f0-9]{16}\/scripts\/consumer\/omp$/.exec(path);
   const alias = shim?.[1] ?? launcher?.[1];
   if (!alias) return false;
-  const root = shim ? dori : releases;
+  const root = shim ? cataly : releases;
   try {
     if (realpathSync(alias) === root) return true;
     const actual = statSync(alias, { bigint: true });
@@ -93,31 +93,31 @@ export function resolveConsumerOmpCommand(
   }: { readonly home?: string; readonly sourceRoot?: string } = {},
 ): readonly string[] {
   const source = realpathSync(sourceRoot);
-  const doriHome = consumerReleaseHome(source);
-  if (!doriHome) return configured;
-  const paths = consumerPaths(home, doriHome);
+  const catalyHome = consumerReleaseHome(source);
+  if (!catalyHome) return configured;
+  const paths = consumerPaths(home, catalyHome);
   const first = configured[0] ?? "omp";
   const managed =
     isAbsolute(first) &&
-    (first.split("/").join(sep) === join(paths.dori, "bin", "omp") ||
+    (first.split("/").join(sep) === join(paths.cataly, "bin", "omp") ||
       /^[a-f0-9]{40}-[a-f0-9]{16}\/scripts\/consumer\/omp$/.test(
         relative(paths.releases, first).split(sep).join("/"),
       ) ||
-      managedWindowsAlias(first, paths.dori, paths.releases));
+      managedWindowsAlias(first, paths.cataly, paths.releases));
   if (first !== "omp" && !managed) return configured;
   const manifest = JSON.parse(readFileSync(join(paths.manifests, `${basename(source)}.json`), "utf8"));
-  if (manifest.requirements.omp !== "18.20.0") return configured;
+  if (manifest.requirements.omp === "18.18.8") return configured;
   assertNativeSource(source, home);
   return [
     join(source, "scripts/consumer/omp"),
     "--no-extensions",
     "-e",
     join(source, "extension"),
-    ...(paths.dori === join(paths.home, ".dori")
+    ...(isPrimaryConsumer(paths)
       ? []
       : [
           "--config",
-          join(paths.dori, "omp.yml"),
+          join(paths.cataly, "omp.yml"),
           "--config",
           join(paths.root, "consumer-discovery", basename(source), "omp.yml"),
         ]),
@@ -129,7 +129,7 @@ export function resolveConsumerOmpCommand(
 export function processOmpCommand(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): readonly string[] | undefined {
-  const raw = env["DORI_AGENT_ARGV"];
+  const raw = env["CATALY_AGENT_ARGV"];
   if (raw === undefined) return undefined;
   const selected: unknown = JSON.parse(raw);
   if (
@@ -138,7 +138,7 @@ export function processOmpCommand(
     selected.some((part) => typeof part !== "string") ||
     selected[0] === ""
   )
-    throw new Error("DORI_AGENT_ARGV must be a nonempty string array with an executable");
+    throw new Error("CATALY_AGENT_ARGV must be a nonempty string array with an executable");
   return selected;
 }
 
@@ -152,10 +152,10 @@ export function resolveProcessOmpCommand(
   const installation = resolve(dirname(configFile));
   const installed =
     selected !== undefined &&
-    (existsSync(join(installation, ".omp-dori")) || existsSync(join(installation, "releases/consumer-owner.json"))) &&
+    [".omp-cataly", ".omp-dori", "releases/consumer-owner.json"].some((part) => existsSync(join(installation, part))) &&
     (configured[0] === join(installation, "bin/omp") || configured[0] === join(realpathSync(installation), "bin/omp"));
   if (selected && (configured[0] === "omp" || installed)) return [...selected, ...configured.slice(1)];
-  const legacy = configured[0] === "omp" ? env["DORI_AGENT_CMD"] : undefined;
+  const legacy = configured[0] === "omp" ? env["CATALY_AGENT_CMD"] : undefined;
   return legacy ? [legacy, ...configured.slice(1)] : configured;
 }
 
@@ -165,13 +165,24 @@ export function resolveProcessOmpUlwPath(
   home: string,
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
-  const selected = env["DORI_OMP_ULW_PATH"];
+  const selected = env["CATALY_OMP_ULW_PATH"];
   if (!selected) return configured;
-  const managed = /^omp-ulw-[a-f0-9]{40}(?:-[a-f0-9]{64})?(?:\/index\.ts)?$/.test(
-    relative(consumerPaths(home).dependencies, configured),
+  const managed = [".cataly", ".dori"].some((root) =>
+    /^omp-ulw-[a-f0-9]{40}(?:-[a-f0-9]{64})?(?:\/index\.ts)?$/.test(
+      relative(consumerPaths(home, join(home, root)).dependencies, configured),
+    ),
   );
-  if (configured !== "" && configured !== join(home, ".dori/omp-ulw/index.ts") && !managed) return configured;
-  if (/^omp-ulw-[a-f0-9]{64}\/index\.ts$/.test(relative(join(home, ".cache/omp-dori"), selected))) {
+  if (
+    configured !== "" &&
+    ![".cataly", ".dori"].some((root) => configured === join(home, root, "omp-ulw/index.ts")) &&
+    !managed
+  )
+    return configured;
+  if (
+    ["omp-cataly", "omp-dori"].some((root) =>
+      /^omp-ulw-[a-f0-9]{64}\/index\.ts$/.test(relative(join(home, ".cache", root), selected)),
+    )
+  ) {
     try {
       assertSourceBundle(dirname(selected), readSourceBundle(resolve(import.meta.dir, "../..")), home);
     } catch (error) {
@@ -182,26 +193,31 @@ export function resolveProcessOmpUlwPath(
 }
 
 /** Empty assignments override tokens retained by the terminal server; lanes do not host messenger bots. */
-export const laneMessengerOverrides = { DORI_DISCORD_TOKEN: "", DORI_TELEGRAM_TOKEN: "" } as const;
+export const laneMessengerOverrides = {
+  CATALY_DISCORD_TOKEN: "",
+  CATALY_TELEGRAM_TOKEN: "",
+  DORI_DISCORD_TOKEN: "",
+  DORI_TELEGRAM_TOKEN: "",
+} as const;
 
 /** Only launch context crosses a terminal server boundary; paths retain the caller's OS resolution. */
-export function doriLaunchEnv(
+export function catalyLaunchEnv(
   env: Readonly<Record<string, string | undefined>>,
   configFile: string,
-  resolved: { readonly doriHome?: string; readonly stateDir?: string; readonly ompUlwPath?: string } = {},
+  resolved: { readonly catalyHome?: string; readonly stateDir?: string; readonly ompUlwPath?: string } = {},
 ): Record<string, string> {
-  const context: Record<string, string> = { DORI_MANAGED_STARTUP: "" };
+  const context: Record<string, string> = { CATALY_MANAGED_STARTUP: "" };
   for (const [key, path] of Object.entries({
     HOME: env["HOME"],
-    DORI_CONFIG: configFile,
-    DORI_HOME: resolved.doriHome ?? env["DORI_HOME"] ?? dirname(configFile),
-    DORI_STATE_DIR: resolved.stateDir ?? env["DORI_STATE_DIR"],
-    DORI_OMP_ULW_PATH: resolved.ompUlwPath ?? env["DORI_OMP_ULW_PATH"],
+    CATALY_CONFIG: configFile,
+    CATALY_HOME: resolved.catalyHome ?? env["CATALY_HOME"] ?? dirname(configFile),
+    CATALY_STATE_DIR: resolved.stateDir ?? env["CATALY_STATE_DIR"],
+    CATALY_OMP_ULW_PATH: resolved.ompUlwPath ?? env["CATALY_OMP_ULW_PATH"],
     OMP_ULW_SCOPE_FILE: env["OMP_ULW_SCOPE_FILE"],
   })) {
     if (path !== undefined) context[key] = path === "" || isAbsolute(path) ? path : `${process.cwd()}${sep}${path}`;
   }
-  for (const key of ["DORI_AGENT_ARGV", "DORI_HERDR_SESSION", "HC_SESSION"] as const) {
+  for (const key of ["CATALY_AGENT_ARGV", "CATALY_HERDR_SESSION", "HC_SESSION"] as const) {
     if (env[key] !== undefined) context[key] = env[key];
   }
   return context;

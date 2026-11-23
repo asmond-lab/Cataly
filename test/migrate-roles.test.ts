@@ -6,48 +6,46 @@ import { migrate } from "../src/migrate.ts";
 import { refText } from "../src/refs.ts";
 import { Refusal } from "../src/refusal.ts";
 import { readJournal, writeJournal } from "../src/store-journal.ts";
+import { controllerTerminals } from "./controller-migration-setup.ts";
 import { href } from "./fake.ts";
-import { migrateWorld, OLD } from "./migrate-setup.ts";
+import { migrateWorld, OLD, rolesWorld } from "./migrate-setup.ts";
 
-/** migrateWorld plus duty (w1:p2), the duty loop (w1:p4) and the hourly loop (w1:p5), all on herdr. */
-function rolesWorld() {
-  const m = migrateWorld();
-  m.w.addPane("w1:p2", "idle");
-  m.w.addPane("w1:p4", "shell");
-  m.w.addPane("w1:p5", "shell");
-  m.d.store.setRole("duty", href("w1:p2"));
-  m.d.store.setRole("duty-loop", href("w1:p4"));
-  m.d.store.setRole("hourly-loop", href("w1:p5"));
-  const order = () =>
-    m.w.calls.flatMap((c) =>
-      c.cmd === "hc" && c.argv[1] === "run"
-        ? [`open ${c.argv.find((a) => a.startsWith("dori.role="))}`]
-        : c.cmd === "herdr" && c.argv[1] === "close"
-          ? [`close ${c.argv[2]}`]
-          : [],
-    );
-  return { ...m, order };
-}
+describe("cataly migrate: roles and loops", () => {
+  test("bulk migration holds before opening a replacement when a headless role is registered", async () => {
+    const { w, d, opts } = rolesWorld();
+    const native = { runtime: "headless", id: "9fb0af3f-aad9-4384-b052-e5953b40d960" } as const;
+    d.store.setRole("hourly-loop", native);
+    expect(d.store.roles()["hourly-loop"]).toEqual(native);
 
-describe("dori migrate: roles and loops", () => {
-  test("duty-loop: the old loop is closed before the new one opens", async () => {
-    const { d, lines, opts, order } = rolesWorld();
-    expect(await migrate(d, { role: "duty-loop" }, opts())).toBe(0);
-    expect(order()).toEqual(["close w1:p4", "open dori.role=duty-loop"]);
-    expect(lines).toEqual(["MIGRATED duty-loop w1:p4 -> hc:t1"]);
-    expect(refText(d.store.roles()["duty-loop"]!)).toBe("hc:t1");
-    expect(readJournal(d.store.root, "duty-loop")).toBeUndefined();
+    await expect(migrate(d, { all: true }, opts())).rejects.toThrow(/headless role hourly-loop/);
+
+    expect(d.store.roles()["hourly-loop"]).toEqual(native);
+    expect(d.store.lane("k")?.sessionRef).toEqual(OLD);
+    expect(w.calls).toEqual([]);
+    expect(w.hc.terminals.size).toBe(0);
+    expect(readJournal(d.store.root, "hourly-loop")).toBeUndefined();
   });
 
-  test("hourly-loop: the new loop opens before the old one is closed", async () => {
-    const { w, d, opts, order } = rolesWorld();
-    expect(await migrate(d, { role: "hourly-loop" }, opts())).toBe(0);
-    expect(order()).toEqual(["open dori.role=hourly-loop", "close w1:p5"]);
-    expect(w.hc.sent[0]!.text).toBe("dori loop");
+  test("a terminal migration preview uses the legacy runtime when --to is omitted", () => {
+    const { d } = rolesWorld();
+    const config = join(d.store.root, "config.json");
+    writeFileSync(config, JSON.stringify({ runtime: "hc" }));
+    const child = Bun.spawnSync(
+      [process.execPath, join(import.meta.dir, "../src/cli.ts"), "migrate", "--role", "hourly-loop", "--dry-run"],
+      { env: { PATH: process.env["PATH"], CATALY_HOME: d.store.root, CATALY_CONFIG: config } },
+    );
+
+    expect({ code: child.exitCode, message: child.stdout.toString().trim() }).toEqual({
+      code: 0,
+      message: "PLAN hourly-loop w1:p5 -> hc (inbox entries: 0)",
+    });
+    expect(d.store.roles()["hourly-loop"]).toEqual(href("w1:p5"));
   });
 
   test("lead: handoff from its prompt file, roles.json switched, its inbox moved", async () => {
     const { w, d, lines, opts } = rolesWorld();
+    const observation = "- (2026-11-19) Local profile migration marker.";
+    writeFileSync(join(d.store.root, "owner.md"), `${observation}\n`);
     d.store.saveInbox(href("w1:p1"), [{ at: 1, from: "k", text: "[REPORT k] hi" }]);
     expect(await migrate(d, { role: "lead" }, opts())).toBe(0);
     expect(lines).toEqual(["MIGRATED lead w1:p1 -> hc:t1"]);
@@ -55,24 +53,45 @@ describe("dori migrate: roles and loops", () => {
     const start = w.hc.sent[0]!.text;
     expect(start).toStartWith("omo --append-system-prompt ");
     const brief = start.split(" ").at(-1)!.replaceAll("'", "");
-    expect(readFileSync(brief, "utf8")).toContain("## Handoff");
+    const handoff = readFileSync(brief, "utf8");
+    expect(handoff).toContain("## Handoff");
+    expect(handoff).toContain("cataly owner show");
+    expect(handoff).not.toContain(observation);
     expect(d.store.queued({ runtime: "hc", id: "t1" }).map((m) => m.text)).toEqual(["[REPORT k] hi"]);
   });
 
   test("--all: lanes first, then lead and duty, the loops last", async () => {
-    const { d, lines, opts } = rolesWorld();
-    expect(await migrate(d, { all: true }, opts())).toBe(0);
-    expect(lines.map((l) => l.split(" ").slice(0, 2).join(" "))).toEqual([
-      "MIGRATED k",
-      "MIGRATED lead",
-      "MIGRATED duty",
-      "MIGRATED duty-loop",
-      "MIGRATED hourly-loop",
-    ]);
+    const { w, d, lines, opts } = rolesWorld();
+    const f = controllerTerminals(w, d);
+    try {
+      await Promise.all([f.source("duty-loop", href("w1:p4")), f.source("hourly-loop", href("w1:p5"))]);
+      const sleep = opts().sleep;
+      expect(
+        await migrate(
+          d,
+          { all: true },
+          opts({
+            sleep: async (ms) => {
+              await f.sleep(ms);
+              await sleep(ms);
+            },
+          }),
+        ),
+      ).toBe(0);
+      expect(lines.map((l) => l.split(" ").slice(0, 2).join(" "))).toEqual([
+        "MIGRATED k",
+        "MIGRATED lead",
+        "MIGRATED duty",
+        "MIGRATED duty-loop",
+        "MIGRATED hourly-loop",
+      ]);
+    } finally {
+      await f.closeActors();
+    }
   });
 });
 
-describe("dori migrate --resume and refusals", () => {
+describe("cataly migrate --resume and refusals", () => {
   test("--resume is refused when no session path is recorded", async () => {
     const { w, d, opts } = migrateWorld();
     await expect(migrate(d, { lane: "k" }, opts({ resume: true }))).rejects.toThrow(/no recorded session path/);
@@ -106,13 +125,15 @@ describe("dori migrate --resume and refusals", () => {
     expect(await migrate({ ...d, agentCmd: "omp --model selected/model" }, { lane: "k" }, opts({ resume: true }))).toBe(
       0,
     );
-    expect(w.hc.sent[0]!.text).toBe("omp --model selected/model --dori-role lane --resume='/synthetic/current.jsonl'");
+    expect(w.hc.sent[0]!.text).toBe(
+      "omp --model selected/model --cataly-role lane --resume='/synthetic/current.jsonl'",
+    );
   });
 
-  test("OMP lead replacements select the Dori role", async () => {
+  test("OMP lead replacements select the Cataly role", async () => {
     const { w, d, opts } = rolesWorld();
     expect(await migrate({ ...d, agentCmd: "omp" }, { role: "lead" }, opts())).toBe(0);
-    expect(w.hc.sent[0]!.text).toStartWith("omp --dori-role dori --append-system-prompt ");
+    expect(w.hc.sent[0]!.text).toStartWith("omp --cataly-role cataly --append-system-prompt ");
   });
 
   test("a migration already running for the name is refused", async () => {

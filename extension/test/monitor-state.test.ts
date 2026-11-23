@@ -12,7 +12,7 @@ test("boot metadata survives shutdown and restoration, then forgets an explicitl
   const session = { id: "monitor-owner", file: "/sessions/monitor-owner.jsonl", entries: [] };
   const path = join(stateDir, "monitors", "monitor-owner.json");
   const argv = ["sh", "-c", "exec sleep 30"];
-  const first = await load({ session, flags: { "dori-role": "dori" } });
+  const first = await load({ session, flags: { "cataly-role": "cataly" } });
   let resumed: FakePi | undefined;
   try {
     await first.emit("session_start");

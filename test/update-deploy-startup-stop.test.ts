@@ -19,7 +19,7 @@ import { deploymentConfig } from "./update-deploy-setup.ts";
 const posix = test.skipIf(process.platform !== "linux" && process.platform !== "darwin");
 
 posix("an owned no-shell bad startup stops before any role or health writer exists", async () => {
-  const root = mkdtempSync(join(tmpdir(), "dori-uninitialized-"));
+  const root = mkdtempSync(join(tmpdir(), "cataly-uninitialized-"));
   const config = { ...deploymentConfig(root), omp: join(root, "omp"), bun: process.execPath, stopTimeoutMs: 2_000 };
   ownReleaseRoot(config);
   const nativeConfig = join(config.releaseRoot, "native-config.json");
@@ -49,8 +49,8 @@ await Bun.stdin.text();
     "--config",
     nativeConfig,
     `--resume=${sessionFile}`,
-    "--dori-role",
-    "dori",
+    "--cataly-role",
+    "cataly",
     "--model",
     config.model,
   ];
@@ -76,7 +76,7 @@ await Bun.stdin.text();
       launchRequestedAt: since,
       oldRuntime: {
         ...processIdentity(process.pid)!,
-        role: "dori",
+        role: "cataly",
         pane: config.pane,
         sessionId: config.sessionId,
         sessionFile,

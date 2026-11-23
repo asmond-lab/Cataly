@@ -4,8 +4,8 @@ import { fill } from "../src/harness.ts";
 
 describe("consistent lead and skill routing", () => {
   const surfaces = {
-    lead: () => fill(readFileSync(new URL("../prompts/lead.md", import.meta.url), "utf8"), { dori: "dori" }),
-    skill: () => readFileSync(new URL("../skills/dori-mode/SKILL.md", import.meta.url), "utf8"),
+    lead: () => fill(readFileSync(new URL("../prompts/lead.md", import.meta.url), "utf8"), { cataly: "cataly" }),
+    skill: () => readFileSync(new URL("../skills/cataly-mode/SKILL.md", import.meta.url), "utf8"),
   };
   for (const [name, render] of Object.entries(surfaces)) {
     test(`${name}: questions and explicitly main-scoped implementation stay direct`, () => {
@@ -33,7 +33,7 @@ describe("consistent lead and skill routing", () => {
   test("the skill retains launch holds, idle-lane reuse and work threads", () => {
     const skill = surfaces.skill();
     expect(skill).toContain("If an idle lane already owns that repo or topic");
-    expect(skill).toContain("If `dori can-launch` says HOLD");
+    expect(skill).toContain("If `cataly can-launch` says HOLD");
     expect(skill).toContain("substantive messenger work gets a work thread before execution");
     expect(skill).toContain("A follow-up to existing work continues in its original thread");
   });

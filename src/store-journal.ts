@@ -1,31 +1,44 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { takeInboxLock } from "./inbox-lock.ts";
 import { sameSession } from "./refs.ts";
-import type { RuntimeKind, SessionRef } from "./runtime/types.ts";
+import type { SessionRef, TerminalRuntimeKind } from "./runtime/types.ts";
 
 /**
- * The durable record of one `dori migrate` of a lane or role (`DORI_HOME/migrate/<name>.json`), rewritten tmp+rename
+ * The durable record of one `cataly migrate` of a lane or role (`CATALY_HOME/migrate/<name>.json`), rewritten tmp+rename
  * before each phase so a crashed run resumes where it stopped. `hold`: the session is held (no flush, no nudge);
  * `opened`: the replacement `newRef` exists; `switched`: the record points at it and only the old close is left.
+ * Controllers also record `starting` before dispatch, `activating` once on standby, and `cleanup` to fence a failed
+ * replacement while retaining its terminal address. Source retirement is recorded before issuing the close.
  */
 export type MigrateJournal = {
   readonly name: string;
   readonly kind: "lane" | "role";
-  readonly phase: "hold" | "opened" | "switched";
+  readonly phase: "hold" | "opened" | "starting" | "activating" | "switched" | "cleanup";
   readonly from: SessionRef;
-  readonly to: RuntimeKind;
+  readonly to: TerminalRuntimeKind;
   readonly newRef?: SessionRef;
   readonly at: number;
   readonly briefPath?: string;
+  readonly controller?: {
+    readonly token?: string;
+    readonly sourcePid?: number;
+    readonly retirementStarted?: true;
+    /** Previously published replacement retained until a new live controller can replace it. */
+    readonly publishedRef?: SessionRef;
+  };
 };
 
 const dir = (root: string): string => join(root, "migrate");
 const pathOf = (root: string, name: string): string => join(dir(root), `${name}.json`);
 
 export function readJournal(root: string, name: string): MigrateJournal | undefined {
-  const path = pathOf(root, name);
-  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as MigrateJournal) : undefined;
+  try {
+    return JSON.parse(readFileSync(pathOf(root, name), "utf8")) as MigrateJournal;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
 }
 
 export function writeJournal(root: string, journal: MigrateJournal): void {
@@ -36,15 +49,20 @@ export function writeJournal(root: string, journal: MigrateJournal): void {
   renameSync(tmp, path);
 }
 
-/** The first journal of a run, created O_EXCL: a second migration that raced to the same name is refused. */
+/** Publish the first journal atomically without replacing one created by another invocation. */
 export function createJournal(root: string, journal: MigrateJournal): boolean {
   mkdirSync(dir(root), { recursive: true });
+  const path = pathOf(root, journal.name);
+  const tmp = `${path}.${crypto.randomUUID()}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(journal, null, 2)}\n`, { flag: "wx" });
   try {
-    writeFileSync(pathOf(root, journal.name), `${JSON.stringify(journal, null, 2)}\n`, { flag: "wx" });
+    linkSync(tmp, path);
     return true;
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "EEXIST") return false;
     throw e;
+  } finally {
+    rmSync(tmp, { force: true });
   }
 }
 

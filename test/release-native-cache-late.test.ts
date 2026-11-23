@@ -91,7 +91,7 @@ test("Astra R2: a preparation whose owner was killed stays while its detached ch
   const code = `import { mkdtempSync } from "node:fs"; import { join } from "node:path";
 import { leaseNativeIdentity, nativeStagePrefix } from ${JSON.stringify(lease)}; import { command } from ${JSON.stringify(run)};
 const [home, identity, pidfile] = process.argv.slice(1); leaseNativeIdentity(home, identity);
-const stage = mkdtempSync(join(home, ".cache/omp-dori", nativeStagePrefix(identity))); console.log(stage);
+const stage = mkdtempSync(join(home, ".cache/omp-cataly", nativeStagePrefix(identity))); console.log(stage);
 await command(["/bin/sh", "-c", 'echo $$ > "$1"; exec sleep 60', "stage-child", pidfile], stage, { PATH: process.env.PATH, HOME: home }, 60000);`;
   const owner = Bun.spawn([process.execPath, "-e", code, c.home, x.identity, childFile], { stdout: "pipe" });
   let child = 0;
@@ -118,7 +118,7 @@ posix("Astra R3: a lock a killed recoverer left mid-takeover (lock and tombstone
   const c = pruneFixture();
   const x = c.native("x");
   // The state the reviewer built: an ended holder's lock, already hard-linked to its tombstone, not yet unlinked.
-  const lock = join(c.home, ".cache/omp-dori/native-prune.lock");
+  const lock = join(c.home, ".cache/omp-cataly/native-prune.lock");
   const ended = Bun.spawnSync(["/bin/sh", "-c", "echo $$"]).stdout.toString().trim();
   writeFileSync(lock, JSON.stringify({ pid: Number(ended), startTicks: "1", bootId: bootId() }));
   linkSync(lock, `${lock}.ended-${ended}-1-${bootId()}`);
@@ -141,7 +141,7 @@ test.each(["file", "directory"])(
     const c = pruneFixture();
     const x = c.native(kind);
     const ended = Bun.spawnSync(["/bin/sh", "-c", "echo $$"]).stdout.toString().trim();
-    const stage = join(c.home, ".cache/omp-dori", `native-stage-${x.identity}-${ended}-1-${bootId()}-AbC123`);
+    const stage = join(c.home, ".cache/omp-cataly", `native-stage-${x.identity}-${ended}-1-${bootId()}-AbC123`);
     mkdirSync(stage);
     writeFileSync(join(stage, "still-needed"), "payload");
     // As the reviewer ran it: the holder works outside the stage and only keeps a descriptor open.

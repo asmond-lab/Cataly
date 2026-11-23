@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { canonical, UpdateInterrupted } from "./config.ts";
+import { updateConfigurationHash } from "./config-identity.ts";
+import { inspectActiveDeployment } from "./deployment-active.ts";
 import { buildCandidate } from "./pipeline.ts";
 import { detectHead } from "./prepare.ts";
 import { pendingPromotion, promoteJob, type PromotionOutcome } from "./promotion.ts";
@@ -16,8 +18,8 @@ export type UpdateCycleResult = {
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-/** One Dori ref and one hash-bound candidate at a time; optional standing promotion follows source readiness. */
-export class DoriUpdater {
+/** One Cataly ref and one hash-bound candidate at a time; optional standing promotion follows source readiness. */
+export class CatalyUpdater {
   readonly context: UpdateContext;
 
   constructor(
@@ -27,14 +29,14 @@ export class DoriUpdater {
   ) {
     this.context = {
       config,
-      configHash: digest(JSON.stringify(config)),
+      configHash: updateConfigurationHash(config),
       emit,
       ...(signal === undefined ? {} : { signal }),
     };
   }
 
   /** Private local state and full reports. A stale or malformed candidate is reported as such, never promoted. */
-  status() {
+  async status() {
     const ctx = this.context;
     const state = readState(ctx);
     let lock: unknown = null;
@@ -50,7 +52,7 @@ export class DoriUpdater {
       } catch (error) {
         return {
           version: 1,
-          target: "dori",
+          target: "cataly",
           candidateOnly: job.promotion?.publication?.status !== "published",
           published: job.promotion?.publication?.status === "published",
           deployed: job.promotion?.deployment?.status === "healthy" && job.promotion.status === "complete",
@@ -65,12 +67,15 @@ export class DoriUpdater {
     });
     return {
       version: 1,
-      target: "dori",
+      target: "cataly",
       candidateOnly: jobs.every((job) => job.candidateOnly),
       stagingOnly: ctx.config.promotion === undefined,
       state,
       lock,
       jobs,
+      running: ctx.config.promotion?.deployment
+        ? await inspectActiveDeployment(ctx.config.promotion.deployment, ctx.signal)
+        : { status: "unknown", reason: "managed deployment is not configured" },
     };
   }
 
@@ -92,7 +97,7 @@ export class DoriUpdater {
         try {
           if ((await this.cycle("check")).outcome === "held") return "held";
         } catch (error) {
-          ctx.emit({ type: "DORI_UPDATE", target: "dori", event: "error" });
+          ctx.emit({ type: "CATALY_UPDATE", target: "cataly", event: "error" });
           saveJson(join(ctx.config.root, "watch-error.json"), {
             at: new Date().toISOString(),
             error: messageOf(error),
@@ -129,8 +134,8 @@ export class DoriUpdater {
       const job = readJob(ctx.config.root, state.active);
       if (job.phase === "ready" && ctx.config.promotion) return { outcome: await promoteJob(ctx, state, job), job };
       ctx.emit({
-        type: "DORI_UPDATE",
-        target: "dori",
+        type: "CATALY_UPDATE",
+        target: "cataly",
         event: "held",
         job: job.id,
         phase: job.phase,
@@ -158,8 +163,8 @@ export class DoriUpdater {
         }
       }
       ctx.emit({
-        type: "DORI_UPDATE",
-        target: "dori",
+        type: "CATALY_UPDATE",
+        target: "cataly",
         event: "duplicate",
         job: earlier.id,
         phase: earlier.phase,
@@ -171,7 +176,7 @@ export class DoriUpdater {
     if (trigger === "check" && sha === baseline) {
       state.processed = sha;
       persistState(ctx, state);
-      ctx.emit({ type: "DORI_UPDATE", target: "dori", event: "unchanged", upstream: sha });
+      ctx.emit({ type: "CATALY_UPDATE", target: "cataly", event: "unchanged", upstream: sha });
       return { outcome: "unchanged" };
     }
     const id = digest(`${ctx.configHash}\n${sha}`);
@@ -207,7 +212,7 @@ export class DoriUpdater {
     state.jobs[sha] = id;
     state.active = id;
     persistState(ctx, state);
-    ctx.emit({ type: "DORI_UPDATE", target: "dori", event: "phase", job: id, phase: "prepared", upstream: sha });
+    ctx.emit({ type: "CATALY_UPDATE", target: "cataly", event: "phase", job: id, phase: "prepared", upstream: sha });
     try {
       await buildCandidate({ ...ctx, config: { ...ctx.config, localSource: canonical(ctx.config.localSource) } }, job);
     } catch (error) {

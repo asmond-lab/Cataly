@@ -36,7 +36,7 @@ posix.each([false, true])(
           {
             stdout: "pipe",
             stderr: "pipe",
-            env: { HOME: f.paths.home, PATH: process.env["PATH"], DORI_AUTO_UPDATE: "0" },
+            env: { HOME: f.paths.home, PATH: process.env["PATH"], CATALY_AUTO_UPDATE: "0" },
           },
         ),
       );

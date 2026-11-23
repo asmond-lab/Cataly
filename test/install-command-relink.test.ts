@@ -23,9 +23,9 @@ for (const mode of ["primary", "side"]) {
     `${mode} holds a native selection traversing the command relink through %s`,
     (alias) => {
       const s = setup();
-      const base = join(s.home, mode === "primary" ? ".dori" : ".omp-dori");
+      const base = join(s.home, mode === "primary" ? ".cataly" : ".omp-cataly");
       const bin = join(s.home, "global-bin");
-      const command = join(bin, mode === "primary" ? "dori" : "omp-dori");
+      const command = join(bin, mode === "primary" ? "cataly" : "omp-cataly");
       const tools = join(s.root, "tools");
       mkdirSync(tools);
       mkdirSync(bin);
@@ -41,13 +41,13 @@ for (const mode of ["primary", "side"]) {
       }
       if (alias === "parent alias") {
         symlinkSync(bin, join(tools, "command-bin"));
-        selected = join(tools, "command-bin", mode === "primary" ? "dori" : "omp-dori");
+        selected = join(tools, "command-bin", mode === "primary" ? "cataly" : "omp-cataly");
       }
       const originalLink = readlinkSync(command);
       const config = '{"owner":"preserve"}\n';
       writeFileSync(join(base, "config.json"), config);
       s.upstreamCommit("v2\n");
-      const result = s.install({ DORI_INSTALL_MODE: mode, DORI_OMP: selected });
+      const result = s.install({ CATALY_INSTALL_MODE: mode, CATALY_OMP: selected });
       expect(result.code).toBe(1);
       expect(result.err).toContain(`traverses installation command link ${command}`);
       expect(readlinkSync(command)).toBe(originalLink);
@@ -58,7 +58,7 @@ for (const mode of ["primary", "side"]) {
       for (const path of [
         join(s.root, "bun.log"),
         join(base, "backups"),
-        join(base, ".omp-dori"),
+        join(base, ".omp-cataly"),
         join(base, "env.sh"),
       ])
         expect(existsSync(path)).toBe(false);
@@ -69,9 +69,9 @@ for (const mode of ["primary", "side"]) {
     `${mode} permits the independent %s of a command link being replaced`,
     (alias) => {
       const s = setup();
-      const base = join(s.home, mode === "primary" ? ".dori" : ".omp-dori");
+      const base = join(s.home, mode === "primary" ? ".cataly" : ".omp-cataly");
       const bin = join(s.home, "global-bin");
-      const command = join(bin, mode === "primary" ? "dori" : "omp-dori");
+      const command = join(bin, mode === "primary" ? "cataly" : "omp-cataly");
       const tools = join(s.root, "tools");
       mkdirSync(tools);
       mkdirSync(bin);
@@ -85,7 +85,7 @@ for (const mode of ["primary", "side"]) {
         else linkSync(native, selected);
       }
       const inode = statSync(selected).ino;
-      const env = s.env({ DORI_INSTALL_MODE: mode, DORI_NO_PULL: "1", DORI_OMP: selected });
+      const env = s.env({ CATALY_INSTALL_MODE: mode, CATALY_NO_PULL: "1", CATALY_OMP: selected });
       const installed = Bun.spawnSync([script], { cwd: s.root, env });
       expect(installed.exitCode).toBe(0);
       expect(readlinkSync(command)).not.toBe(native);
@@ -102,10 +102,10 @@ for (const mode of ["primary", "side"]) {
   posix(`${mode} retains an existing regular command that link installation leaves untouched`, () => {
     const s = setup();
     const bin = join(s.home, "global-bin");
-    const command = join(bin, mode === "primary" ? "dori" : "omp-dori");
+    const command = join(bin, mode === "primary" ? "cataly" : "omp-cataly");
     mkdirSync(bin);
     writeFileSync(command, executable, { mode: 0o755 });
-    const result = s.install({ DORI_INSTALL_MODE: mode, DORI_NO_PULL: "1", DORI_OMP: command });
+    const result = s.install({ CATALY_INSTALL_MODE: mode, CATALY_NO_PULL: "1", CATALY_OMP: command });
     expect(result.code).toBe(mode === "primary" ? 1 : 0);
     expect(result.err).toContain("exists and is not a link; leaving it alone");
     expect(result.err).not.toContain("traverses installation command link");

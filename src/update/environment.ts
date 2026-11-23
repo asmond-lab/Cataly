@@ -74,7 +74,7 @@ export function isolatedEnv(
     privateDirectory(join(directory, name));
   }
   const shortCache = join(runtime, "cache");
-  const config = join(runtime, "dori.json");
+  const config = join(runtime, "cataly.json");
   saveJson(config, { runtime: "herdr", stateDir: state, sessionsDir: sessions, defaultCwd: directory, hooks: {} });
   // OMP 18.18.8 filters these discovery providers before MCP startup; model auth/settings remain referenced.
   saveJson(join(runtime, "omp.json"), {
@@ -108,11 +108,11 @@ export function isolatedEnv(
     XDG_STATE_HOME: state,
     XDG_DATA_HOME: join(runtime, "data"),
     XDG_RUNTIME_DIR: join(runtime, "run"),
-    DORI_CONFIG: config,
-    DORI_STATE_DIR: state,
-    DORI_HOME: join(runtime, "harness"),
-    DORI_RUNTIME: "herdr",
-    DORI_TELEMETRY: "0",
+    CATALY_CONFIG: config,
+    CATALY_STATE_DIR: state,
+    CATALY_HOME: join(runtime, "harness"),
+    CATALY_RUNTIME: "herdr",
+    CATALY_TELEMETRY: "0",
     DO_NOT_TRACK: "1",
     PI_CODING_AGENT_DIR: capability === "model" ? (ctx.config.modelAgentDir ?? agent) : agent,
     BUN_INSTALL_CACHE_DIR: join(shortCache, "bun"),
@@ -124,13 +124,18 @@ export function isolatedEnv(
   };
   if (capability === "model") {
     // A headless model child must never address (or overwrite records of) the parent's herdr/hc server.
-    const namespace = `dori-update-${digest(directory).slice(0, 16)}`;
-    env["DORI_HERDR_SESSION"] = namespace;
+    const namespace = `cataly-update-${digest(directory).slice(0, 16)}`;
+    env["CATALY_HERDR_SESSION"] = namespace;
     env["HC_SESSION"] = namespace;
   }
   const names = capability === "model" ? ctx.config.modelEnv : capability === "reporter" ? ctx.config.reporterEnv : [];
   for (const name of names) {
-    const value = process.env[name];
+    // The CLI translated the operator environment, but a retained reporter still requests its exact legacy keys.
+    const current =
+      capability === "reporter" && /^DORI_(?:SLACK_TOKEN|SLACK_COOKIE|TELEGRAM_TOKEN|DISCORD_TOKEN)$/.test(name)
+        ? `CATALY_${name.slice("DORI_".length)}`
+        : name;
+    const value = process.env[current] ?? process.env[name];
     if (value === undefined || !value) {
       throw new UpdateError(`required ${capability} environment capability ${name} is missing`);
     }

@@ -3,35 +3,35 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defaultDeps } from "../src/harness.ts";
 import type { Exec } from "../src/runtime/exec.ts";
-import type { RuntimeKind } from "../src/runtime/types.ts";
+import type { TerminalRuntimeKind } from "../src/runtime/types.ts";
 import { Store } from "../src/store.ts";
 import { World } from "./fake.ts";
 import { environment, managedCommand } from "./managed-command-setup.ts";
 import { type ChildCapture, recorded, recordingOmp, terminalServer } from "./terminal-context-setup.ts";
 
-export function managedTerminal(runtime: RuntimeKind, conflicting = true) {
+export function managedTerminal(runtime: TerminalRuntimeKind, conflicting = true) {
   const f = managedCommand();
   recordingOmp(f.omp);
   const prefix = [...f.argv, "--owner-option", ""];
   const scope = join(f.root, "process scope 'quote'.json");
   environment({
     HOME: f.config.home,
-    DORI_AGENT_ARGV: JSON.stringify(prefix),
+    CATALY_AGENT_ARGV: JSON.stringify(prefix),
     OMP_ULW_SCOPE_FILE: scope,
-    DORI_HERDR_SESSION: "private-herdr-session",
+    CATALY_HERDR_SESSION: "private-herdr-session",
     HC_SESSION: "private-hc-session",
-    DORI_RUNTIME: undefined,
+    CATALY_RUNTIME: undefined,
     HERDR_PANE_ID: "wparent:pparent",
     HERDR_WORKSPACE_ID: "wparent",
     HC_TERMINAL_ID: "tparent",
-    DORI_MANAGED_STARTUP: "1",
-    DORI_SLACK_TOKEN: undefined,
-    DORI_SLACK_TOKEN_FILE: undefined,
-    DORI_SLACK_TOKEN_FILE_OUTSIDE_HOME: undefined,
+    CATALY_MANAGED_STARTUP: "1",
+    CATALY_SLACK_TOKEN: undefined,
+    CATALY_SLACK_TOKEN_FILE: undefined,
+    CATALY_SLACK_TOKEN_FILE_OUTSIDE_HOME: undefined,
     UNRELATED_SECRET: "actor-only-secret",
   });
   writeFileSync(
-    f.config.doriConfig,
+    f.config.catalyConfig,
     JSON.stringify({
       runtime,
       stateDir: f.config.stateDir,
@@ -40,15 +40,15 @@ export function managedTerminal(runtime: RuntimeKind, conflicting = true) {
   );
   const expected = {
     HOME: f.config.home,
-    DORI_CONFIG: f.config.doriConfig,
-    DORI_HOME: f.config.doriHome,
-    DORI_STATE_DIR: f.config.stateDir,
-    DORI_AGENT_ARGV: JSON.stringify(prefix),
-    DORI_OMP_ULW_PATH: f.env["DORI_OMP_ULW_PATH"]!,
+    CATALY_CONFIG: f.config.catalyConfig,
+    CATALY_HOME: f.config.catalyHome,
+    CATALY_STATE_DIR: f.config.stateDir,
+    CATALY_AGENT_ARGV: JSON.stringify(prefix),
+    CATALY_OMP_ULW_PATH: f.env["CATALY_OMP_ULW_PATH"]!,
     OMP_ULW_SCOPE_FILE: scope,
-    DORI_HERDR_SESSION: "private-herdr-session",
+    CATALY_HERDR_SESSION: "private-herdr-session",
     HC_SESSION: "private-hc-session",
-    DORI_MANAGED_STARTUP: "",
+    CATALY_MANAGED_STARTUP: "",
   };
   const world = new World();
   const original = world.exec;
@@ -71,15 +71,16 @@ export function managedTerminal(runtime: RuntimeKind, conflicting = true) {
     ...(conflicting ? Object.fromEntries(Object.keys(expected).map((key) => [key, `/server/default/${key}`])) : {}),
     HOME: join(f.root, "server-home"),
     PATH: "/usr/bin:/bin",
-    DORI_MANAGED_STARTUP: "1",
+    ...(conflicting ? { CATALY_RUNTIME: "headless" } : {}),
+    CATALY_MANAGED_STARTUP: "1",
     SERVER_ONLY: "daemon-created-child",
   });
   world.exec = daemon.exec;
   const deps = {
     ...world.deps({ runtime }),
-    store: new Store(f.config.doriHome),
+    store: new Store(f.config.catalyHome),
     agentCmd: defaultDeps().agentCmd,
-    doriCmd: ":",
+    catalyCmd: ":",
   };
   const brief = join(f.root, "brief 'literal'.txt");
   writeFileSync(brief, "Execute the terminal transport recording program.\n");

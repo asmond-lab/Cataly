@@ -7,7 +7,7 @@ import { World } from "./fake.ts";
 import { captureIo } from "./inbox-setup.ts";
 
 describe("one duty loop per home", () => {
-  test("a second dori duty refuses while a live loop holds duty/lock, and runs once the lock is released", async () => {
+  test("a second cataly duty refuses while a live loop holds duty/lock, and runs once the lock is released", async () => {
     const d = new World().deps();
     const lock = d.store.lockPath("duty");
     const first = acquire(d, lock);

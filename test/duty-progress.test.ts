@@ -173,7 +173,7 @@ describe("the progress clock", () => {
     for (const l of lines.slice(0, 3)) expect(Bun.stringWidth(l)).toBeLessThanOrEqual(120);
   });
 
-  test("dori report prints whether the clock moved and why not", async () => {
+  test("cataly report prints whether the clock moved and why not", async () => {
     const { w, d } = await quietLane();
     w.clock += 12 * MIN;
     const file = touched(d.store.root, "note.md", w.clock);
@@ -214,8 +214,8 @@ describe("the progress clock", () => {
     expect(d.store.lane("talker")!.progressAt).toBe(progress);
   }
 
-  test("dori report keeps a clipped link whole when counted or skipped", () => clipped("link"));
-  posix("dori report keeps a clipped file whole when counted or skipped", () => clipped("file"));
+  test("cataly report keeps a clipped link whole when counted or skipped", () => clipped("link"));
+  posix("cataly report keeps a clipped file whole when counted or skipped", () => clipped("file"));
 
   posix(
     "an evidence path with a line break or a terminal escape stays on one line in PROGRESS and ESCALATE",

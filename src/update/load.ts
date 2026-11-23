@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { expandHome } from "../../skills/dori-mode/scripts/src/config.ts";
+import { expandHome } from "../../skills/cataly-mode/scripts/src/config.ts";
 import { platform } from "../platform/index.ts";
 import { classifyOmpArgv, isOmpArgv, mayRunOmpArgv, nonPidPreservingPrefix } from "../runtime/omp-argv.ts";
 import { canonical, contains, object, UpdateError } from "./config.ts";
@@ -32,8 +32,8 @@ const CONFIG_KEYS = [
   "promotion",
 ] as const;
 const RESERVED_ENV =
-  /^(?:HOME|PATH|TMP.*|TEMP|XDG_.*|DORI_.*|PI_.*|OMP_.*|BUN_.*|NODE_.*|GIT_.*|GH_.*|GITHUB_.*|SSH_.*|HERDR_.*|HC_.*|DO_NOT_TRACK)$/;
-const MESSENGER_ENV = /^DORI_(?:SLACK_TOKEN|SLACK_COOKIE|TELEGRAM_TOKEN|DISCORD_TOKEN)$/;
+  /^(?:HOME|PATH|TMP.*|TEMP|XDG_.*|(?:CATALY|DORI)_.*|PI_.*|OMP_.*|BUN_.*|NODE_.*|GIT_.*|GH_.*|GITHUB_.*|SSH_.*|HERDR_.*|HC_.*|DO_NOT_TRACK)$/;
+const MESSENGER_ENV = /^(?:CATALY|DORI)_(?:SLACK_TOKEN|SLACK_COOKIE|TELEGRAM_TOKEN|DISCORD_TOKEN)$/;
 const REPORTER_TOKENS = /\{(?!text\}|job\}|upstream\}|phase\})\w+\}/;
 
 const text = (value: unknown, label: string): string => {
@@ -124,7 +124,7 @@ const checkAgent = (agent: UpdateCommand, label: string): void => {
   // only an explicitly external wrapper, which owns its own contract, may use one.
   if (agent.engine !== "external" && classifyOmpArgv(agent.argv).kind === "unparsed") {
     throw new UpdateError(
-      `${label}.argv has a command prefix Dori cannot read; attach bun/node option values with = (such as --preload=FILE), drop -S and unknown env options, or set ${label}.engine to "external"; a shell script or package runner string that names OMP is not read either`,
+      `${label}.argv has a command prefix Cataly cannot read; attach bun/node option values with = (such as --preload=FILE), drop -S and unknown env options, or set ${label}.engine to "external"; a shell script or package runner string that names OMP is not read either`,
     );
   }
   if (!native) return; // an explicit external wrapper owns its own fresh-context and capability contract
@@ -169,8 +169,8 @@ export function loadUpdateConfig(path: string): UpdateConfig {
   }
   if (!object(raw)) throw new UpdateError("update config must be an object");
   allow(raw, CONFIG_KEYS, "update");
-  if (raw["version"] !== 1 || raw["target"] !== "dori" || raw["runtime"] !== "herdr") {
-    throw new UpdateError('update requires version:1, target:"dori", runtime:"herdr"');
+  if (raw["version"] !== 1 || (raw["target"] !== "cataly" && raw["target"] !== "dori") || raw["runtime"] !== "herdr") {
+    throw new UpdateError('update requires version:1, target:"cataly", runtime:"herdr"');
   }
   const root = canonical(resolve(base, text(raw["root"], "root")));
   const localSource = resolve(base, text(raw["localSource"], "localSource"));
@@ -229,7 +229,7 @@ export function loadUpdateConfig(path: string): UpdateConfig {
     raw["promotion"] === undefined ? undefined : parsePromotionConfig(raw["promotion"], base, root, sourceTarget);
   return {
     version: 1,
-    target: "dori",
+    target: "cataly",
     runtime: "herdr",
     root,
     remote: remoteOf(raw["remote"], base),

@@ -2,7 +2,7 @@ import { beforeAll, expect, spyOn, test } from "bun:test";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { UpdateError } from "../src/update/config.ts";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { pendingPromotion } from "../src/update/promotion.ts";
 import { publicSource } from "../src/update/publish-export.ts";
 import { PublicationProcess } from "../src/update/publish-process.ts";
@@ -38,7 +38,7 @@ async function terminalCycles(f: PublicationFixture, held: UpdateJob) {
   const retained = readFileSync(join(f.job.directory, "job.json"), "utf8");
   const report = readFileSync(join(f.job.directory, "report.json"), "utf8");
   for (let cycle = 0; cycle < 2; cycle++) {
-    const duplicate = await new DoriUpdater(f.config, (event) => f.events.push(event)).once();
+    const duplicate = await new CatalyUpdater(f.config, (event) => f.events.push(event)).once();
     expect(duplicate.outcome).toBe("duplicate");
     expect(duplicate.job?.id).toBe(f.job.id);
     expect(readFileSync(join(f.job.directory, "job.json"), "utf8")).toBe(retained);
@@ -48,7 +48,7 @@ async function terminalCycles(f: PublicationFixture, held: UpdateJob) {
   git(f.remote, "add", ".");
   git(f.remote, "commit", "-m", "New upstream after terminal publication admission hold");
   const upstream = git(f.remote, "rev-parse", "HEAD");
-  const next = await new DoriUpdater(f.config, (event) => f.events.push(event)).once();
+  const next = await new CatalyUpdater(f.config, (event) => f.events.push(event)).once();
   expect(next.job?.upstream).toBe(upstream);
   expect(next.job?.id).not.toBe(f.job.id);
   expect(next.job?.baseUpstream).toBe(f.config.baseUpstream);
@@ -80,7 +80,7 @@ posixSuite("terminal initial-source publication admission", () => {
       expect(readState(f.updater.context).initialSourceJob).toBeUndefined();
       await terminalCycles(f, first.job!);
       expect(git(f.target, "rev-parse", "main")).toBe(f.expectedMain);
-      expect(git(f.target, "for-each-ref", "--format=%(refname)", "refs/heads/dori-update/")).toBe("");
+      expect(git(f.target, "for-each-ref", "--format=%(refname)", "refs/heads/cataly-update/")).toBe("");
     },
     terminalCycleTimeoutMs,
   );
@@ -209,7 +209,7 @@ it("a transient pre-record remote operation retries the same ready job without a
     expect(first.notification).toBeUndefined();
     expect(first.commands).toEqual(f.job.commands);
     expect(pendingPromotion(f.updater.context, readState(f.updater.context))?.id).toBe(f.job.id);
-    const resumed = await new DoriUpdater(f.config, (event) => f.events.push(event)).once();
+    const resumed = await new CatalyUpdater(f.config, (event) => f.events.push(event)).once();
     expect(resumed.outcome).toBe("promoted");
     expect(resumed.job?.id).toBe(f.job.id);
     expect(resumed.job?.promotion?.status).toBe("complete");

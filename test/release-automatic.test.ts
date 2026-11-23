@@ -6,7 +6,7 @@ import { readAutomaticState, setAutomaticEnabled } from "../src/release/automati
 import type { VerifiedBundle } from "../src/release/bundle.ts";
 import { saveJson } from "../src/release/files.ts";
 import { installBundle, rollbackRelease } from "../src/release/install.ts";
-import { supportsReleaseProfile } from "../src/release/manifest.ts";
+import { supportsReleaseProfile } from "../src/release/capabilities.ts";
 import { loadInstalled, releasePath } from "../src/release/state.ts";
 import { portableFixture as fixture } from "./release-consumer-setup.ts";
 
@@ -163,7 +163,7 @@ posix.each(["ulw", "native"])("explicit %s overrides are preserved without an au
   const one = await installBundle(f.paths, f.release("one").bundle, undefined);
   const config = JSON.parse(readFileSync(f.paths.config, "utf8"));
   if (kind === "ulw") config.ompUlwPath = "/owner/ulw/index.ts";
-  else config.agentCommand = ["/owner/omp", "--dori-role", "lane"];
+  else config.agentCommand = ["/owner/omp", "--cataly-role", "lane"];
   saveJson(f.paths.config, config);
   const bytes = readFileSync(f.paths.config);
   expect(
@@ -179,7 +179,7 @@ posix.each(["ulw", "native"])("explicit %s overrides are preserved without an au
   expect(readFileSync(f.paths.config)).toEqual(bytes);
 });
 
-posix.each(["OMP_ULW_SRC", "OMP_ULW_REF", "OMP_ULW_REPO", "DORI_OMP", "DORI_AGENT_ARGV", "DORI_OMP_ULW_PATH"])(
+posix.each(["OMP_ULW_SRC", "OMP_ULW_REF", "OMP_ULW_REPO", "CATALY_OMP", "CATALY_AGENT_ARGV", "CATALY_OMP_ULW_PATH"])(
   "explicit %s environment selection suppresses automatic updates",
   async (name) => {
     const f = fixture();

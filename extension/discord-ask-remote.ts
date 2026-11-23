@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { openDiscordAskMailbox } from "../skills/dori-mode/scripts/src/messenger/discord-ask-mailbox.ts";
-import { isDiscordSnowflake } from "../skills/dori-mode/scripts/src/messenger/discord-inbound-state.ts";
-import { Discord } from "../skills/dori-mode/scripts/src/messenger/discord.ts";
-import { fetchHttp } from "../skills/dori-mode/scripts/src/messenger/http.ts";
+import { openDiscordAskMailbox } from "../skills/cataly-mode/scripts/src/messenger/discord-ask-mailbox.ts";
+import { isDiscordSnowflake } from "../skills/cataly-mode/scripts/src/messenger/discord-inbound-state.ts";
+import { Discord, discordApiBase } from "../skills/cataly-mode/scripts/src/messenger/discord.ts";
+import { fetchHttp } from "../skills/cataly-mode/scripts/src/messenger/http.ts";
 import { buildDiscordAskCard } from "./discord-ask-card.ts";
 import { type AskData, parseAskAnswer, parseAskChoice, projectAskForm } from "./discord-ask-form.ts";
 import { type AskButtonSocket, openAskButtons } from "./discord-ask-interactions.ts";
@@ -23,15 +23,17 @@ export async function askOnDiscord(options: {
   readonly stillConnected?: (() => Promise<boolean>) | undefined;
   readonly warn: (message: string) => void;
   readonly openSocket?: AskButtonSocket | undefined;
+  readonly apiOverride: string;
 }): Promise<{ data: AskData; timedOut?: true } | undefined> {
-  const { html, route, token, stillConnected, signal, warn, openSocket } = options;
+  const { html, route, token, stillConnected, signal, warn, openSocket, apiOverride } = options;
   const form = await projectAskForm(html);
   if (!form) {
     warn("This ASK form needs the local OMP dialog; nothing was posted to Discord.");
     return;
   }
   signal.throwIfAborted();
-  const discord = new Discord(fetchHttp, { now: Date.now, sleep: Bun.sleep }, token);
+  const base = discordApiBase(apiOverride);
+  const discord = new Discord(fetchHttp, { now: Date.now, sleep: Bun.sleep }, token, base);
   const path = `/channels/${route.channel}/messages`;
   const requestSignal = () => AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
   const post = (content: string, reference?: string) =>
@@ -68,7 +70,9 @@ export async function askOnDiscord(options: {
   try {
     if (card) {
       const binding = { channel: route.channel, owner: route.owner, question: question.id, answers: card.answers };
-      buttons = await openAskButtons(token, binding, signal, openSocket).catch(() => undefined);
+      buttons = await openAskButtons(token, binding, signal, { base, apiOverride, open: openSocket }).catch(
+        () => undefined,
+      );
       void buttons?.answer.then((answer) => {
         clicked = answer;
       });

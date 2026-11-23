@@ -12,7 +12,7 @@ import {
 import { dirname, join } from "node:path";
 import { UpdateError } from "./config.ts";
 import type { PublicationProcess } from "./publish-process.ts";
-import type { PublicationBasis } from "./publish-types.ts";
+import type { PublicationRecord } from "./publish-types.ts";
 import { assertSource, digest, sameManifest, sourceManifest } from "./source.ts";
 import { saveJson } from "./state.ts";
 import type { SourceEntry, SourceManifest, UpdateJob } from "./types.ts";
@@ -143,21 +143,22 @@ export async function publicCommit(
   process: PublicationProcess,
   job: UpdateJob,
   manifest: SourceManifest,
-  expectedMain: string,
-  basis: PublicationBasis,
+  intent: Pick<PublicationRecord, "expectedMain" | "basis" | "branch">,
 ): Promise<{ readonly commit: string; readonly tree: string }> {
   const source = materializePublic(job, manifest);
   const treeHash = await publicTree(process, source, manifest);
   if (!sameManifest(sourceManifest(source), manifest))
     throw new UpdateError("public export changed while writing Git objects");
   assertSource(job);
+  const { expectedMain, basis, branch } = intent;
+  const brand = branch === `refs/heads/dori-update/${job.id}` ? "Dori" : "Cataly";
   const message = [
-    `Port Dori upstream ${job.upstream.slice(0, 12)} to OMP`,
+    `Port ${brand} upstream ${job.upstream.slice(0, 12)} to OMP`,
     "",
     `Upstream-Commit: ${job.upstream}`,
     `Upstream-Base: ${job.baseUpstream}`,
-    `Dori-Source-SHA256: ${job.sourceHash}`,
-    `Dori-Export-SHA256: ${manifest.hash}`,
+    `${brand}-Source-SHA256: ${job.sourceHash}`,
+    `${brand}-Export-SHA256: ${manifest.hash}`,
     ...(basis.kind === "initial-source" ? ["Initial-Source-Basis: historical-replay"] : []),
     "",
   ].join("\n");

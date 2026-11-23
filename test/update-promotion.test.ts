@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { parseDeploymentConfig } from "../src/update/deployment.ts";
 import { pendingPromotion } from "../src/update/promotion.ts";
 import { publishRelease } from "../src/update/publish.ts";
@@ -22,7 +22,7 @@ it("terminal held promotion retains its evidence and baseline while dedup permit
   const configHash = f.updater.context.configHash;
   expect(pendingPromotion(f.updater.context, state)).toBeUndefined();
 
-  const duplicate = await new DoriUpdater(f.config, () => {}).once();
+  const duplicate = await new CatalyUpdater(f.config, () => {}).once();
   expect(duplicate.outcome).toBe("duplicate");
   expect(duplicate.job?.id).toBe(f.job.id);
   expect(duplicate.job?.commands).toEqual(f.job.commands);
@@ -32,7 +32,7 @@ it("terminal held promotion retains its evidence and baseline while dedup permit
   git(f.remote, "add", ".");
   git(f.remote, "commit", "-m", "New upstream after terminal promotion hold");
   const upstream = git(f.remote, "rev-parse", "HEAD");
-  const restarted = new DoriUpdater(f.config, () => {});
+  const restarted = new CatalyUpdater(f.config, () => {});
   const next = await restarted.once();
   expect(next.outcome).toBe("candidate");
   expect(next.job?.upstream).toBe(upstream);
@@ -50,31 +50,31 @@ it("terminal held promotion retains its evidence and baseline while dedup permit
   expect(restarted.context.configHash).toBe(configHash);
   expect(restarted.context.config.baseUpstream).toBe(f.config.baseUpstream);
   expect(git(f.target, "rev-parse", "main")).toBe(f.expectedMain);
-  expect(git(f.target, "for-each-ref", "--format=%(refname)", "refs/heads/dori-update/")).toBe("");
+  expect(git(f.target, "for-each-ref", "--format=%(refname)", "refs/heads/cataly-update/")).toBe("");
 });
 
 it("published ancestor remains published while advanced owner main holds stale deployment before effects", async () => {
   const f = await publicationFixture((paths) => {
     const home = join(paths.directory, "operator-home");
-    const doriHome = join(home, ".dori");
-    const stateDir = join(doriHome, "state");
-    const doriConfig = join(doriHome, "config.json");
+    const catalyHome = join(home, ".cataly");
+    const stateDir = join(catalyHome, "state");
+    const catalyConfig = join(catalyHome, "config.json");
     mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-    saveJson(doriConfig, { runtime: "herdr", stateDir, defaultCwd: paths.localSource });
+    saveJson(catalyConfig, { runtime: "herdr", stateDir, defaultCwd: paths.localSource });
     return {
       promotion: {
         publish: {
           remote: join(paths.directory, "publication.git"),
           ref: "refs/heads/main",
-          author: { name: "Dori publication fixture", email: "publication@example.invalid" },
+          author: { name: "Cataly publication fixture", email: "publication@example.invalid" },
         },
         deployment: parseDeploymentConfig(
           {
             releaseRoot: join(paths.directory, "releases"),
             liveSource: paths.localSource,
             home,
-            doriHome,
-            doriConfig,
+            catalyHome,
+            catalyConfig,
             stateDir,
             bun: process.execPath,
             omp: process.execPath,
@@ -82,7 +82,7 @@ it("published ancestor remains published while advanced owner main holds stale d
             pane: "fixture:p1",
             sessionId: "00000000-0000-4000-8000-000000000001",
             model: "openai-codex/gpt-6.1-sol",
-            restartLock: join(doriHome, "deployment.lock"),
+            restartLock: join(catalyHome, "deployment.lock"),
             launcherPath: join(paths.directory, "bin", "managed-restart"),
             healthTimeoutMs: 100,
             stopTimeoutMs: 100,

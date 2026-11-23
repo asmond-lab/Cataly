@@ -9,17 +9,17 @@ const root = resolve("/r");
 
 const base = {
   releaseRoot: "managed",
-  liveSource: "home/.dori/src",
+  liveSource: "home/.cataly/src",
   home: "home",
-  doriHome: "home/.dori",
-  doriConfig: "home/.dori/config.json",
-  stateDir: "home/.dori/state",
+  catalyHome: "home/.cataly",
+  catalyConfig: "home/.cataly/config.json",
+  stateDir: "home/.cataly/state",
   bun: "home/private-bun/bun",
   omp: "home/private-omp/omp",
   sessionId: "preserved-session",
   model: "openai-codex/gpt-6.1-sol",
-  restartLock: "home/.dori/restart.lock",
-  launcherPath: "home/.dori/bin/restart",
+  restartLock: "home/.cataly/restart.lock",
+  launcherPath: "home/.cataly/bin/restart",
   healthTimeoutMs: 100,
 };
 const hcConfig = { ...base, runtime: "hc", hc: "home/private-cli/hc", hcSession: "default", pane: "t13j" };

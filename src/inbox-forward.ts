@@ -63,6 +63,10 @@ function movedInto(root: string, ref: SessionRef): string[] {
     });
 }
 
+/** A harness stop must not race a writer routing to the same inbox through another ref. */
+export const hasInboxForward = (root: string, ref: SessionRef): boolean =>
+  existsSync(`${inboxFile(root, ref)}${MARKER}`) || movedInto(root, ref).length > 0;
+
 /** True when ref's inbox has entries to move in: spooled beside it, or waiting in an old inbox that names it. */
 export const mergePending = (root: string, ref: SessionRef): boolean =>
   spooled(inboxFile(root, ref), true).length > 0 ||

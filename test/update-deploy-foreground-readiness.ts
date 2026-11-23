@@ -172,7 +172,7 @@ function spawnForegroundActor(phase: "prior" | "current", spawn: () => ChildProc
         throw error;
       }
     })());
-  const waitForReady = async () => {
+  const waitForReady = async (timeoutMs = 6_000) => {
     if (!child.stdout) throw failure("missing stdout pipe");
     const lines = createInterface({ input: child.stdout });
     const options = { signal: readiness.signal };
@@ -180,7 +180,8 @@ function spawnForegroundActor(phase: "prior" | "current", spawn: () => ChildProc
       const eof = once(lines, "close", options).then(() => Promise.reject(new Error("stdout EOF before ready line")));
       // A normal exit can precede delivery of the actor's last stdout line.
       const spawnFailure = exited.then((error) => (error ? Promise.reject(error) : eof));
-      const [line] = await Promise.race([once(lines, "line", options), eof, spawnFailure]);
+      const ready = Promise.race([once(lines, "line", options), eof, spawnFailure]);
+      const [line] = await withinFixturePhase(ready, timeoutMs, "actor ready line");
       const observed = JSON.parse(String(line)) as { pid: number; monitors: number[] } | { error: string };
       if ("error" in observed) throw new Error(observed.error);
       return observed;
@@ -203,7 +204,7 @@ export const foregroundActor = {
 };
 
 export function silentForegroundActor() {
-  const root = mkdtempSync(join(tmpdir(), "dori-silent-foreground-"));
+  const root = mkdtempSync(join(tmpdir(), "cataly-silent-foreground-"));
   const marker = join(root, "monitor.pid");
   const script = join(root, "actor");
   const { promise: started, resolve } = Promise.withResolvers<void>();

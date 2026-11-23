@@ -24,7 +24,7 @@ async function pullRequest(process: PublicationProcess, record: PublicationRecor
     save();
     try {
       await process.api(`repos/${repository}/pulls`, "POST", {
-        title: `Dori OMP publication ${record.commit!.slice(0, 12)}`,
+        title: `Cataly OMP publication ${record.commit!.slice(0, 12)}`,
         head,
         base,
         body: `Checked source: ${record.sourceHash}\nPublic export: ${record.exportHash}\nExact publication commit: ${record.commit}`,

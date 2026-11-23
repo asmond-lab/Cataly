@@ -7,20 +7,20 @@ import { groupId } from "../src/runtime/group.ts";
 
 describe("groupId", () => {
   test("is 8 lowercase hex chars and stable for one store root", () => {
-    const id = groupId("/some/dori/home");
+    const id = groupId("/some/cataly/home");
     expect(id).toMatch(/^[0-9a-f]{8}$/);
-    expect(groupId("/some/dori/home")).toBe(id);
+    expect(groupId("/some/cataly/home")).toBe(id);
   });
 
   test("hashes the resolved path: relative and trailing-slash spellings agree, other roots differ", () => {
-    expect(groupId("/some/dori/home/")).toBe(groupId("/some/dori/home"));
-    expect(groupId("/some/dori/./home")).toBe(groupId("/some/dori/home"));
+    expect(groupId("/some/cataly/home/")).toBe(groupId("/some/cataly/home"));
+    expect(groupId("/some/cataly/./home")).toBe(groupId("/some/cataly/home"));
     expect(groupId(".")).toBe(groupId(process.cwd()));
-    expect(groupId("/other/home")).not.toBe(groupId("/some/dori/home"));
+    expect(groupId("/other/home")).not.toBe(groupId("/some/cataly/home"));
   });
 
   test("a symlinked store root shares the target's group", () => {
-    const dir = mkdtempSync(join(tmpdir(), "dori-group-"));
+    const dir = mkdtempSync(join(tmpdir(), "cataly-group-"));
     symlinkSync(dir, `${dir}-link`);
     expect(groupId(`${dir}-link`)).toBe(groupId(dir));
   });

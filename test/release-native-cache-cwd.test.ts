@@ -26,7 +26,7 @@ posix("when no working directory can be read, the report says so for every ident
   const receipt = nativeCacheFixture(f.source, home, f.checkout);
   rmSync(f.source, { recursive: true });
 
-  const entries = reportNativeCache(home, [], [], () => null, { files: ownProcessFiles });
+  const entries = reportNativeCache(home, [], [], () => null, { files: ownProcessFiles, table: () => "" });
 
   expect(entries.map((entry) => [entry.directory, entry.protectedBy])).toEqual([
     [receipt.directory, ["process working directories unavailable"]],

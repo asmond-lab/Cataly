@@ -10,7 +10,7 @@ export { ToolError };
 export class HerdrCli {
   constructor(
     readonly exec: Exec = spawnExec,
-    private readonly session: string | undefined = process.env["DORI_HERDR_SESSION"],
+    private readonly session: string | undefined = process.env["CATALY_HERDR_SESSION"],
   ) {}
 
   async call(argv: readonly string[]): Promise<Record<string, unknown>> {

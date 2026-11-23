@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { DoriUpdater } from "../src/update/controller.ts";
+import { CatalyUpdater } from "../src/update/controller.ts";
 import { verifyCandidate } from "../src/update/pipeline.ts";
 import { prepareCandidate } from "../src/update/prepare.ts";
 import { digest, gitIdentity } from "../src/update/source.ts";
@@ -67,7 +67,7 @@ export function git(cwd: string, ...argv: string[]): string {
 }
 
 export function fixture() {
-  const directory = realpathSync(mkdtempSync(join(tmpdir(), "dori-update-test-")));
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "cataly-update-test-")));
   directories.push(directory);
   const remote = join(directory, "remote");
   const localSource = join(directory, "local");
@@ -78,20 +78,20 @@ export function fixture() {
     writeFileSync(join(root, path), text);
   };
   for (const root of [remote, localSource]) {
-    write(root, "package.json", '{"name":"dori-superagent","type":"module"}\n');
-    write(root, "skills/dori-mode/scripts/src/cli.ts", "export const cli = 1;\n");
+    write(root, "package.json", '{"name":"cataly","type":"module"}\n');
+    write(root, "skills/cataly-mode/scripts/src/cli.ts", "export const cli = 1;\n");
     write(root, "src/behavior.ts", "export const behavior = 1;\n");
     write(root, "omp-ulw.lock", `${"a".repeat(40)}\n`);
   }
   git(remote, "init", "-b", "main");
-  git(remote, "config", "user.name", "Dori updater fixture");
+  git(remote, "config", "user.name", "Cataly updater fixture");
   git(remote, "config", "user.email", "updater@example.invalid");
   git(remote, "add", ".");
-  git(remote, "commit", "-m", "Dori fixture baseline");
+  git(remote, "commit", "-m", "Cataly fixture baseline");
   const baseUpstream = git(remote, "rev-parse", "HEAD");
   const config: UpdateConfig = {
     version: 1,
-    target: "dori",
+    target: "cataly",
     runtime: "herdr",
     root: join(directory, "updates"),
     remote,
@@ -112,7 +112,7 @@ export function fixture() {
     reporterEnv: [],
   };
   const events: UpdateEvent[] = [];
-  const updater = new DoriUpdater(config, (event) => events.push(event));
+  const updater = new CatalyUpdater(config, (event) => events.push(event));
   return { directory, remote, localSource, config, updater, events, write };
 }
 
@@ -121,7 +121,7 @@ export type PublicationFixture = {
   readonly remote: string;
   readonly localSource: string;
   readonly config: UpdateConfig;
-  readonly updater: DoriUpdater;
+  readonly updater: CatalyUpdater;
   readonly events: UpdateEvent[];
   readonly write: (root: string, path: string, text: string) => void;
   readonly job: UpdateJob;
@@ -155,7 +155,7 @@ export async function publicationFixture(
   f.write(seed, "package.json", '{"name":"independent-owner-history","type":"module"}\n');
   git(seed, "add", ".");
   git(seed, "commit", "-m", "Independent owner history");
-  for (const path of ["package.json", "skills/dori-mode/scripts/src/cli.ts", "src/behavior.ts", "omp-ulw.lock"]) {
+  for (const path of ["package.json", "skills/cataly-mode/scripts/src/cli.ts", "src/behavior.ts", "omp-ulw.lock"]) {
     f.write(seed, path, readFileSync(join(f.localSource, path), "utf8"));
   }
   git(seed, "add", ".");
@@ -190,12 +190,12 @@ export async function publicationFixture(
       publish: {
         remote: target,
         ref: "refs/heads/main",
-        author: { name: "Dori publication fixture", email: "publication@example.invalid" },
+        author: { name: "Cataly publication fixture", email: "publication@example.invalid" },
       },
     },
     ...options(f),
   };
-  const updater = new DoriUpdater(config, (event) => f.events.push(event));
+  const updater = new CatalyUpdater(config, (event) => f.events.push(event));
   const id = digest(`${updater.context.configHash}\n${upstream}`);
   const directory = join(config.root, "jobs", id);
   mkdirSync(directory, { recursive: true, mode: 0o700 });

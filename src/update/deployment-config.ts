@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { hasControl } from "./config.ts";
 import type { DeploymentConfig } from "./deployment-types.ts";
+import { digest } from "./source.ts";
 
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -19,6 +20,19 @@ const below = (root: string, path: string): boolean => {
 export const runtimeBinary = (config: DeploymentConfig): string =>
   (config.runtime === "hc" ? config.hc : config.herdr) ?? fail(config.runtime ?? "herdr");
 
+/** Preserve the exact v0.1.3 framing of an already-journaled config without changing any configured values. */
+export function legacyDeploymentConfig(config: DeploymentConfig): object {
+  return Object.fromEntries(
+    Object.entries(config).map(([key, value]) => [
+      key === "catalyHome" ? "doriHome" : key === "catalyConfig" ? "doriConfig" : key,
+      value,
+    ]),
+  );
+}
+
+export const matchesDeploymentConfigHash = (config: DeploymentConfig, expected: string): boolean =>
+  digest(JSON.stringify(config)) === expected || digest(JSON.stringify(legacyDeploymentConfig(config))) === expected;
+
 /** Keep lexical paths stable when liveSource changes from a directory to a release symlink. */
 export function parseDeploymentConfig(
   value: { omp: string } & Record<string, unknown>,
@@ -31,8 +45,8 @@ export function parseDeploymentConfig(value: unknown, configDir: string): Deploy
     "releaseRoot",
     "liveSource",
     "home",
-    "doriHome",
-    "doriConfig",
+    "catalyHome",
+    "catalyConfig",
     "stateDir",
     "bun",
     "pane",
@@ -44,6 +58,8 @@ export function parseDeploymentConfig(value: unknown, configDir: string): Deploy
   ];
   const allowed = new Set([
     ...required,
+    "doriHome",
+    "doriConfig",
     "legacyOmp",
     "omp",
     "stopTimeoutMs",
@@ -83,6 +99,10 @@ export function parseDeploymentConfig(value: unknown, configDir: string): Deploy
       : resolve(supplied.startsWith("~/") ? home : configDir, supplied.startsWith("~/") ? supplied.slice(2) : supplied);
   };
   const path = (name: string): string => resolvedPath(value[name], name);
+  const renamedPath = (name: string, legacy: string): string => {
+    if (Object.hasOwn(value, name) && Object.hasOwn(value, legacy)) return fail(name);
+    return resolvedPath(Object.hasOwn(value, legacy) ? value[legacy] : value[name], name);
+  };
   const ms = (name: string, fallback?: number): number => {
     const n = value[name] === undefined ? fallback : value[name];
     return typeof n === "number" && Number.isSafeInteger(n) && n >= 100 && n <= 600_000 ? n : fail(name);
@@ -91,8 +111,8 @@ export function parseDeploymentConfig(value: unknown, configDir: string): Deploy
     releaseRoot: path("releaseRoot"),
     liveSource: path("liveSource"),
     home,
-    doriHome: path("doriHome"),
-    doriConfig: path("doriConfig"),
+    catalyHome: renamedPath("catalyHome", "doriHome"),
+    catalyConfig: renamedPath("catalyConfig", "doriConfig"),
     stateDir: path("stateDir"),
     bun: path("bun"),
     ...(value["omp"] === undefined ? {} : { omp: path("omp") }),
@@ -118,8 +138,8 @@ export function parseDeploymentConfig(value: unknown, configDir: string): Deploy
   if (!/^[A-Za-z0-9_-]+$/.test(config.sessionId)) return fail("sessionId");
   if (!/^[A-Za-z0-9_.:-]+\/[A-Za-z0-9_.:/-]+$/.test(config.model)) return fail("model");
   if (
-    !below(config.home, config.doriHome) ||
-    !below(config.home, config.doriConfig) ||
+    !below(config.home, config.catalyHome) ||
+    !below(config.home, config.catalyConfig) ||
     !below(config.home, config.stateDir)
   )
     return fail("operator paths");
@@ -144,7 +164,7 @@ export function parseDeploymentConfig(value: unknown, configDir: string): Deploy
     config.liveSource,
     config.launcherPath,
     config.restartLock,
-    config.doriConfig,
+    config.catalyConfig,
     config.bun,
     ...(config.omp ? [config.omp] : []),
     runtimeBinary(config),

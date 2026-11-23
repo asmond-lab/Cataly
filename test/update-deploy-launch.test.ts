@@ -18,25 +18,30 @@ afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
-posix("launched process chronology allows only the two-second ps precision window", async () => {
-  const root = mkdtempSync(join(tmpdir(), "dori-deploy-identity-"));
+posix.each([
+  { flags: ["--cataly-role", "cataly"], owned: true },
+  { flags: ["--dori-role", "dori"], owned: true },
+  { flags: ["--dori-role", "cataly", "dori"], owned: false },
+  { flags: ["--dori-role", "dori", "--cataly-role", "lane"], owned: false },
+])("only exact role pairs can identify a startup process and its chronology %#", async ({ flags, owned }) => {
+  const root = mkdtempSync(join(tmpdir(), "cataly-deploy-identity-"));
   directories.push(root);
   const config = parseDeploymentConfig(
     {
       releaseRoot: "managed",
-      liveSource: "home/.dori/src",
+      liveSource: "home/.cataly/src",
       home: "home",
-      doriHome: "home/.dori",
-      doriConfig: "home/.dori/config.json",
-      stateDir: "home/.dori/state",
+      catalyHome: "home/.cataly",
+      catalyConfig: "home/.cataly/config.json",
+      stateDir: "home/.cataly/state",
       bun: process.execPath,
       omp: process.execPath,
       herdr: process.execPath,
       pane: "w1:p1",
       sessionId: "same-session",
       model: "openai-codex/gpt-6.1-sol",
-      restartLock: "home/.dori/restart.lock",
-      launcherPath: "home/.dori/bin/restart",
+      restartLock: "home/.cataly/restart.lock",
+      launcherPath: "home/.cataly/bin/restart",
       healthTimeoutMs: 100,
       quiesceCheckpointFile: "quiesce.json",
     },
@@ -44,7 +49,7 @@ posix("launched process chronology allows only the two-second ps precision windo
   );
   const runtime: RuntimeIdentity = {
     ...processIdentity(process.pid)!,
-    role: "dori",
+    role: "cataly",
     pane: config.pane,
     sessionId: config.sessionId,
     sessionFile: join(root, "existing-session.jsonl"),
@@ -88,8 +93,7 @@ posix("launched process chronology allows only the two-second ps precision windo
     'console.log("ready"); await Bun.stdin.text();',
     "--",
     `--resume=${f.runtime.sessionFile}`,
-    "--dori-role",
-    "dori",
+    ...flags,
     "--model",
     f.config.model,
     "--config",
@@ -128,6 +132,10 @@ posix("launched process chronology allows only the two-second ps precision windo
       expect(args).toEqual(["-o", "lstart=", "-p", String(child.pid)]);
       return { code: 0, stdout: `${psStart}\n`, stderr: "" };
     }, "clock-guard");
+    if (!owned) {
+      await expect(launchedProcess(f.config, cli, f.record, since)).rejects.toThrow("identity is ambiguous");
+      return;
+    }
     for (const prior of [false, true]) {
       expect(await launchedProcess(f.config, cli, f.record, since, prior)).toEqual(identity);
       expect(await launchedProcess(f.config, cli, f.record, "2026-11-12T01:31:07.000Z", prior)).toEqual(identity);
@@ -154,7 +162,7 @@ test
   .each(["Etc/UTC", "America/New_York", "Asia/Seoul"])(
   "native ps observation preserves the caller's %s epoch without inheriting its environment",
   async (timezone) => {
-    const root = mkdtempSync(join(tmpdir(), "dori-observer-zone-"));
+    const root = mkdtempSync(join(tmpdir(), "cataly-observer-zone-"));
     directories.push(root);
     const observer = join(root, "observer.ts");
     writeFileSync(

@@ -10,7 +10,7 @@ import { terminal } from "./fake-hc.ts";
 
 /** Synthetic extension state and process evidence: no real agent, terminal or ps is started. */
 export function ompWorld(kind: RuntimeKind = "herdr", direct = false, withState = true) {
-  const stateDir = mkdtempSync(join(tmpdir(), "dori-omp-"));
+  const stateDir = mkdtempSync(join(tmpdir(), "cataly-omp-"));
   const ref: SessionRef = { runtime: kind, id: kind === "herdr" ? "w1:p1" : "t1" };
   const path = join(stateDir, "sessions", `${encodeURIComponent(ref.id)}.json`);
   const record = {
@@ -30,7 +30,7 @@ export function ompWorld(kind: RuntimeKind = "herdr", direct = false, withState 
   const save = () => writeFileSync(path, JSON.stringify(record));
   if (withState) save();
   const control = {
-    table: `100 1 /bin/bash\n101 ${direct ? 1 : 100} bun /synthetic/omp --dori-role lane\n`,
+    table: `100 1 /bin/bash\n101 ${direct ? 1 : 100} bun /synthetic/omp --cataly-role lane\n`,
     started: "2026-11-11T00:00:00Z",
     psCode: 0,
     onPs: (_argv: readonly string[]): void => {},

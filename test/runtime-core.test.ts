@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { interactiveShellInFront } from "../src/runtime/foreground.ts";
 import { Runtimes } from "../src/runtime/registry.ts";
-import type { CreateSpec, ForegroundProcess, RuntimeKind, SessionRef, SessionRuntime } from "../src/runtime/types.ts";
+import type { CreateSpec, ForegroundProcess, RuntimeKind, SessionRef, TerminalRuntime } from "../src/runtime/types.ts";
 import { formatRef, openSession, parseRef } from "../src/runtime/types.ts";
 
 describe("parseRef / formatRef", () => {
@@ -86,27 +86,29 @@ describe("interactiveShellInFront (#66), ported from the herdr parser", () => {
   });
 });
 
-describe("Runtimes registry", () => {
-  const fakeRuntime = (kind: RuntimeKind): SessionRuntime => {
-    const never = (): never => {
-      throw new Error("not used");
-    };
-    return {
-      kind,
-      self: () => undefined,
-      createGroup: never,
-      create: never,
-      start: never,
-      list: never,
-      probe: never,
-      read: never,
-      deliver: never,
-      submitTyped: never,
-      typeIntoShell: never,
-      keys: never,
-      close: never,
-    };
+const unused = (): never => {
+  throw new Error("unexpected runtime operation");
+};
+const fakeRuntime = (kind: RuntimeKind): TerminalRuntime => {
+  if (kind === "headless") throw new Error("unexpected native runtime construction");
+  return {
+    kind,
+    self: () => undefined,
+    create: unused,
+    list: unused,
+    probe: unused,
+    read: unused,
+    deliver: unused,
+    close: unused,
+    createGroup: unused,
+    start: unused,
+    submitTyped: unused,
+    typeIntoShell: unused,
+    keys: unused,
   };
+};
+
+describe("Runtimes registry", () => {
   const counting = () => {
     const made: RuntimeKind[] = [];
     const runtimes = new Runtimes("hc", (k) => {
@@ -120,8 +122,7 @@ describe("Runtimes registry", () => {
     const { made, runtimes } = counting();
     expect(made).toEqual([]);
     const a = runtimes.default;
-    const b = runtimes.default;
-    expect(a).toBe(b);
+    expect(runtimes.default).toBe(a);
     expect(a.kind).toBe("hc");
     expect(made).toEqual(["hc"]);
   });
@@ -131,13 +132,31 @@ describe("Runtimes registry", () => {
     const herdrRef: SessionRef = { runtime: "herdr", id: "w1:p3" };
     expect(runtimes.for(herdrRef).kind).toBe("herdr");
     expect(runtimes.for({ runtime: "hc", id: "t7" })).toBe(runtimes.default);
-    expect(runtimes.for(herdrRef)).toBe(runtimes.for(herdrRef));
+    expect(runtimes.for(herdrRef)).toBe(runtimes.terminal("herdr"));
     expect(made).toEqual(["herdr", "hc"]);
+  });
+
+  test("terminal lookup refuses a native lane without constructing an adapter", () => {
+    const { made, runtimes } = counting();
+    expect(() => runtimes.terminal("headless")).toThrow();
+    expect(made).toEqual([]);
+  });
+
+  test("for(ref) never calls the lazy choice; default does", () => {
+    let asked = 0;
+    const rts = new Runtimes(() => {
+      asked += 1;
+      return "hc";
+    }, fakeRuntime);
+    expect(rts.for({ runtime: "herdr", id: "w1:p3" }).kind).toBe("herdr");
+    expect(asked).toBe(0);
+    expect(rts.default.kind).toBe("hc");
+    expect(asked).toBe(1);
   });
 });
 
 describe("Runtimes.kinds and selfAny", () => {
-  const make = () => new Runtimes("herdr", (k) => ({ kind: k }) as unknown as SessionRuntime);
+  const make = () => new Runtimes("herdr", fakeRuntime);
 
   test("kinds lists the runtimes built so far, in first-use order", () => {
     const runtimes = make();
@@ -178,8 +197,8 @@ describe("openSession", () => {
   test("creates the session, then starts the command in it, and returns the created ref", async () => {
     const calls: string[] = [];
     const ref: SessionRef = { runtime: "hc", id: "t9", group: "g" };
-    const rt = {
-      kind: "hc",
+    const rt: TerminalRuntime = {
+      ...fakeRuntime("hc"),
       create: async (spec: CreateSpec) => {
         calls.push(`create ${spec.name} ${spec.container}`);
         return ref;
@@ -187,7 +206,7 @@ describe("openSession", () => {
       start: async (r: SessionRef, command: string) => {
         calls.push(`start ${formatRef(r)} ${command}`);
       },
-    } as unknown as SessionRuntime;
+    };
     const spec: CreateSpec = { name: "lane-a", cwd: "/w", env: {}, role: "lane", container: "tab" };
     expect(await openSession(rt, spec, "omo")).toBe(ref);
     expect(calls).toEqual(["create lane-a tab", "start hc:t9 omo"]);
@@ -195,8 +214,9 @@ describe("openSession", () => {
 
   test("a failed start closes the session it just created (scope session) and rethrows the start error", async () => {
     const calls: string[] = [];
-    const rt = {
-      create: async () => ({ runtime: "hc", id: "t4" }) as SessionRef,
+    const rt: TerminalRuntime = {
+      ...fakeRuntime("hc"),
+      create: async () => ({ runtime: "hc", id: "t4" }),
       start: async () => {
         calls.push("start");
         throw new Error("send refused");
@@ -204,7 +224,7 @@ describe("openSession", () => {
       close: async (r: SessionRef, scope?: string) => {
         calls.push(`close ${formatRef(r)} ${scope}`);
       },
-    } as unknown as SessionRuntime;
+    };
     await expect(
       openSession(rt, { name: "x", cwd: "/", env: {}, role: "lane", container: "tab" }, "omo"),
     ).rejects.toThrow("send refused");
@@ -213,32 +233,18 @@ describe("openSession", () => {
 
   test("a failed create starts nothing", async () => {
     let started = false;
-    const rt = {
+    const rt: TerminalRuntime = {
+      ...fakeRuntime("hc"),
       create: async () => {
         throw new Error("no space");
       },
       start: async () => {
         started = true;
       },
-    } as unknown as SessionRuntime;
+    };
     await expect(
       openSession(rt, { name: "x", cwd: "/", env: {}, role: "lead", container: "workspace-root" }, "omo"),
     ).rejects.toThrow("no space");
     expect(started).toBe(false);
-  });
-});
-
-describe("Runtimes with a lazy choice", () => {
-  test("for(ref) never calls the choice; default does", () => {
-    let asked = 0;
-    const make = (kind: RuntimeKind): SessionRuntime => ({ kind }) as unknown as SessionRuntime;
-    const rts = new Runtimes(() => {
-      asked += 1;
-      return "hc";
-    }, make);
-    expect(rts.for({ runtime: "herdr", id: "w1:p3" }).kind).toBe("herdr");
-    expect(asked).toBe(0);
-    expect(rts.default.kind).toBe("hc");
-    expect(asked).toBe(1);
   });
 });

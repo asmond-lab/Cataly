@@ -102,7 +102,7 @@ export function importId(repo: string, n: number): string {
 export async function backlogImport(
   d: Deps,
   repo: string,
-  label = "dori",
+  label = "cataly",
   cwd?: string,
 ): Promise<{ added: string[]; capped: boolean }> {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Refusal(`repo must look like owner/repo, got ${repo}`);

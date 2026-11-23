@@ -26,7 +26,7 @@ posix("a writer leases first and waits while a prune holds the lock, then goes o
   const release = claimNativePrune(c.home);
   const code = `const { leaseNativeIdentity } = await import(${JSON.stringify(LEASE)}); leaseNativeIdentity(process.argv[1], process.argv[2]); console.log(Date.now());`;
   const writer = Bun.spawn([process.execPath, "-e", code, c.home, x.identity], { stdout: "pipe", stderr: "pipe" });
-  const leases = join(c.home, ".cache/omp-dori/native-leases", x.identity);
+  const leases = join(c.home, ".cache/omp-cataly/native-leases", x.identity);
   let released = 0;
   try {
     // Its lease appears for the prune to see before it reads the lock (a file, so polled for).
@@ -72,8 +72,8 @@ test("the cache launcher's lease lasts as long as the shell that execs OMP, and 
 });
 
 test("a script's lease holder is the named shell, else its parent", () => {
-  expect(scriptLeaseHolder({ DORI_NATIVE_LEASE_PID: "4242" })).toBe(4242);
-  expect(() => scriptLeaseHolder({ DORI_NATIVE_LEASE_PID: "4242; rm" })).toThrow("must be a process id");
+  expect(scriptLeaseHolder({ CATALY_NATIVE_LEASE_PID: "4242" })).toBe(4242);
+  expect(() => scriptLeaseHolder({ CATALY_NATIVE_LEASE_PID: "4242; rm" })).toThrow("must be a process id");
   expect(scriptLeaseHolder({})).toBe(process.ppid > 1 ? process.ppid : process.pid);
 });
 
@@ -82,7 +82,7 @@ posix(
   async () => {
     const c = pruneFixture();
     const x = c.native("x");
-    const lock = join(c.home, ".cache/omp-dori/native-prune.lock");
+    const lock = join(c.home, ".cache/omp-cataly/native-prune.lock");
     const code = `const { claimNativePrune } = await import(${JSON.stringify(LEASE)}); claimNativePrune(process.argv[1]); console.log("held"); await Bun.stdin.text();`;
     const holder = Bun.spawn([process.execPath, "-e", code, c.home], { stdin: "pipe", stdout: "pipe" });
     try {
@@ -166,7 +166,7 @@ posix("direct legacy inspection leases its identity before executable or fence v
   await expect(
     inspectRuntimeToolchain({ ...f.config, home: c.home }, f.record, join(x.directory, "bin/missing"), true),
   ).rejects.toThrow("is gone from the native cache");
-  const leases = join(c.home, ".cache/omp-dori/native-leases", x.identity);
+  const leases = join(c.home, ".cache/omp-cataly/native-leases", x.identity);
   expect(readdirSync(leases).some((name) => name.startsWith(`${process.pid}-`))).toBe(true);
   expect(existsSync(join(f.config.releaseRoot, "native-config.json"))).toBe(false);
   expect(keptFor(c.prune(), x.directory)).toEqual([`lease of process ${process.pid}`]);
@@ -175,7 +175,7 @@ posix("direct legacy inspection leases its identity before executable or fence v
 posix("a FIFO prune lock is refused by both prunes and writers without blocking", () => {
   const c = pruneFixture();
   const x = c.native("fifo");
-  const lock = join(c.home, ".cache/omp-dori/native-prune.lock");
+  const lock = join(c.home, ".cache/omp-cataly/native-prune.lock");
   const made = Bun.spawnSync(["python3", "-c", "import os,sys; os.mkfifo(sys.argv[1])", lock]);
   expect(made.exitCode).toBe(0);
   expect(() => c.prune()).toThrow("Another native cache prune holds");

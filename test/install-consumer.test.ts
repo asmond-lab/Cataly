@@ -18,7 +18,7 @@ posix("a consumer home with its extension link holds a non-terminal source insta
   expect(r.code).toBe(1);
   expect(protectedSnapshot(paths)).toEqual(before);
   expect(snapshot(source.src)).toBe(checkout);
-  expect(existsSync(join(paths.home, ".omp-dori"))).toBe(false);
+  expect(existsSync(join(paths.home, ".omp-cataly"))).toBe(false);
   expect(existsSync(join(paths.home, "global-bin"))).toBe(false);
   expect(existsSync(join(source.root, "bun.log"))).toBe(false);
 });
@@ -31,7 +31,7 @@ posix(
     const before = protectedSnapshot(paths);
     const checkout = snapshot(source.src);
     for (const selectedSource of [source.src, ""]) {
-      const r = source.install({ ...consumerEnv(paths), DORI_INSTALL_MODE: "primary", DORI_SRC: selectedSource });
+      const r = source.install({ ...consumerEnv(paths), CATALY_INSTALL_MODE: "primary", CATALY_SRC: selectedSource });
       expect(r.code).toBe(1);
       expect(protectedSnapshot(paths)).toEqual(before);
       expect(snapshot(source.src)).toBe(checkout);
@@ -46,9 +46,9 @@ posix("a separate side source install and its reinstall preserve an installed co
   const { paths } = await installedConsumer();
   const before = protectedSnapshot(paths);
   const options = consumerEnv(paths);
-  expect(source.install({ ...options, DORI_INSTALL_MODE: "side" }).code).toBe(0);
+  expect(source.install({ ...options, CATALY_INSTALL_MODE: "side" }).code).toBe(0);
   expect(protectedSnapshot(paths)).toEqual(before);
-  const side = options.OMP_DORI_HOME;
+  const side = options.OMP_CATALY_HOME;
   const configPath = join(side, "config.json");
   const config = JSON.parse(readFileSync(configPath, "utf8"));
   expect(config.stateDir).toBe(join(side, "state"));
@@ -59,7 +59,7 @@ posix("a separate side source install and its reinstall preserve an installed co
   expect(source.install(options).code).toBe(0);
   expect(protectedSnapshot(paths)).toEqual(before);
   expect(JSON.parse(readFileSync(configPath, "utf8")).defaultModel).toBe("fixture/preserved");
-  expect(readlinkSync(join(options.OMP_DORI_BIN_DIR, "omp-dori"))).toBe(join(side, "bin/omp-dori"));
+  expect(readlinkSync(join(options.OMP_CATALY_BIN_DIR, "omp-cataly"))).toBe(join(side, "bin/omp-cataly"));
 });
 
 posix(
@@ -72,7 +72,7 @@ posix(
     const before = protectedSnapshot(paths);
     const checkout = snapshot(source.src);
     for (const base of [paths.dori, alias]) {
-      const r = source.install({ DORI_INSTALL_MODE: "side", OMP_DORI_HOME: base });
+      const r = source.install({ CATALY_INSTALL_MODE: "side", OMP_CATALY_HOME: base });
       expect(r.code).toBe(1);
       expect(protectedSnapshot(paths)).toEqual(before);
       expect(snapshot(source.src)).toBe(checkout);
@@ -93,7 +93,7 @@ posix.each(["consumer-owner.json", "consumer-installed.json", "consumer-journal.
     symlinkSync(paths.dori, alias);
     const before = protectedSnapshot(paths);
     const checkout = snapshot(source.src);
-    expect(source.install({ DORI_INSTALL_MODE: "side", OMP_DORI_HOME: alias }).code).toBe(1);
+    expect(source.install({ CATALY_INSTALL_MODE: "side", OMP_CATALY_HOME: alias }).code).toBe(1);
     expect(protectedSnapshot(paths)).toEqual(before);
     expect(snapshot(source.src)).toBe(checkout);
     expect(existsSync(join(source.root, "bun.log"))).toBe(false);
@@ -108,13 +108,13 @@ posix(
     const before = protectedSnapshot(paths);
     const checkout = snapshot(source.src);
     const overrides: Record<string, string>[] = [
-      { OMP_DORI_HOME: join(paths.dori, "experiment") },
-      { DORI_SRC: paths.live },
+      { OMP_CATALY_HOME: join(paths.dori, "experiment") },
+      { CATALY_SRC: paths.live },
       { OMP_ULW_SRC: ownedDependency },
-      { OMP_DORI_BIN_DIR: join(paths.dori, "bin") },
+      { OMP_CATALY_BIN_DIR: join(paths.dori, "bin") },
     ];
     for (const override of overrides) {
-      const r = source.install({ ...consumerEnv(paths), DORI_INSTALL_MODE: "side", ...override });
+      const r = source.install({ ...consumerEnv(paths), CATALY_INSTALL_MODE: "side", ...override });
       expect(r.code).toBe(1);
       expect(protectedSnapshot(paths)).toEqual(before);
       expect(snapshot(source.src)).toBe(checkout);
@@ -127,15 +127,15 @@ posix("side config and wrapper symlinks cannot redirect generated files into the
   const source = setup();
   const { paths } = await installedConsumer();
   const options = consumerEnv(paths);
-  const side = options.OMP_DORI_HOME;
+  const side = options.OMP_CATALY_HOME;
   mkdirSync(join(side, "bin"), { recursive: true });
   const before = protectedSnapshot(paths);
   const checkout = snapshot(source.src);
-  for (const entry of ["config.json", "bin/dori"]) {
+  for (const entry of ["config.json", "bin/cataly"]) {
     const path = join(side, entry);
     symlinkSync(paths.config, path);
     const sideBefore = snapshot(side);
-    expect(source.install({ ...options, DORI_INSTALL_MODE: "side" }).code).toBe(1);
+    expect(source.install({ ...options, CATALY_INSTALL_MODE: "side" }).code).toBe(1);
     expect(protectedSnapshot(paths)).toEqual(before);
     expect(snapshot(source.src)).toBe(checkout);
     expect(snapshot(side)).toBe(sideBefore);
@@ -156,15 +156,15 @@ posix.each(["config", "retained"])(
     writeFileSync(join(protectedUlw, "index.ts"), "export default () => {};\n");
     writeFileSync(join(protectedUlw, "presets.ts"), "export {};\n");
     symlinkSync(protectedUlw, alias);
-    mkdirSync(options.OMP_DORI_HOME);
-    const config = join(options.OMP_DORI_HOME, "config.json");
+    mkdirSync(options.OMP_CATALY_HOME);
+    const config = join(options.OMP_CATALY_HOME, "config.json");
     const configBytes = JSON.stringify({ ompUlwPath: choice === "config" ? join(alias, "index.ts") : "" });
     writeFileSync(config, configBytes);
-    if (choice === "retained") symlinkSync(alias, join(options.OMP_DORI_HOME, ".omp-dori-ulw"));
+    if (choice === "retained") symlinkSync(alias, join(options.OMP_CATALY_HOME, ".omp-cataly-ulw"));
     const before = protectedSnapshot(paths);
     const checkout = snapshot(source.src);
     source.upstreamCommit("pending upstream\n");
-    const r = source.install({ ...options, DORI_INSTALL_MODE: "side", OMP_ULW_SRC: "" });
+    const r = source.install({ ...options, CATALY_INSTALL_MODE: "side", OMP_ULW_SRC: "" });
     expect(r.code).toBe(1);
     expect(protectedSnapshot(paths)).toEqual(before);
     expect(snapshot(source.src)).toBe(checkout);

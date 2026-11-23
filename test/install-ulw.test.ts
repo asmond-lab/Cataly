@@ -11,9 +11,9 @@ posix("the default source dependency uses the bound upstream and applies its rev
   commit("u2");
   expect(install().code).toBe(0);
   expect(ulwHead()).toBe(first);
-  const selected = join(home, ".dori/omp-ulw/index.ts");
+  const selected = join(home, ".cataly/omp-ulw/index.ts");
   expect(readFileSync(selected, "utf8")).toContain("export const reviewedOverlay = true");
-  expect(readlinkSync(join(home, "extensions/omp-ulw"))).toBe(join(home, ".dori/omp-ulw"));
+  expect(readlinkSync(join(home, "extensions/omp-ulw"))).toBe(join(home, ".cataly/omp-ulw"));
   expect(config().ompUlwPath).toBe("");
 });
 
@@ -23,7 +23,7 @@ posix("reinstall preserves the bound overlay instead of following a newer unrevi
   commit("u2");
   expect(install().code).toBe(0);
   expect(ulwHead()).toBe(first);
-  expect(readFileSync(join(home, ".dori/omp-ulw/index.ts"), "utf8")).toContain("reviewedOverlay");
+  expect(readFileSync(join(home, ".cataly/omp-ulw/index.ts"), "utf8")).toContain("reviewedOverlay");
 });
 
 posix("OMP_ULW_REF=lock keeps the revision in omp-ulw.lock", () => {
@@ -57,9 +57,9 @@ posix("a standalone omp-ulw extension is reused: no second checkout and no secon
   ulwCheckout(standalone);
   // When the source installer runs.
   const r = install();
-  // Then omp-dori clones nothing and its config leaves omp-ulw to that extension.
+  // Then omp-cataly clones nothing and its config leaves omp-ulw to that extension.
   expect(r.code).toBe(0);
-  expect(existsSync(join(home, ".dori/omp-ulw"))).toBe(false);
+  expect(existsSync(join(home, ".cataly/omp-ulw"))).toBe(false);
   expect(config().ompUlwPath).toBe("");
 });
 
@@ -68,18 +68,18 @@ posix("a config that points ompUlwPath at its own checkout keeps that checkout, 
   const { home, config, install } = withUlwRemote();
   const own = join(home, "my-ulw");
   ulwCheckout(own);
-  mkdirSync(join(home, ".dori"));
-  writeFileSync(join(home, ".dori/.omp-dori"), "primary\n");
-  writeFileSync(join(home, ".dori/config.json"), JSON.stringify({ ompUlwPath: join(own, "index.ts") }));
+  mkdirSync(join(home, ".cataly"));
+  writeFileSync(join(home, ".cataly/.omp-cataly"), "primary\n");
+  writeFileSync(join(home, ".cataly/config.json"), JSON.stringify({ ompUlwPath: join(own, "index.ts") }));
   // When the source installer runs; then nothing is cloned, that checkout is the extension, and the import path is emptied.
   const r = install();
   expect(r.code).toBe(0);
-  expect(existsSync(join(home, ".dori/omp-ulw"))).toBe(false);
+  expect(existsSync(join(home, ".cataly/omp-ulw"))).toBe(false);
   expect(readlinkSync(join(home, "extensions/omp-ulw"))).toBe(own);
   expect(config().ompUlwPath).toBe("");
   expect(install().code).toBe(0);
   expect(readlinkSync(join(home, "extensions/omp-ulw"))).toBe(own);
-  expect(existsSync(join(home, ".dori/omp-ulw"))).toBe(false);
+  expect(existsSync(join(home, ".cataly/omp-ulw"))).toBe(false);
 });
 
 posix.each(["lock", "main"])("a standalone extension replaces only the installer's owned %s link", (ref) => {
@@ -87,7 +87,7 @@ posix.each(["lock", "main"])("a standalone extension replaces only the installer
   const { home, install } = withUlwRemote();
   expect(install({ OMP_ULW_REF: ref }).code).toBe(0);
   expect(readlinkSync(join(home, "extensions/omp-ulw"))).toBe(
-    join(home, ref === "lock" ? ".dori/omp-ulw" : ".dori/omp-ulw-custom"),
+    join(home, ref === "lock" ? ".cataly/omp-ulw" : ".cataly/omp-ulw-custom"),
   );
   ulwCheckout(join(home, "extensions/omp-ulw-main"));
   // When the source installer runs again; then the standalone is used and the earlier link is gone, so omp-ulw loads once.
@@ -125,13 +125,13 @@ posix("an explicit checkout already registered as a standalone extension gets no
   ulwCheckout(standalone);
   expect(install({ OMP_ULW_SRC: standalone }).code).toBe(0);
   expect(existsSync(join(home, "extensions/omp-ulw"))).toBe(false);
-  expect(existsSync(join(home, ".dori/omp-ulw"))).toBe(false);
+  expect(existsSync(join(home, ".cataly/omp-ulw"))).toBe(false);
   expect(config().ompUlwPath).toBe("");
 });
 
 posix("an unmarked default-looking ULW link is retained when another standalone extension exists", () => {
   const { root, home, src, upstreamCommit, install } = withUlwRemote();
-  const dependency = join(home, ".dori/omp-ulw");
+  const dependency = join(home, ".cataly/omp-ulw");
   ulwCheckout(dependency);
   mkdirSync(join(home, "extensions"));
   symlinkSync(dependency, join(home, "extensions/omp-ulw"));
@@ -153,27 +153,27 @@ posix("a different owner standalone holds an explicit primary checkout before so
   expect(install({ OMP_ULW_SRC: ulw }).code).toBe(1);
   expect(readFileSync(join(standalone, "presets.ts"), "utf8")).toBe("export {};\n");
   expect(git(src, "rev-parse", "HEAD")).toBe(before);
-  expect(existsSync(join(home, ".dori/config.json"))).toBe(false);
+  expect(existsSync(join(home, ".cataly/config.json"))).toBe(false);
   expect(existsSync(join(root, "bun.log"))).toBe(false);
 });
 
 posix("a side custom checkout survives clearing the import path and later reinstalls", () => {
   const { home, install } = withUlwRemote();
-  const side = join(home, ".omp-dori");
+  const side = join(home, ".omp-cataly");
   const own = join(home, "my-ulw");
   ulwCheckout(own);
   mkdirSync(side);
   const config = join(side, "config.json");
   writeFileSync(config, JSON.stringify({ ompUlwPath: join(own, "index.ts"), defaultModel: "fixture/preserved" }));
-  expect(install({ DORI_INSTALL_MODE: "side" }).code).toBe(0);
-  expect(readlinkSync(join(side, ".omp-dori-ulw"))).toBe(own);
+  expect(install({ CATALY_INSTALL_MODE: "side" }).code).toBe(0);
+  expect(readlinkSync(join(side, ".omp-cataly-ulw"))).toBe(own);
   expect(JSON.parse(readFileSync(config, "utf8"))).toEqual({
     ompUlwPath: "",
     defaultModel: "fixture/preserved",
-    agentCommand: [join(side, "bin/omp"), "--dori-role", "lane", "--model", "{model}", "{prompt}"],
+    agentCommand: [join(side, "bin/omp"), "--cataly-role", "lane", "--model", "{model}", "{prompt}"],
   });
   expect(install().code).toBe(0);
-  expect(readlinkSync(join(side, ".omp-dori-ulw"))).toBe(own);
+  expect(readlinkSync(join(side, ".omp-cataly-ulw"))).toBe(own);
   expect(existsSync(join(side, "omp-ulw"))).toBe(false);
   expect(existsSync(join(home, "extensions"))).toBe(false);
 });
@@ -181,10 +181,10 @@ posix("a side custom checkout survives clearing the import path and later reinst
 posix("a modified bound source dependency holds reinstall and retains the owner's edit", () => {
   const { home, env, install } = withUlwRemote();
   expect(install().code).toBe(0);
-  const entry = join(home, ".dori/omp-ulw/index.ts");
+  const entry = join(home, ".cataly/omp-ulw/index.ts");
   writeFileSync(entry, "owner edit\n");
   expect(install().code).not.toBe(0);
   expect(readFileSync(entry, "utf8")).toBe("owner edit\n");
-  const launch = Bun.spawnSync([join(home, ".dori/bin/omp"), "--version"], { env: env() });
+  const launch = Bun.spawnSync([join(home, ".cataly/bin/omp"), "--version"], { env: env() });
   expect(launch.exitCode).not.toBe(0);
 });

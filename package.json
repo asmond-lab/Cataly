@@ -1,12 +1,12 @@
 {
-  "name": "dori-superagent",
-  "version": "0.1.2",
-  "description": "Dori's complete upstream harness and messenger skill ported to OMP.",
+  "name": "cataly",
+  "version": "0.1.4",
+  "description": "Cataly session harness and messenger skill for OMP.",
   "type": "module",
   "license": "SUL-1.0",
   "packageManager": "bun@1.4.4",
   "bin": {
-    "dori-harness": "src/cli.ts"
+    "cataly-harness": "src/cli.ts"
   },
   "scripts": {
     "check": "bun run lint && bun run format:check",
@@ -19,8 +19,8 @@
     "lint:loc": "bun scripts/check-loc.ts",
     "knip": "knip",
     "test": "bun test ./test/",
-    "test:ci": "bun test --parallel=2 --timings=.bun-test-timings.json ./test/",
-    "test:skill": "cd skills/dori-mode/scripts && bun test",
+    "test:ci": "bun test --parallel=1 --timings=.bun-test-timings.json ./test/",
+    "test:skill": "cd skills/cataly-mode/scripts && bun test",
     "test:extension": "cd extension && bun test",
     "ci": "bun run check:fixtures && bun run check && bun run typecheck && bun run knip && bun run lint:loc && bun run test:ci && bun run test:skill && bun run test:extension"
   },

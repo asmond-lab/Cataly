@@ -61,7 +61,7 @@ console.log(JSON.stringify({ before, after: process.umask(), record }));
         "/bin/sh",
         "-c",
         'umask "$1"; shift; exec "$@"',
-        "dori-umask-fixture",
+        "cataly-umask-fixture",
         mask,
         process.execPath,
         "-e",
@@ -82,8 +82,8 @@ console.log(JSON.stringify({ before, after: process.umask(), record }));
     for (const file of full.files) expect(lstatSync(join(record.releasePath, file.path)).mode & 0o222).toBe(0);
     expect(lstatSync(join(record.releasePath, ".git")).mode & 0o077).toBe(0);
     expect(lstatSync(config.liveSource, { throwIfNoEntry: false })).toBeUndefined();
-    expect(readFileSync(join(f.home, ".dori/config.json"), "utf8")).toBe('{"owner":"unchanged"}\n');
-    expect(readFileSync(join(f.home, ".dori/state/owner.json"), "utf8")).toBe('{"cursor":17}\n');
+    expect(readFileSync(join(f.home, ".cataly/config.json"), "utf8")).toBe('{"owner":"unchanged"}\n');
+    expect(readFileSync(join(f.home, ".cataly/state/owner.json"), "utf8")).toBe('{"cursor":17}\n');
     // The fix must not relax admission for an independently writable lock.
     chmodSync(join(record.releasePath, "native-omp.lock"), 0o666);
     expect(() => readSourceBundle(record.releasePath, true)).toThrow("Group/world-writable installation path");

@@ -17,7 +17,7 @@ const turn = (): Promise<void> => {
 export function lockWorld() {
   const sleepers: (() => void)[] = [];
   const w = {
-    root: mkdtempSync(join(tmpdir(), "dori-lock-")),
+    root: mkdtempSync(join(tmpdir(), "cataly-lock-")),
     clock: 1_000_000,
     live: new Set<number>(),
     env: (pid: number, extra: Partial<LockEnv> = {}): LockEnv => {

@@ -20,7 +20,7 @@ test("daily ULW preparation and release publication admit only the renamed canon
   }
 });
 
-test.each(["vntrevx/Cataly", "vntrevx/omp-dori", "other/Cataly", "vntrevx/Cataly-extra", ""])(
+test.each(["vntrevx/Cataly", "vntrevx/omp-cataly", "other/Cataly", "vntrevx/Cataly-extra", ""])(
   "the real ULW publisher CLI enforces its canonical admission before input or GitHub access: %s",
   (repository) => {
     // No --from: the canonical identity reaches argument validation without publishing anything.

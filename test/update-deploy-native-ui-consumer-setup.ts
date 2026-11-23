@@ -6,8 +6,11 @@ import { digest } from "../src/update/source.ts";
 import { managedBashFixture } from "./update-deploy-managed-setup.ts";
 
 /** Reuse the managed Bash actor; real replacement children publish their own process-bound health. */
-export async function nativeUiConsumerFixture(outcome: "delayed" | "late" | "undelivered") {
-  const f = await managedBashFixture();
+export async function nativeUiConsumerFixture(
+  outcome: "delayed" | "late" | "undelivered",
+  options: Parameters<typeof managedBashFixture>[0] = {},
+) {
+  const f = await managedBashFixture(options);
   const config = {
     ...f.config,
     nativeStopMode: "ui" as const,
@@ -17,7 +20,7 @@ export async function nativeUiConsumerFixture(outcome: "delayed" | "late" | "und
   };
   const healthPath = join(config.stateDir, "runtime", `${encodeURIComponent(config.pane)}.json`);
   const modules = {
-    state: new URL("../skills/dori-mode/scripts/src/lane-state.ts", import.meta.url).href,
+    state: new URL("../skills/cataly-mode/scripts/src/lane-state.ts", import.meta.url).href,
     process: new URL("../src/update/deployment-process.ts", import.meta.url).href,
     source: new URL("../src/update/source.ts", import.meta.url).href,
   };
@@ -38,7 +41,7 @@ writeHealth(${JSON.stringify(healthPath)}, JSON.stringify({ ...health,
 }));
 writeHealth(${JSON.stringify(f.bootstrap.intake.path)}, String(Date.now()), { mode: 0o600 });
 writePaneState(${JSON.stringify(config.stateDir)}, { ...processIdentity(process.pid),
-  paneId: ${JSON.stringify(config.pane)}, role: "dori", sessionId: ${JSON.stringify(config.sessionId)},
+  paneId: ${JSON.stringify(config.pane)}, role: "cataly", sessionId: ${JSON.stringify(config.sessionId)},
   sessionFile: ${JSON.stringify(f.runtime.sessionFile)}, cwd: ${JSON.stringify(f.runtime.cwd)},
   startedAt, updatedAt: startedAt, approvalPending: false, agentStatus: "idle", goal: { status: "none" },
 });
@@ -64,6 +67,11 @@ writePaneState(${JSON.stringify(config.stateDir)}, { ...processIdentity(process.
       else if (outcome === "delayed") timer = setTimeout(() => f.closeNativeInput(), 50);
     }
     handled = pending.length;
+  });
+  // Bun can start fixture teardown before a timed-out caller reaches its finally block.
+  const closeRequests = f.ownCleanup(() => {
+    watcher.close();
+    clearTimeout(timer);
   });
   writeFileSync(
     runtimeBinary(config),
@@ -115,9 +123,6 @@ console.log(JSON.stringify({ result }));
     ...f,
     config,
     requests,
-    closeRequests: () => {
-      watcher.close();
-      clearTimeout(timer);
-    },
+    closeRequests,
   };
 }

@@ -2,7 +2,7 @@ import { lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSy
 import { delimiter, dirname, join } from "node:path";
 import { platform } from "../platform/index.ts";
 import type { ConsumerPaths } from "./files.ts";
-import { consumerPaths, owned, readJson, realDirectory, regularFile, saveJson } from "./files.ts";
+import { consumerPaths, isPrimaryConsumer, owned, readJson, realDirectory, regularFile, saveJson } from "./files.ts";
 import { assertSourceBundle, readSourceBundle } from "./source-bundle.ts";
 import { checkoutSourceBundle } from "./source-checkout.ts";
 import type { ReleaseManifest } from "./types.ts";
@@ -24,12 +24,15 @@ export function nativeOmp(): string | undefined {
     const bases = [dirname(dirname(candidate)), dirname(dirname(physical))];
     if (
       bases.some((base) => {
-        const marker = join(base, ".omp-dori");
         // A side home, including a directory alias, is not the source installer's marker file.
         return (
-          (lstatSync(marker, { throwIfNoEntry: false }) &&
-            !statSync(marker, { throwIfNoEntry: false })?.isDirectory()) ||
-          lstatSync(join(base, "releases/consumer-owner.json"), { throwIfNoEntry: false })
+          [".omp-cataly", ".omp-dori"].some((name) => {
+            const marker = join(base, name);
+            return (
+              lstatSync(marker, { throwIfNoEntry: false }) &&
+              !statSync(marker, { throwIfNoEntry: false })?.isDirectory()
+            );
+          }) || lstatSync(join(base, "releases/consumer-owner.json"), { throwIfNoEntry: false })
         );
       }) ||
       (physical.endsWith("/scripts/consumer/omp") &&
@@ -45,15 +48,15 @@ export function prerequisites(runtime: string, tools = true, legacyNative = fals
   if (!platform.supportsReleaseProfile(platform.os, process.arch, runtime))
     throw new Error(`Unsupported release host/runtime: ${platform.os}/${process.arch}/${runtime}`);
   if (!tools) return;
-  if (!atLeast(Bun.version, [1, 4, 4])) throw new Error("Bun 1.4.4+ is required; install it before OMP-Dori");
-  for (const name of ["git", runtime]) {
-    if (!Bun.which(name)) throw new Error(`${name} is required; install it before OMP-Dori`);
+  if (!atLeast(Bun.version, [1, 4, 4])) throw new Error("Bun 1.4.4+ is required; install it before Cataly");
+  for (const name of runtime === "headless" ? ["git"] : ["git", runtime]) {
+    if (!Bun.which(name)) throw new Error(`${name} is required; install it before Cataly`);
   }
   if (legacyNative) {
-    const executable = paths.dori === join(paths.home, ".dori") ? Bun.which("omp") : nativeOmp();
+    const executable = isPrimaryConsumer(paths) ? Bun.which("omp") : nativeOmp();
     if (!executable) throw new Error("Older release protocol requires an independently installed OMP 18.18.8+");
-    if (paths.dori === join(paths.home, ".dori")) {
-      const managed = join(paths.dori, "bin/omp");
+    if (isPrimaryConsumer(paths)) {
+      const managed = join(paths.cataly, "bin/omp");
       if (lstatSync(managed, { throwIfNoEntry: false })) {
         const target = realpathSync(managed);
         const config = regularFile(paths.config) ? readJson(paths.config) : undefined;
@@ -82,7 +85,7 @@ async function git(args: readonly string[], cwd: string, home: string): Promise<
       "/bin/sh",
       "-c",
       'umask 077; exec "$@"',
-      "dori-dependency-git",
+      "cataly-dependency-git",
       "git",
       "-c",
       "core.hooksPath=/dev/null",
@@ -119,7 +122,7 @@ async function git(args: readonly string[], cwd: string, home: string): Promise<
 
 export function dependencyPlan(paths: ConsumerPaths, manifest: ReleaseManifest, source?: string) {
   const { commit, repository } = manifest.ompUlw;
-  const bundle = manifest.requirements.omp === "18.20.0" ? readSourceBundle(source!, false) : undefined;
+  const bundle = manifest.requirements.omp !== "18.18.8" ? readSourceBundle(source!, false) : undefined;
   if (bundle && (bundle.lock.commit !== commit || bundle.lock.repository !== repository))
     throw new Error("Release overlay differs from its upstream dependency pin");
   const dependency = join(paths.dependencies, `omp-ulw-${commit}${bundle ? `-${bundle.identity}` : ""}`);
@@ -182,7 +185,7 @@ export async function provisionDependency(
 export function assertLock(source: string, manifest: ReleaseManifest): void {
   if (readFileSync(join(source, "omp-ulw.lock"), "utf8").trim() !== manifest.ompUlw.commit)
     throw new Error("Release omp-ulw.lock differs from its declared public pin");
-  if (manifest.requirements.omp === "18.20.0") {
+  if (manifest.requirements.omp !== "18.18.8") {
     const overlay = readSourceBundle(source);
     const native = readSourceBundle(source, true);
     if (overlay.lock.commit !== manifest.ompUlw.commit || native.lock.nativeVersion !== manifest.requirements.omp)

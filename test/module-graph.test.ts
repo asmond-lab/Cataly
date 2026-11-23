@@ -6,9 +6,9 @@ import { Glob } from "bun";
 import ts from "typescript";
 
 const ROOT = resolve(import.meta.dir, "..");
-const TREES = ["src", "skills/dori-mode/scripts/src"];
+const TREES = ["src", "skills/cataly-mode/scripts/src"];
 // The skill CLI runs its command at import; it is an entry point, never imported.
-const ENTRY_ONLY = new Set([join(ROOT, "skills/dori-mode/scripts/src/cli.ts")]);
+const ENTRY_ONLY = new Set([join(ROOT, "skills/cataly-mode/scripts/src/cli.ts")]);
 
 const modules = (): string[] =>
   TREES.flatMap((tree) => {
@@ -18,7 +18,7 @@ const modules = (): string[] =>
 
 // Oxlint's import/no-cycle owns the general cycle guard; this also forbids a one-way dependency.
 test("launch validation does not import its coordinator", () => {
-  const skillSrc = join(ROOT, "skills/dori-mode/scripts/src");
+  const skillSrc = join(ROOT, "skills/cataly-mode/scripts/src");
   const input = join(skillSrc, "launch-input.ts");
   const source = ts.createSourceFile(input, readFileSync(input, "utf8"), ts.ScriptTarget.Latest);
   const imports = source.statements.flatMap((statement) => {

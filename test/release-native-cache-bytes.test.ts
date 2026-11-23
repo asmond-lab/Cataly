@@ -11,7 +11,7 @@ const posix = test.skipIf(process.platform === "win32");
 posix("exclusive bytes include directories and internal hardlinks once, but not externally shared files", () => {
   const home = realpathSync(mkdtempSync(join(tmpdir(), "dori-cache-bytes-")));
   try {
-    const entry = join(home, ".cache/omp-dori", `native-${process.platform}-${process.arch}-${"a".repeat(64)}`);
+    const entry = join(home, ".cache/omp-cataly", `native-${process.platform}-${process.arch}-${"a".repeat(64)}`);
     const child = join(entry, "child");
     mkdirSync(child, { recursive: true, mode: 0o700 });
     const internal = join(entry, "internal");

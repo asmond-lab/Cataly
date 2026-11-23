@@ -4,14 +4,14 @@ import { tmpdir } from "node:os";
 import { delimiter, join, sep } from "node:path";
 import { ConfigError, RuntimeChoiceError, readRuntimeChoice } from "../src/runtime/select.ts";
 
-const scratch = (): string => mkdtempSync(join(tmpdir(), "dori-select-"));
+const scratch = (): string => mkdtempSync(join(tmpdir(), "cataly-select-"));
 
 const config = (text: string): string => {
   const path = join(scratch(), "config.json");
   writeFileSync(path, text);
   return path;
 };
-const NO_CONFIG = "/nonexistent/dori/config.json";
+const NO_CONFIG = "/nonexistent/cataly/config.json";
 const posix = test.skipIf(process.platform === "win32");
 
 const pathWith = (...bins: string[]): string => {
@@ -26,19 +26,44 @@ const pathWith = (...bins: string[]): string => {
   return [join(scratch(), "empty"), ...dirs].join(delimiter);
 };
 
-describe("readRuntimeChoice precedence", () => {
+describe("default native execution", () => {
+  posix("legacy installer preferences, pane IDs and installed binaries never opt into terminal execution", () => {
+    for (const saved of ["{}", '{"runtime":"hc"}', '{"runtime":"herdr"}']) {
+      expect(
+        readRuntimeChoice({
+          env: { HC_TERMINAL_ID: "t1", HERDR_PANE_ID: "w3:p1", PATH: pathWith("hc", "herdr") },
+          configPath: config(saved),
+          exists: () => {
+            throw new Error("native selection should not scan PATH");
+          },
+        }),
+      ).toEqual({ kind: "headless", source: "default" });
+    }
+  });
+  test("the new session setting and environment can explicitly select either execution mode", () => {
+    const configPath = config('{"runtime":"hc","sessionRuntime":"herdr"}');
+    expect(readRuntimeChoice({ configPath, env: {} })).toEqual({ kind: "herdr", source: "config" });
+    expect(readRuntimeChoice({ configPath, env: { CATALY_RUNTIME: "headless" } })).toEqual({
+      kind: "headless",
+      source: "env",
+    });
+    expect(() => readRuntimeChoice({ configPath: config('{"sessionRuntime":"tmux"}'), env: {} })).toThrow(ConfigError);
+  });
+});
+
+describe("explicit terminal selection precedence", () => {
   const both = pathWith("herdr", "hc");
   test.each([
     [
-      "DORI_RUNTIME beats config and every detection",
-      { DORI_RUNTIME: "hc", HERDR_PANE_ID: "w1:p1", PATH: both },
+      "CATALY_RUNTIME beats config and every detection",
+      { CATALY_RUNTIME: "hc", HERDR_PANE_ID: "w1:p1", PATH: both },
       '{"runtime":"herdr"}',
       "hc",
       "env",
     ],
     [
-      "DORI_RUNTIME=herdr inside an hc terminal",
-      { DORI_RUNTIME: "herdr", HC_TERMINAL_ID: "t3", PATH: both },
+      "CATALY_RUNTIME=herdr inside an hc terminal",
+      { CATALY_RUNTIME: "herdr", HC_TERMINAL_ID: "t3", PATH: both },
       undefined,
       "herdr",
       "env",
@@ -77,33 +102,63 @@ describe("readRuntimeChoice precedence", () => {
     ["both on PATH, hc's directory first: still hc", { PATH: pathWith("hc", "herdr") }, "{}", "hc", "detect:path"],
     [
       "empty variables count as unset",
-      { DORI_RUNTIME: "", HC_TERMINAL_ID: "", HERDR_PANE_ID: "", PATH: pathWith("hc") },
+      { CATALY_RUNTIME: "", HC_TERMINAL_ID: "", HERDR_PANE_ID: "", PATH: pathWith("hc") },
       undefined,
       "hc",
       "detect:path",
     ],
+    ["CATALY_RUNTIME=tern", { CATALY_RUNTIME: "tern", HC_TERMINAL_ID: "t3", PATH: both }, undefined, "tern", "env"],
+    [
+      "TERN_PANE with neither hc nor herdr installed",
+      { TERN_PANE: "42", PATH: pathWith() },
+      undefined,
+      "tern",
+      "detect:TERN_PANE",
+    ],
+    [
+      "TERN_PANE beats tern on PATH but not an installed hc: hc in a Tern block stays hc",
+      { TERN_PANE: "42", PATH: pathWith("tern", "hc") },
+      undefined,
+      "hc",
+      "detect:path",
+    ],
+    [
+      "an installed herdr also comes before TERN_PANE",
+      { TERN_PANE: "42", PATH: pathWith("herdr", "tern") },
+      "{}",
+      "herdr",
+      "detect:path",
+    ],
+    [
+      "HERDR_PANE_ID beats TERN_PANE",
+      { HERDR_PANE_ID: "w1:p1", TERN_PANE: "42", PATH: pathWith("tern") },
+      undefined,
+      "herdr",
+      "detect:HERDR_PANE_ID",
+    ],
+    ["only tern on PATH", { PATH: pathWith("tern") }, undefined, "tern", "detect:path"],
   ] as const)("%s", (_, env, configText, kind, source) => {
     const configPath = configText === undefined ? NO_CONFIG : config(configText);
-    expect(readRuntimeChoice({ env, configPath })).toEqual({ kind, source });
+    expect(readRuntimeChoice({ env, configPath, terminalOnly: true })).toEqual({ kind, source });
   });
 });
 
 describe("readRuntimeChoice refusals", () => {
-  test("neither binary and nothing set: RuntimeChoiceError whose message names the config path and the fix", () => {
+  test("no binary and nothing set: RuntimeChoiceError whose message names the config path and the fix", () => {
     const configPath = config("{}");
     let caught: unknown;
     try {
-      readRuntimeChoice({ env: { PATH: pathWith() }, configPath });
+      readRuntimeChoice({ env: { PATH: pathWith() }, configPath, terminalOnly: true });
     } catch (e) {
       caught = e;
     }
     expect(caught).toBeInstanceOf(RuntimeChoiceError);
     const message = (caught as Error).message;
-    expect(message).toContain("neither herdr nor hc is on PATH");
+    expect(message).toContain("none of herdr, hc or tern is on PATH");
     expect(message).toContain(configPath);
-    expect(message).toContain('"runtime": "herdr" or "hc"');
-    expect(message).toContain("DORI_RUNTIME");
-    expect(() => readRuntimeChoice({ env: {}, configPath: NO_CONFIG })).toThrow(RuntimeChoiceError);
+    expect(message).toContain('"runtime": "herdr", "hc" or "tern"');
+    expect(message).toContain("CATALY_RUNTIME");
+    expect(() => readRuntimeChoice({ env: {}, configPath: NO_CONFIG, terminalOnly: true })).toThrow(RuntimeChoiceError);
   });
 
   // POSIX-only: the executable bit decides install here, and Windows has no mode bits.
@@ -112,12 +167,14 @@ describe("readRuntimeChoice refusals", () => {
     writeFileSync(join(dir, "hc"), "");
     chmodSync(join(dir, "hc"), 0o644);
     mkdirSync(join(dir, "herdr"));
-    expect(() => readRuntimeChoice({ env: { PATH: dir }, configPath: NO_CONFIG })).toThrow(RuntimeChoiceError);
+    expect(() => readRuntimeChoice({ env: { PATH: dir }, configPath: NO_CONFIG, terminalOnly: true })).toThrow(
+      RuntimeChoiceError,
+    );
   });
 
   test('config value "tmux": ConfigError naming the file and the value', () => {
     const configPath = config('{"runtime":"tmux"}');
-    expect(() => readRuntimeChoice({ env: { DORI_RUNTIME: "" }, configPath })).toThrow(ConfigError);
+    expect(() => readRuntimeChoice({ env: { CATALY_RUNTIME: "" }, configPath })).toThrow(ConfigError);
     expect(() => readRuntimeChoice({ env: {}, configPath })).toThrow(
       new RegExp(`${configPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*"tmux"`),
     );
@@ -137,14 +194,14 @@ describe("readRuntimeChoice refusals", () => {
     expect(() => readRuntimeChoice({ env: {}, configPath: config("[]") })).toThrow(ConfigError);
   });
 
-  test("an invalid DORI_RUNTIME is a ConfigError naming the variable and the value", () => {
-    expect(() => readRuntimeChoice({ env: { DORI_RUNTIME: "tmux" }, configPath: NO_CONFIG })).toThrow(
-      /DORI_RUNTIME.*"tmux"/,
+  test("an invalid CATALY_RUNTIME is a ConfigError naming the variable and the value", () => {
+    expect(() => readRuntimeChoice({ env: { CATALY_RUNTIME: "tmux" }, configPath: NO_CONFIG })).toThrow(
+      /CATALY_RUNTIME.*"tmux"/,
     );
   });
 
-  test("DORI_RUNTIME wins without reading a broken config", () => {
-    expect(readRuntimeChoice({ env: { DORI_RUNTIME: "herdr" }, configPath: config("not json") })).toEqual({
+  test("CATALY_RUNTIME wins without reading a broken config", () => {
+    expect(readRuntimeChoice({ env: { CATALY_RUNTIME: "herdr" }, configPath: config("not json") })).toEqual({
       kind: "herdr",
       source: "env",
     });
@@ -159,7 +216,12 @@ describe("readRuntimeChoice PATH detection is injectable", () => {
       return path === join("/b", "hc");
     };
     expect(
-      readRuntimeChoice({ env: { PATH: [join("/a"), join("/b")].join(delimiter) }, configPath: NO_CONFIG, exists }),
+      readRuntimeChoice({
+        env: { PATH: [join("/a"), join("/b")].join(delimiter) },
+        configPath: NO_CONFIG,
+        exists,
+        terminalOnly: true,
+      }),
     ).toEqual({
       kind: "hc",
       source: "detect:path",
@@ -176,7 +238,12 @@ describe("readRuntimeChoice PATH detection is injectable", () => {
     };
     const a = join("/a");
     expect(() =>
-      readRuntimeChoice({ env: { PATH: ["", a, ""].join(delimiter) }, configPath: NO_CONFIG, exists }),
+      readRuntimeChoice({
+        env: { PATH: ["", a, ""].join(delimiter) },
+        configPath: NO_CONFIG,
+        exists,
+        terminalOnly: true,
+      }),
     ).toThrow(RuntimeChoiceError);
     expect(asked.every((p) => p.startsWith(`${a}${sep}`))).toBe(true);
   });
