@@ -232,6 +232,10 @@ export const parseSignal = (raw: string): Signal => {
   };
 };
 
+export function requiresWindowsShell(cmd: string, platform: NodeJS.Platform = process.platform): boolean {
+  return platform === "win32" && (/\.(?:cmd|bat)$/i.test(cmd) || /^(?:npm|npx)$/i.test(cmd));
+}
+
 export const defaultRunner: Runner = (argv, opts = {}) =>
   new Promise<RunResult>((resolvePromise) => {
     const [cmd, ...args] = argv;
@@ -239,19 +243,22 @@ export const defaultRunner: Runner = (argv, opts = {}) =>
       resolvePromise({ code: 127, out: "", err: "empty command" });
       return;
     }
-    // On Windows, .cmd/.bat shims like npm.cmd need shell resolution only when invoking npm directly;
-    // to keep no-shell safety while supporting npm on Windows, resolve npm -> npm.cmd when win32.
-    const resolvedCmd = process.platform === "win32" && (cmd === "npm" || cmd === "npx") ? `${cmd}.cmd` : cmd;
+    // Batch files require cmd.exe, which does not preserve argv boundaries. Fail
+    // closed rather than interpreting a command signal as shell source.
+    if (requiresWindowsShell(cmd)) {
+      resolvePromise({ code: 1, out: "", err: "Batch commands are not supported safely on Windows; use node with an absolute CLI .js path instead" });
+      return;
+    }
 
     execFile(
-      resolvedCmd,
+      cmd,
       args,
       {
         cwd: opts.cwd,
         timeout: opts.timeoutMs ?? COMMAND_TIMEOUT_MS,
         maxBuffer: 10 * 1024 * 1024,
         windowsHide: true,
-        shell: process.platform === "win32" && resolvedCmd.endsWith(".cmd"),
+        shell: false,
       },
       (error, stdout, stderr) => {
         if (!error) {
