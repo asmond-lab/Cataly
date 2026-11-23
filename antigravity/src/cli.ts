@@ -10,7 +10,7 @@ import { PrTracker } from "./core/pr.js";
 import { formatReportLine, isReportKind, Reports } from "./core/reports.js";
 import { checkDone } from "./core/signals.js";
 import { downloadDiscordAttachment } from "./discord/attachments.js";
-import { DiscordClient } from "./discord/client.js";
+import { DiscordClient, isDiscordSnowflake } from "./discord/client.js";
 import { parseDiscordCommand, runLocalDiscordCommand } from "./discord/commands.js";
 import { waitForDiscordGateway } from "./discord/gateway.js";
 import { DiscordInboundState, type InboundMessageRecord, pollDiscordInbound } from "./discord/inbound.js";
@@ -195,16 +195,21 @@ async function main(): Promise<void> {
       const channelsRaw = getFlag(args, "--channels");
       const guildId = getFlag(args, "--guild");
       const tokenFile = getFlag(args, "--token-file");
+      const channelIds = channelsRaw?.split(",").map((s) => s.trim());
+      for (const [flag, ids] of [["--owner", ownerId === undefined ? [] : [ownerId]],
+        ["--guild", guildId === undefined ? [] : [guildId]],
+        ["--channels", channelIds ?? []]] as const) {
+        if (ids.some((id) => !isDiscordSnowflake(id))) {
+          throw new Error(`${flag} requires Discord snowflake IDs (17-22 digits)`);
+        }
+      }
       const updated = updateConfig(
         {
           discord: {
             ...(ownerId ? { ownerId } : {}),
             ...(channelsRaw
               ? {
-                  channelIds: channelsRaw
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter(Boolean),
+                  channelIds,
                 }
               : {}),
             ...(guildId ? { guildId } : {}),
