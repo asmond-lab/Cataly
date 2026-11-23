@@ -10,7 +10,7 @@ An autonomous AI teammate plugin for Google Antigravity ported from [vntrevx/Cat
   - `cataly-responder`: lightweight parallel Discord responder subagent for scoped read-only requests with direct per-message replies
   - `cataly-reviewer`: independent code/PR reviewer outputting `VERDICT: CLEAR` or `VERDICT: BLOCK`
 - **Rules**: `rules/AGENTS.md` (evidence over claims, owner authority, one-shot destructive actions, secret hygiene, quota discipline, compaction persistence)
-- **MCP Server**: `cataly-core` (42 tools covering boot, config, lanes, live done checks, shared board, worklog, decisions, lessons, checkpoints, reports, backlog, locks, PR verify/watch, and Discord)
+- **MCP Server**: `cataly-core` (51 tools covering boot, config, lanes, live done checks, shared board, worklog, decisions, lessons, checkpoints, reports, backlog, locks, PR verify/watch, and Discord)
 - **Hooks**: `SessionStart` (boot summary injection when active state exists) and `Stop` (single-shot guard for bound working lanes)
 
 ## State Directory

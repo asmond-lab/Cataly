@@ -11,7 +11,7 @@ antigravity/
 ├── src/
 │   ├── core/            # config (mtime-cached), Done = signal verifier, lanes, shared board, worklog, decisions, lessons, checkpoints, reports, backlog, locks, PR verify/watch, boot
 │   ├── discord/         # v10 REST client, code-fence splitter, Gateway v10 online WebSocket waiter (burst coalescing, autoAck, local commands), channel purposes/cache, attachment downloader, owner-only inbound poller
-│   ├── mcp-server.ts    # Stdio MCP server (`cataly-core`, 42 tools)
+│   ├── mcp-server.ts    # Stdio MCP server (`cataly-core`, 51 tools)
 │   ├── hooks.ts         # Antigravity SessionStart & Stop lifecycle hooks
 │   ├── cli.ts           # Standalone CLI (`boot`, `sweep`, `check-done`, `report`, `checkpoint`, `claim-done`, `board`, `pr-watch`, `discord`)
 │   └── test/            # Unit, hook, installer/rollback, board/commands, Gateway WebSocket, and MCP stdio handshake tests
@@ -51,3 +51,7 @@ npm run install:plugin
 ## Licensing & Attribution
 
 This directory is part of [vntrevx/Cataly](https://github.com/vntrevx/Cataly) and retains the repository's applicable license and provenance terms documented in [../LICENSE](../LICENSE), [../LICENSE.omp-dori](../LICENSE.omp-dori), [../LICENSING.md](../LICENSING.md), and [../NOTICE](../NOTICE).
+
+### Windows command signals
+
+Command signals run native executables without a shell. Windows `.cmd`/`.bat` files and bare `npm`/`npx` commands are rejected rather than passing argv through cmd.exe. Use `node` with an absolute path to the CLI JavaScript entry point instead, including for package-version checks that would otherwise invoke npm.
