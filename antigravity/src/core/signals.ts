@@ -247,7 +247,11 @@ export const defaultRunner: Runner = (argv, opts = {}) =>
     // Batch files require cmd.exe, which does not preserve argv boundaries. Fail
     // closed rather than interpreting a command signal as shell source.
     if (requiresWindowsShell(cmd)) {
-      resolvePromise({ code: 1, out: "", err: "Batch commands are not supported safely on Windows; use node with an absolute CLI .js path instead" });
+      resolvePromise({
+        code: 1,
+        out: "",
+        err: "Batch commands are not supported safely on Windows; use node with an absolute CLI .js path instead",
+      });
       return;
     }
 
@@ -356,7 +360,12 @@ export const checkSignal = async (
 
     case "published": {
       if ((io.platform ?? process.platform) === "win32") {
-        return { signal: s, ok: false, detail: "published signals are unsupported on Windows: use a command signal invoking node with an absolute npm-cli.js path and view arguments" };
+        return {
+          signal: s,
+          ok: false,
+          detail:
+            "published signals are unsupported on Windows: use a command signal invoking node with an absolute npm-cli.js path and view arguments",
+        };
       }
       const r = await run(["npm", "view", `${sig.pkg}@${sig.version}`, "version", "--json"]);
       const ok = r.code === 0 && publishedVersions(r.out).includes(sig.version);

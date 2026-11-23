@@ -22,7 +22,7 @@ it("reports the published signal boundary on Windows without invoking npm", asyn
   const runner = async (argv: readonly string[]) => {
     calls++;
     assert.deepEqual(argv, ["npm", "view", "example@1.2.3", "version", "--json"]);
-    return { code: 0, out: '\"1.2.3\"', err: "" };
+    return { code: 0, out: JSON.stringify("1.2.3"), err: "" };
   };
   const windows = await checkDone("published example@1.2.3", runner, { platform: "win32" });
   assert.equal(windows[0]?.ok, false);

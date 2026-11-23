@@ -3,13 +3,13 @@ name: antigravity
 on:
   pull_request:
     paths:
-      - 'antigravity/**'
-      - '.github/workflows/antigravity.yml'
+      - "antigravity/**"
+      - ".github/workflows/antigravity.yml"
   push:
     branches: [main]
     paths:
-      - 'antigravity/**'
-      - '.github/workflows/antigravity.yml'
+      - "antigravity/**"
+      - ".github/workflows/antigravity.yml"
   workflow_dispatch:
 
 permissions:

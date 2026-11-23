@@ -196,9 +196,11 @@ async function main(): Promise<void> {
       const guildId = getFlag(args, "--guild");
       const tokenFile = getFlag(args, "--token-file");
       const channelIds = channelsRaw?.split(",").map((s) => s.trim());
-      for (const [flag, ids] of [["--owner", ownerId === undefined ? [] : [ownerId]],
+      for (const [flag, ids] of [
+        ["--owner", ownerId === undefined ? [] : [ownerId]],
         ["--guild", guildId === undefined ? [] : [guildId]],
-        ["--channels", channelIds ?? []]] as const) {
+        ["--channels", channelIds ?? []],
+      ] as const) {
         if (ids.some((id) => !isDiscordSnowflake(id))) {
           throw new Error(`${flag} requires Discord snowflake IDs (17-22 digits)`);
         }
