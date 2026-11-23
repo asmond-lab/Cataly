@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_PROJECT_ROOT = resolve(__dirname, "..");
 
-export const REPO_NOTICE_FILES = ["LICENSE", "LICENSE.omp-dori", "LICENSING.md", "NOTICE"];
+export const REPO_NOTICE_FILES = ["LICENSE", "LICENSE.integration", "LICENSING.md", "NOTICE"];
 export const ATTRIBUTION_FILE_RE =
   /^(?:(?:[\w-]+[-_.])?(?:LICEN[CS]ES?|NOTICES?|COPYING|UNLICENSE|PATENTS?))(?:[._-].+)?$/i;
 
@@ -217,7 +217,7 @@ export function installPlugin(options = {}) {
       cpSync(src, dst, { recursive: true });
     }
 
-    // 2. Copy applicable repository license and notice files (LICENSE, LICENSE.omp-dori, LICENSING.md, NOTICE)
+    // 2. Copy applicable repository license and notice files (LICENSE, LICENSE.integration, LICENSING.md, NOTICE)
     const repoNotices = resolveRepoNoticeFiles(projectRoot);
     for (const notice of repoNotices) {
       cpSync(notice.src, join(stagingDir, notice.name));

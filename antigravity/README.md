@@ -37,7 +37,7 @@ npm test
 npm run install:plugin
 ```
 
-`npm run install:plugin` stages, validates, and atomically publishes a self-contained production bundle (preserving upstream `LICENSE`, `LICENSE.omp-dori`, `LICENSING.md`, `NOTICE`, and dependency license/notice files while excluding devDependencies, source maps, type declarations, and tests, with automatic rollback on failed upgrades) to `~/.gemini/config/plugins/cataly/` (override with `CATALY_PLUGIN_DIR`). Antigravity discovers the plugin automatically without restarting.
+`npm run install:plugin` stages, validates, and atomically publishes a self-contained production bundle (preserving upstream `LICENSE`, `LICENSE.integration`, `LICENSING.md`, `NOTICE`, and dependency license/notice files while excluding devDependencies, source maps, type declarations, and tests, with automatic rollback on failed upgrades) to `~/.gemini/config/plugins/cataly/` (override with `CATALY_PLUGIN_DIR`). Antigravity discovers the plugin automatically without restarting.
 
 ### Optional Discord Setup
 
@@ -50,7 +50,7 @@ npm run install:plugin
 
 ## Licensing & Attribution
 
-This directory is part of [vntrevx/Cataly](https://github.com/vntrevx/Cataly) and retains the repository's applicable license and provenance terms documented in [../LICENSE](../LICENSE), [../LICENSE.omp-dori](../LICENSE.omp-dori), [../LICENSING.md](../LICENSING.md), and [../NOTICE](../NOTICE).
+This directory is part of [vntrevx/Cataly](https://github.com/vntrevx/Cataly) and retains the repository's applicable license and provenance terms documented in [../LICENSE](../LICENSE), [../LICENSE.integration](../LICENSE.integration), [../LICENSING.md](../LICENSING.md), and [../NOTICE](../NOTICE).
 
 ### Windows command signals
 
