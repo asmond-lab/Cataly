@@ -54,4 +54,4 @@ This directory is part of [vntrevx/Cataly](https://github.com/vntrevx/Cataly) an
 
 ### Windows command signals
 
-Command signals run native executables without a shell. Windows `.cmd`/`.bat` files and bare `npm`/`npx` commands are rejected rather than passing argv through cmd.exe. Use `node` with an absolute path to the CLI JavaScript entry point instead, including for package-version checks that would otherwise invoke npm.
+Command signals run native executables without a shell. Windows `.cmd`/`.bat` files and bare `npm`/`npx` commands are rejected rather than passing argv through cmd.exe. Use `node` with an absolute path to the CLI JavaScript entry point instead, The built-in `published` signal is therefore unsupported on Windows and returns a signal-specific error. For an equivalent check, use a command signal such as `command ["node","C:/absolute/path/to/npm-cli.js","view","your-package@1.2.3","version","--json"] stdout~"1\\.2\\.3"`, replacing the CLI path and package/version with your installation and target.

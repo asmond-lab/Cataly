@@ -72,6 +72,7 @@ describe("signals", () => {
     ].join("; ");
 
     const checks = await checkDone(doneLine, fakeRunner, {
+      platform: "linux",
       cwd: dir,
       http: async () => ({ status: 200, body: "service ready" }),
     });

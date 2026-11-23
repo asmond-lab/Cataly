@@ -39,6 +39,7 @@ export type SignalCheck = {
 };
 
 export type SignalIo = {
+  readonly platform?: NodeJS.Platform;
   readonly http?: HttpFetcher;
   readonly cwd?: string;
   readonly home?: string;
@@ -354,6 +355,9 @@ export const checkSignal = async (
     }
 
     case "published": {
+      if ((io.platform ?? process.platform) === "win32") {
+        return { signal: s, ok: false, detail: "published signals are unsupported on Windows: use a command signal invoking node with an absolute npm-cli.js path and view arguments" };
+      }
       const r = await run(["npm", "view", `${sig.pkg}@${sig.version}`, "version", "--json"]);
       const ok = r.code === 0 && publishedVersions(r.out).includes(sig.version);
       return {
